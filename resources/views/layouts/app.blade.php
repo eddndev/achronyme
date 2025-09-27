@@ -19,7 +19,7 @@
             <x-partials.navigation />
 
             <!-- Page Content -->
-            <main class="lg:py-6">
+            <main class="">
                 {{ $slot }}
             </main>
         </div>
