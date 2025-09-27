@@ -7,11 +7,23 @@
         :priority="true"
     />
     <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
-    
-    <!-- Session Status -->
+        <div>
+            <x-image.logo
+            class="h-10 w-auto"
+            src="resources/images/logo.png"
+            alt="Logotipo de Achronyme"
+            size="md"
+            :priority="true"
+            />
+            <h2 class="mt-8 text-2xl/9 font-bold tracking-tight text-gray-900 dark:text-white">{{ $title }}</h2>
+            <p class="mt-2 text-sm/6 text-slate-500 dark:text-slate-400">
+            ¿No tienes una cuenta?
+            <a href="{{ route('register') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Regístrate</a>
+            </p>
+        </div>
         <x-auth-session-status class="mb-4" :status="session('status')" />
 
-        <form method="POST" action="{{ route('login') }}" class="space-y-6">
+        <form method="POST" action="{{ route('login') }}" class="space-y-6 mt-10">
             @csrf
 
             <!-- Email Address -->
@@ -91,8 +103,5 @@
             </div>
         </div>
     </div>
-    <p class="mt-10 text-center text-sm/6 text-slate-500 dark:text-slate-400">
-    ¿No tienes una cuenta?
-    <a href="{{ route('register') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Regístrate</a>
-    </p>
+    
 </x-guest-layout>
