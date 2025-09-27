@@ -16,6 +16,8 @@ class EmailVerificationPromptController extends Controller
     {
         return $request->user()->hasVerifiedEmail()
                     ? redirect()->intended(route('dashboard', absolute: false))
-                    : view('auth.verify-email');
+                    : view('auth.verify-email',
+                        ['title' => 'Verifica tu dirección de correo electrónico']
+                    );
     }
 }

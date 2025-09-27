@@ -7,14 +7,21 @@
         :priority="true"
     />
     <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
-        <div class="mb-4 text-sm text-slate-800 dark:text-slate-200">
-            {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
+        <div>
+            <h2 class="mt-4 text-2xl/9 font-bold tracking-tight text-gray-900 dark:text-white">{{ $title }}</h2>
+            <p class="mt-2 text-sm/6 text-slate-500 dark:text-slate-400">
+                {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
+            </p>
+            <p class="mt-2 text-sm/6 text-slate-500 dark:text-slate-400">
+                ¿Recuerdas tu contraseña?
+                <a href="{{ route('login') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Inicia sesión</a>
+            </p>
         </div>
 
         <!-- Session Status -->
-        <x-auth-session-status class="mb-4" :status="session('status')" />
+        <x-auth-session-status class="mt-6" :status="session('status')" />
 
-        <form method="POST" action="{{ route('password.email') }}" class="space-y-6">
+        <form method="POST" action="{{ route('password.email') }}" class="space-y-6 mt-6">
             @csrf
 
             <!-- Email Address -->

@@ -7,7 +7,15 @@
         :priority="true"
     />
     <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
-        <form method="POST" action="{{ route('password.store') }}" class="space-y-6">
+        <div>
+            <h2 class="mt-4 text-2xl/9 font-bold tracking-tight text-gray-900 dark:text-white">{{ $title }}</h2>
+            <p class="mt-2 text-sm/6 text-slate-500 dark:text-slate-400">
+            ¿Recuerdas tu contraseña?
+            <a href="{{ route('login') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Inicia Sesión</a>
+            </p>
+        </div>
+
+        <form method="POST" action="{{ route('password.store') }}" class="space-y-6 mt-6">
             @csrf
 
             <!-- Password Reset Token -->
@@ -47,6 +55,6 @@
                     {{ __('Reset Password') }}
                 </x-primary-button>
             </div>
-        </form
+        </form>
     </div>
 </x-guest-layout>

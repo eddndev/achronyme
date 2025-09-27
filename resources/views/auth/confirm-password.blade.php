@@ -7,11 +7,14 @@
         :priority="true"
     />
     <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
-        <div class="mb-4 text-sm text-slate-800 dark:text-slate-200">
-            {{ __('This is a secure area of the application. Please confirm your password before continuing.') }}
+        <div>
+            <h2 class="mt-4 text-2xl/9 font-bold tracking-tight text-gray-900 dark:text-white">{{ $title }}</h2>
+            <p class="mt-2 text-sm/6 text-slate-500 dark:text-slate-400">
+                {{ __('This is a secure area of the application. Please confirm your password before continuing.') }}
+            </p>
         </div>
 
-        <form method="POST" action="{{ route('password.confirm') }}" class="space-y-6">
+        <form method="POST" action="{{ route('password.confirm') }}" class="space-y-6 mt-6">
             @csrf
 
             <!-- Password -->

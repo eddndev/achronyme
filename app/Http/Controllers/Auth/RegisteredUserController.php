@@ -19,7 +19,11 @@ class RegisteredUserController extends Controller
      */
     public function create(): View
     {
-        return view('auth.register');
+        return view('auth.register',
+            [
+                'title' => 'Crea tu cuenta en Achronyme',
+            ]
+        );
     }
 
     /**
