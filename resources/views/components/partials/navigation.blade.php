@@ -1,5 +1,5 @@
-<header class=" dark:bg-gray-900 sticky w-full z-30 top-0 lg:top-6">
-  <nav aria-label="Global" class="bg-purple-blue-50 mx-auto flex max-w-6xl items-center justify-between p-6 lg:px-8 lg:rounded-lg shadow-md dark:bg-gray-800 backdrop-blur-lg">
+<header class="sticky w-full z-30 top-0 lg:top-6">
+  <nav aria-label="Global" class="bg-purple-blue-950/10 mx-auto flex max-w-6xl items-center justify-between p-6 lg:px-8 lg:rounded-lg shadow-md dark:bg-gray-800/75 lg:backdrop-blur-xs">
     <div class="flex lg:flex-1">
       <a href="{{ route('home') }}" class="-m-1.5 p-1.5 flex items-center gap-x-3">
         <span class="sr-only">Achronyme - Engineering toolbox</span>
