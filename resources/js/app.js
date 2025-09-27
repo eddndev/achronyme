@@ -1,4 +1,5 @@
 import './bootstrap';
+import '@hotwired/turbo';
 import '@tailwindplus/elements';
 import { gsap } from 'gsap';
 

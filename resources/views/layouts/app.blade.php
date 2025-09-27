@@ -24,5 +24,20 @@
             </main>
         </div>
         @livewireScripts
+        <script>
+            document.addEventListener('turbo:before-render', (event) => {
+                // Si el navegador no soporta la API, continuamos de forma normal
+                if (!document.startViewTransition) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                // Envolvemos el cambio de DOM en la transiciÃ³n
+                document.startViewTransition(() => {
+                    event.detail.resume();
+                });
+            });
+        </script>
     </body>
 </html>
