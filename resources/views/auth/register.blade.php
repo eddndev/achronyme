@@ -1,5 +1,12 @@
 <x-guest-layout title="Crea una cuenta">
-    <div class="bg-white px-6 py-12 shadow-md sm:rounded-lg sm:px-12 dark:bg-slate-800 dark:border dark:border-slate-700">
+    <x-image.logo
+        class="mx-auto h-80 w-auto absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 -z-10"
+        src="resources/images/logo.png"
+        alt="Logotipo de Achronyme"
+        size="md"
+        :priority="true"
+    />
+    <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
         <form method="POST" action="{{ route('register') }}" class="space-y-6">
             @csrf
 
@@ -81,6 +88,6 @@
     </div>
     <p class="mt-10 text-center text-sm/6 text-slate-500 dark:text-slate-400">
         ¿Ya tienes una cuenta?
-        <a href="{{ route('login') }}" class="font-medium text-purple-blue-600 hover:text-purple-blue-700 dark:text-purple-blue-400 dark:hover:text-purple-blue-500">Inicia Sesión</a>
+        <a href="{{ route('login') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Inicia Sesión</a>
     </p>
 </x-guest-layout>

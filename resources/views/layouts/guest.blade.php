@@ -23,7 +23,7 @@
                 <h2 class="mt-6 text-center text-2xl/9 font-bold tracking-tight text-slate-800 dark:text-slate-200">{{ $title }}</h2>
             </div>
 
-            <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]">
+            <div class="relative mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]">
                 {{ $slot }}
             </div>
         </div>

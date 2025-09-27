@@ -1,6 +1,6 @@
 <x-guest-layout title="Inicia sesión en tu cuenta">
     <x-image.logo
-        class="mx-auto h-80 w-auto absolute top-0 left-1/2 -translate-y-1/2 -translate-x-1/2 -z-20"
+        class="mx-auto h-80 w-auto absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 -z-10"
         src="resources/images/logo.png"
         alt="Logotipo de Achronyme"
         size="md"
