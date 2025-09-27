@@ -8,14 +8,13 @@ use Illuminate\View\View;
 class AppLayout extends Component
 {
     /**
-     * Create the component instance.
-     * 
-     * @param string $title
+     * Create a new component instance.
      */
-    public function __construct(public string $title = 'Guest Layout')
-    {
-        //
+    public function __construct(
+        public ?string $title = null
+    ) {
     }
+
     /**
      * Get the view / contents that represents the component.
      */
