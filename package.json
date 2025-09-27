@@ -1,0 +1,25 @@
+{
+    "$schema": "https://json.schemastore.org/package.json",
+    "name": "achronyme",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite"
+    },
+    "devDependencies": {
+        "@tailwindcss/forms": "^0.5.2",
+        "@tailwindcss/postcss": "^4.1.13",
+        "@tailwindcss/vite": "^4.1.13",
+        "alpinejs": "^3.4.2",
+        "axios": "^1.11.0",
+        "concurrently": "^9.0.1",
+        "laravel-vite-plugin": "^2.0.0",
+        "tailwindcss": "^4.1.13",
+        "vite": "^7.0.4"
+    },
+    "dependencies": {
+        "@tailwindplus/elements": "^1.0.13",
+        "gsap": "^3.13.0"
+    }
+}
