@@ -132,5 +132,12 @@
         filter: brightness(0.9);
         transition-duration: 0.1s;
     }
-}
 
+    .animated-gradient {
+        background-image: linear-gradient(to right, var(--color-purple-blue-600), var(--color-accent-purple-200), var(--color-purple-blue-400), var(--color-purple-blue-600), var(--color-accent-purple-200), var(--color-purple-blue-400), var(--color-purple-blue-600), var(--color-accent-purple-200), var(--color-purple-blue-400), var(--color-purple-blue-600));
+        background-size: 400% auto;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+    }
+}
