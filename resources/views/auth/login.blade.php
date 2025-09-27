@@ -1,5 +1,5 @@
 <x-guest-layout title="Inicia sesión en tu cuenta">
-    <div class="bg-white px-6 py-12 shadow-md sm:rounded-lg sm:px-12 dark:bg-slate-800 dark:border dark:border-slate-700">
+    <div class="bg-slate-100 px-6 py-12 shadow-md sm:rounded-lg sm:px-12 dark:bg-slate-800 dark:border dark:border-slate-700">
     <!-- Session Status -->
         <x-auth-session-status class="mb-4" :status="session('status')" />
 
@@ -44,7 +44,7 @@
                 </div>
 
                 <div class="text-sm/6">
-                    <a href="{{ route('password.request') }}" class="font-medium text-purple-blue-600 hover:text-purple-blue-700 dark:text-purple-blue-400 dark:hover:text-purple-blue-500">¿Olvidaste tu contraseña?</a>
+                    <a href="{{ route('password.request') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">¿Olvidaste tu contraseña?</a>
                 </div>
             </div>
 
@@ -85,6 +85,6 @@
     </div>
     <p class="mt-10 text-center text-sm/6 text-slate-500 dark:text-slate-400">
     ¿No tienes una cuenta?
-    <a href="{{ route('register') }}" class="font-medium text-purple-blue-600 hover:text-purple-blue-700 dark:text-purple-blue-400 dark:hover:text-purple-blue-500">Regístrate</a>
+    <a href="{{ route('register') }}" class="font-medium text-purple-blue-700 hover:text-purple-blue-800 dark:text-purple-blue-300 dark:hover:text-purple-blue-400">Regístrate</a>
     </p>
 </x-guest-layout>
