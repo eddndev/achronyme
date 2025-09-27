@@ -47,7 +47,7 @@
 
 @endphp
 
-<picture {{ $attributes->merge(['class' => 'inline-block']) }}>
+<picture {{ $attributes->merge(['class' => 'block']) }}>
   <source type="image/avif" srcset="{{ $srcsetAvif }}">
   <source type="image/webp" srcset="{{ $srcsetWebp }}">
   <img

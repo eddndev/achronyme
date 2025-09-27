@@ -19,13 +19,7 @@
     <body class="font-sans text-slate-800 antialiased h-full">
         <div class="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-md">
-                <x-image.logo
-                    class="mx-auto h-10 w-auto"
-                    src="resources/images/logo.png"
-                    alt="Logotipo de Achronyme"
-                    size="md"
-                    :priority="true"
-                />
+                
                 <h2 class="mt-6 text-center text-2xl/9 font-bold tracking-tight text-slate-800 dark:text-slate-200">{{ $title }}</h2>
             </div>
 

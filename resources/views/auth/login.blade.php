@@ -1,5 +1,13 @@
 <x-guest-layout title="Inicia sesión en tu cuenta">
-    <div class="bg-slate-100 px-6 py-12 shadow-md sm:rounded-lg sm:px-12 dark:bg-slate-800 dark:border dark:border-slate-700">
+    <x-image.logo
+        class="mx-auto h-80 w-auto absolute top-0 left-1/2 -translate-y-1/2 -translate-x-1/2 -z-20"
+        src="resources/images/logo.png"
+        alt="Logotipo de Achronyme"
+        size="md"
+        :priority="true"
+    />
+    <div class="border border-slate-200 bg-slate-100/75 px-6 py-12 shadow-md backdrop-blur-lg sm:rounded-lg sm:px-12 dark:border-slate-700 dark:bg-slate-900/75">
+    
     <!-- Session Status -->
         <x-auth-session-status class="mb-4" :status="session('status')" />
 
