@@ -28,7 +28,7 @@
           </svg>
         </button>
 
-        <el-popover id="desktop-menu-product" anchor="bottom" popover class="w-screen max-w-md overflow-hidden rounded-3xl bg-white shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(3)] backdrop:bg-transparent open:block data-closed:translate-y-1 data-closed:opacity-0 data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
+        <el-popover id="desktop-menu-product" anchor="bottom" popover class="w-screen max-w-md overflow-hidden rounded-lg bg-white shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(3)] backdrop:bg-transparent open:block data-closed:translate-y-1 data-closed:opacity-0 data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
           <div class="p-4">
             <div class="group relative flex items-center gap-x-6 rounded-lg p-4 text-sm/6 hover:bg-gray-50 dark:hover:bg-white/5">
               <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-700/50 dark:group-hover:bg-gray-700">
@@ -88,7 +88,7 @@
           </svg>
         </button>
 
-        <el-popover id="desktop-menu-company" anchor="bottom" popover class="w-96 overflow-visible rounded-3xl bg-white p-4 shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(3)] backdrop:bg-transparent open:block data-closed:translate-y-1 data-closed:opacity-0 data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in dark:bg-gray-800 dark:-outline-offset-1 dark:outline-white/10">
+        <el-popover id="desktop-menu-company" anchor="bottom" popover class="w-96 overflow-visible rounded-lg bg-white p-4 shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(3)] backdrop:bg-transparent open:block data-closed:translate-y-1 data-closed:opacity-0 data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in dark:bg-gray-800 dark:-outline-offset-1 dark:outline-white/10">
           <div class="relative rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-white/5">
             <a href="#" class="block text-sm/6 font-semibold text-gray-900 dark:text-white">
               About us
@@ -121,7 +121,7 @@
       </div>
     </el-popover-group>
     <div class="hidden lg:flex lg:flex-1 lg:justify-end">
-      <a href="{{ route('login') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Log in <span aria-hidden="true">&rarr;</span></a>
+      <a href="{{ route('login') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Iniciar Sesión <span aria-hidden="true">&rarr;</span></a>
     </div>
   </nav>
   <el-dialog>
