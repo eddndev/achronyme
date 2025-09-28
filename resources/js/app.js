@@ -16,7 +16,7 @@ function initAnimations() {
     if (document.querySelector('.animated-gradient')) {
         gsap.to('.animated-gradient', {
             backgroundPosition: '400% 0',
-            ease: 'ease-in-out',
+            ease: 'power3.inOut',
             duration: 10,
             repeat: -1,
         });

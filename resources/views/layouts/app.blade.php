@@ -15,6 +15,7 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
+        <x-partials.svg />
         <div class="min-h-full">
             <x-partials.navigation />
 
