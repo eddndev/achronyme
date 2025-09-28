@@ -1,17 +1,3 @@
-<!--
-    Componente Parcial: Iconos SVG
-    ================================
-    Autor: Eduardo
-    Fecha: 07 de Septiembre, 2025
-
-    Descripción:
-    Este componente contiene los iconos SVG utilizados en el sitio.
-    Se asegura de que todos los iconos sean consistentes en estilo y tamaño.
-    Se usa el método de sprite svg para hacer referencias a los iconos en otros componentes.
-    Dependencias:
-    - Ninguna
-    - Asegúrate de que los iconos SVG estén optimizados para la web.
--->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
   {{-- Icono usuario --}}
   <symbol id="icon-user" viewBox="0 0 24 24" stroke="currentColor" fill="none">

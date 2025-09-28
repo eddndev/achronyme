@@ -1,11 +1,11 @@
-
+<x-partials.icon-command />
 <div x-data @keydown.window.prevent.cmd.k="$refs.dialog.showModal()" @keydown.window.prevent.ctrl.k="$refs.dialog.showModal()">
 @php
 $tools = [
     ['title' => 'Transformada de Fourier', 'description' => 'Calcular el espectro de magnitud y fase', 'url' => '#', 'icon' => 'icon-fx'],
     ['title' => 'Serie de Fourier', 'description' => 'Analizar funciones periódicas', 'url' => '#', 'icon' => 'icon-sf'],
     ['title' => 'Convolución', 'description' => 'Visualizar la convolución de dos señales', 'url' => '#', 'icon' => 'icon-conv'],
-    ['title' => 'GitHub', 'description' => 'Ver el código fuente del proyecto', 'url' => '#', 'icon' => 'icon-gh'],
+    ['title' => 'GitHub', 'description' => 'Ver el código fuente del proyecto', 'url' => '#', 'icon' => 'icon-github'],
 ];
 @endphp
 
@@ -43,9 +43,37 @@ $tools = [
                 <div class="text-sm text-gray-700 dark:text-gray-300">
                   <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
-                      <path d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" stroke-linecap="round" stroke-linejoin="round" />
+                        <use href="#icon-sf" />
                     </svg>
                     <span class="ml-3 flex-auto truncate">Serie de Fourier</span>
+                    <span aria-hidden="true" class="ml-3 hidden flex-none text-gray-500 group-aria-selected:inline dark:text-gray-400">Ir a...</span>
+                  </a>
+                </div>
+                <div class="text-sm text-gray-700 dark:text-gray-300">
+                  <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
+                      <use href="#icon-fx" />
+                    </svg>
+                    <span class="ml-3 flex-auto truncate">Transformada de Fourier</span>
+                    <span aria-hidden="true" class="ml-3 hidden flex-none text-gray-500 group-aria-selected:inline dark:text-gray-400">Ir a...</span>
+                  </a>
+                </div>
+                <div class="text-sm text-gray-700 dark:text-gray-300">
+                  <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
+                      <use href="#icon-conv" />
+                    </svg>
+                    <span class="ml-3 flex-auto truncate">Convolución</span>
+                    <span aria-hidden="true" class="ml-3 hidden flex-none text-gray-500 group-aria-selected:inline dark:text-gray-400">Ir a...</span>
+                  </a>
+                </div>
+                <h2 class="mt-4 mb-2 px-3 text-xs font-semibold text-gray-900 dark:text-gray-200">Visita nuestra documentación</h2>
+                <div class="text-sm text-gray-700 dark:text-gray-300">
+                  <a href="https://github.com/eddndev/achronyme" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
+                      <use href="#icon-github" />
+                    </svg>
+                    <span class="ml-3 flex-auto truncate">Repositorio de Achronyme</span>
                     <span aria-hidden="true" class="ml-3 hidden flex-none text-gray-500 group-aria-selected:inline dark:text-gray-400">Ir a...</span>
                   </a>
                 </div>
@@ -57,7 +85,9 @@ $tools = [
                 <div class="text-sm text-gray-700 dark:text-gray-300">
                     @foreach ($tools as $tool)
                         <a href="{{ $tool['url'] }}" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-indigo-600 aria-selected:text-white dark:aria-selected:bg-indigo-500">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-400 group-aria-selected:text-white dark:text-gray-500"><path d="M5.25 8.25h13.5m-13.5 7.5h13.5m-13.5-3.75h13.5M3.75 6v12m16.5-12v12" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-400 group-aria-selected:text-white dark:text-gray-500">
+                                <use href="#{{ $tool['icon'] }}" />
+                            </svg>
                             <span class="ml-3 flex-auto truncate">{{ $tool['title'] }}</span>
                         </a>
                     @endforeach
