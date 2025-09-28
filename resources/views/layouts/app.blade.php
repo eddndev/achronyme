@@ -25,6 +25,7 @@
             <main class="">
                 {{ $slot }}
             </main>
+            <x-partials.layout.footer />
         </div>
         <template data-turbo-permanent>
             @livewireScripts
