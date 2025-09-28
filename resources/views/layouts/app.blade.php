@@ -17,6 +17,7 @@
         </template>
     </head>
     <body class="font-sans antialiased h-full">
+        <x-partials.icon-command />
         <x-partials.svg />
         <div class="min-h-full">
             <x-partials.navigation />

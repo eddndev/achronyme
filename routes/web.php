@@ -1,11 +1,16 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ToolController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+Route::get('/fourier-series', [ToolController::class, 'fourierSeries'])->name('fourier-series');
+Route::get('/fourier-transform', [ToolController::class, 'fourierTransform'])->name('fourier-transform');
+Route::get('/convolution', [ToolController::class, 'convolution'])->name('convolution');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

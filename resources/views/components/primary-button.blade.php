@@ -10,6 +10,5 @@
     '
     ]) }}
 >
-    {{-- El span es crucial para que el texto aparezca por encima del efecto de brillo --}}
     <span class="z-10">{{ $slot }}</span>
 </button>
