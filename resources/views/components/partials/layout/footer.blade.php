@@ -1,5 +1,5 @@
 <footer class="bg-white dark:bg-gray-900">
-  <div class="mx-auto max-w-7xl px-6 pt-16 pb-8 sm:pt-24 lg:px-8 lg:pt-32">
+  <div class="mx-auto max-w-6xl px-6 pt-16 pb-8 sm:pt-24 lg:px-8 lg:pt-32">
     <div class="xl:grid xl:grid-cols-3 xl:gap-8">
       <div class="space-y-8">
         <img src="https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=indigo&shade=600" alt="Company name" class="h-9 dark:hidden" />
