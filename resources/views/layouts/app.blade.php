@@ -12,7 +12,9 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
-        @livewireStyles
+        <template data-turbo-permanent>
+            @livewireStyles
+        </template>
     </head>
     <body class="font-sans antialiased h-full">
         <x-partials.svg />
@@ -24,7 +26,9 @@
                 {{ $slot }}
             </main>
         </div>
-        @livewireScripts
+        <template data-turbo-permanent>
+            @livewireScripts
+        </template>
         <script>
             document.addEventListener('turbo:before-render', (event) => {
                 // Si el navegador no soporta la API, continuamos de forma normal

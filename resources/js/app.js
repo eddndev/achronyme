@@ -4,6 +4,12 @@ import '@tailwindplus/elements';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
+import Alpine from 'alpinejs';
+
+window.Alpine = Alpine;
+
+Alpine.start();
+
 gsap.registerPlugin(ScrollTrigger);
 
 function initAnimations() {
