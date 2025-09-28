@@ -45,4 +45,8 @@ return [
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
         'redirect' => env('GITHUB_REDIRECT_URI'),
     ],
+
+    'wolfram' => [
+        'app_id' => env('WOLFRAM_APPID'),
+    ],
 ];

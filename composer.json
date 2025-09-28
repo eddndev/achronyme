@@ -86,6 +86,7 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "repositories": [
-    { "type": "composer", "url": "https://nova.laravel.com" }
+    { 
+        "type": "composer", "url": "https://nova.laravel.com" }
     ]
 }
