@@ -104,4 +104,3 @@ $tools = [
     </div>
   </dialog>
 </div>
-</div>

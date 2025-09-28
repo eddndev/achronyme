@@ -22,4 +22,10 @@
     <x-comand.comand />
 </div>
 
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 px-6 py-24 sm:py-32">
+  <div class="mx-auto max-w-6xl">
+    <x-partials.home.tools-grid />
+  </div>
+</div>
+
 </x-app-layout>
