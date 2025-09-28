@@ -46,4 +46,5 @@ function initAnimations() {
     }
 }
 
+
 document.addEventListener('turbo:load', initAnimations);

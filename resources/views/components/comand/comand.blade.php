@@ -29,11 +29,11 @@ $tools = [
 <el-dialog>
   <dialog x-ref="dialog" id="dialog" class="backdrop:bg-transparent">
     <el-dialog-backdrop class="fixed inset-0 bg-gray-500/25 transition-opacity data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in dark:bg-gray-900/50"></el-dialog-backdrop>
-    <div tabindex="0" class="fixed inset-0 w-screen overflow-y-auto p-4 focus:outline-none sm:p-6 md:p-20">
+    <div tabindex="0" class="fixed inset-0 w-screen overflow-y-auto p-4 sm:p-6 md:p-20">
       <el-dialog-panel class="mx-auto block max-w-2xl transform overflow-hidden rounded-xl bg-white shadow-2xl outline-1 outline-black/5 transition-all data-closed:scale-95 data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in dark:bg-gray-900 dark:-outline-offset-1 dark:outline-white/10">
         <el-command-palette>
-          <div class="grid grid-cols-1 border-b border-gray-100 dark:border-white/10">
-            <input type="text" autofocus placeholder="Buscar..." class="col-start-1 row-start-1 h-12 w-full pr-4 pl-11 text-base text-gray-900 outline-hidden placeholder:text-gray-400 sm:text-sm dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500" />
+          <div class="grid grid-cols-1 border-gray-100 dark:border-white/10">
+            <input type="text" autofocus placeholder="Buscar..." class="col-start-1 row-start-1 h-12 w-full pr-4 pl-11 text-base text-gray-900 outline-hidden placeholder:text-gray-400 sm:text-sm dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 border-full" />
             <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 ml-4 size-5 self-center text-gray-400 dark:text-gray-500"><path d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" fill-rule="evenodd" /></svg>
           </div>
           <el-command-list class="block max-h-80 scroll-py-2 overflow-y-auto">
