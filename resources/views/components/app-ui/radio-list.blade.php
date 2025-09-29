@@ -5,10 +5,10 @@
     'checkedValue' => null
 ])
 
+@if($legend)
+    <legend class="sr-only">{{ $legend }}</legend>
+@endif
 <fieldset aria-label="{{ $legend }}" {{ $attributes->merge(['class' => '-space-y-px rounded-md bg-white dark:bg-slate-900/50']) }}>
-    @if($legend)
-        <legend class="sr-only">{{ $legend }}</legend>
-    @endif
 
     @foreach ($options as $option)
         <label

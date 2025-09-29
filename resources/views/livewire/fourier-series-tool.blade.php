@@ -45,6 +45,7 @@
                     <x-app-ui.input-text label="Coeficiente a₀" name="coeff_a0" placeholder="Ej: 1/2" />
                     <x-app-ui.input-text label="Coeficiente aₙ" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" />
                     <x-app-ui.input-text label="Coeficiente bₙ" name="coeff_bn" placeholder="Ej: 0" />
+                    
                 </div>
             </div>
         </div>
@@ -90,13 +91,7 @@
                 :checkedValues="['series']"
             />
 
-            <x-app-ui.input-text
-                label="Número de términos (N)"
-                name="terms_n"
-                type="number"
-                value="10"
-                placeholder="Número de armónicos"
-            />
+            <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" />
 
             <x-primary-button type="button" class="w-full">
                 Calcular y Graficar

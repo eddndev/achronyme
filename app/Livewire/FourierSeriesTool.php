@@ -26,76 +26,76 @@ class FourierSeriesTool extends Component
     public $renderSeries = true;
     public $terms_n = 10;
 
-    // Resultados
-    public array $results = [];
-    public bool $isLoading = false;
-
     /**
-     * Hook que se ejecuta cuando la propiedad $calculationMode cambia.
+     * Llama a la API de Wolfram para calcular los coeficientes de la serie de Fourier.
      */
-    public function updatedCalculationMode($value)
+    public function calculate()
     {
-        if ($value === 'coefficients') {
+        $appId = config('services.wolfram.app_id');
+        if (!$appId) {
+            // Consider adding a user-facing error
+            Log::error('Wolfram App ID not configured.');
+            return;
+        }
+
+        $query = "fourier series of {$this->functionDefinition} from t={$this->domainStart} to {$this->domainEnd}";
+
+        try {
+            $response = Http::timeout(30)->get('https://api.wolframalpha.com/v2/query', [
+                'appid' => $appId,
+                'input' => $query,
+                'output' => 'json',
+                'format' => 'plaintext',
+                'includepodid' => 'TrigonometricFourierSeries', // Specific pod for coefficients
+            ]);
+
+            if ($response->failed()) {
+                throw new \Exception('API request failed.');
+            }
+
+            $data = $response->json();
+
+            if (!($data['queryresult']['success'] ?? false) || !isset($data['queryresult']['pods'])) {
+                throw new \Exception('API did not return a successful result or pods.');
+            }
+
+            $this->extractCoefficients($data['queryresult']['pods']);
+
+            // Switch to coefficient mode to show results
+            $this->calculationMode = 'coefficients';
             $this->renderOriginal = false;
+
+        } catch (\Exception $e) {
+            Log::error("Wolfram API Error: " . $e->getMessage(), ['query' => $query]);
+            // Consider adding a user-facing error
         }
     }
 
     /**
-     * Llama a la API de Wolfram para calcular los coeficientes.
+     * Extrae los coeficientes de los pods de la API.
      */
-    public function calculate()
+    protected function extractCoefficients(array $pods)
     {
-        $this->isLoading = true;
-        $this->results = [];
-        $appId = config('services.wolfram.app_id');
+        $this->coeff_a0 = 'Not found';
+        $this->coeff_an = 'Not found';
+        $this->coeff_bn = 'Not found';
 
-        if (!$appId) {
-            $this->results = ['error' => 'Wolfram App ID not configured.'];
-            $this->isLoading = false;
-            return;
-        }
-
-        $T = "({$this->domainEnd}) - ({$this->domainStart})";
-        
-        $queries = [
-            'a0' => "1/($T) * integrate ({$this->functionDefinition}) from t={$this->domainStart} to {$this->domainEnd}",
-            'an' => "2/($T) * integrate ({$this->functionDefinition}) * cos(2*pi*n*t/($T)) from t={$this->domainStart} to {$this->domainEnd}",
-            'bn' => "2/($T) * integrate ({$this->functionDefinition}) * sin(2*pi*n*t/($T)) from t={$this->domainStart} to {$this->domainEnd}",
-        ];
-
-        foreach ($queries as $key => $query) {
-            try {
-                $response = Http::timeout(30)->get('https://api.wolframalpha.com/v2/query', [
-                    'appid' => $appId,
-                    'input' => $query,
-                    'output' => 'json',
-                    'format' => 'plaintext',
-                ]);
-
-                if ($response->failed()) {
-                    throw new \Exception('API request failed for query: ' . $query);
-                }
-
-                $data = $response->json();
-                $coefficient = 'Could not determine';
-
-                if (($data['queryresult']['success'] ?? false) && isset($data['queryresult']['pods'])) {
-                    foreach ($data['queryresult']['pods'] as $pod) {
-                        if ($pod['title'] === 'Result' || str_contains($pod['title'], 'integral')) {
-                            $coefficient = $pod['subpods'][0]['plaintext'];
-                            break;
-                        }
+        foreach ($pods as $pod) {
+            if ($pod['title'] === 'Trigonometric Fourier series') {
+                foreach ($pod['subpods'] as $subpod) {
+                    $text = $subpod['plaintext'];
+                    if (str_starts_with($text, 'a_0')) {
+                        $this->coeff_a0 = trim(explode('=', $text, 2)[1]);
+                    } elseif (str_starts_with($text, 'a_n')) {
+                        $this->coeff_an = trim(explode('=', $text, 2)[1]);
+                    } elseif (str_starts_with($text, 'b_n')) {
+                        $this->coeff_bn = trim(explode('=', $text, 2)[1]);
                     }
                 }
-                $this->results[$key] = $coefficient;
-
-            } catch (\Exception $e) {
-                Log::error("Wolfram API Error for $key: " . $e->getMessage(), ['query' => $query]);
-                $this->results[$key] = 'Error calculating';
+                // Stop after finding the correct pod
+                return;
             }
         }
-
-        $this->isLoading = false;
     }
 
     public function render()

@@ -1,7 +1,6 @@
 @props([
     'label' => '',
     'functionAddon' => 'f(t)',
-    'domainSeparatorAddon' => ',',
 
     'functionName',
     'functionId' => null,
@@ -28,7 +27,7 @@
     $addonClasses = 'flex shrink-0 items-center bg-white px-3 text-base text-slate-500 outline-1 -outline-offset-1 outline-slate-300 sm:text-sm/6 dark:bg-white/5 dark:text-slate-400 dark:outline-slate-700';
 @endphp
 
-<div {{ $attributes }}>
+<div>
     @if ($label)
         <label for="{{ $funcId }}" class="block text-sm/6 font-medium text-slate-900 dark:text-white">{{ $label }}</label>
     @endif
@@ -44,6 +43,7 @@
                 placeholder="{{ $functionPlaceholder }}"
                 value="{{ $functionValue }}"
                 class="-ml-px {{ $inputClasses }} rounded-tr-md"
+                {{ $attributes->whereStartsWith('wire:function') }}
             />
         </div>
 
@@ -56,8 +56,8 @@
                 placeholder="{{ $domainStartPlaceholder }}"
                 value="{{ $domainStartValue }}"
                 class="{{ $inputClasses }} rounded-bl-md"
+                {{ $attributes->whereStartsWith('wire:domainStart') }}
             />
-            <div class="-ml-px {{ $addonClasses }}">{{ $domainSeparatorAddon }}</div>
             <input
                 type="text"
                 name="{{ $domainEndName }}"
@@ -65,6 +65,7 @@
                 placeholder="{{ $domainEndPlaceholder }}"
                 value="{{ $domainEndValue }}"
                 class="-ml-px {{ $inputClasses }} rounded-br-md"
+                {{ $attributes->whereStartsWith('wire:domainEnd') }}
             />
         </div>
     </div>
