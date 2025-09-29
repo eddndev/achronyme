@@ -12,9 +12,7 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
-        <template data-turbo-permanent>
-            @livewireStyles
-        </template>
+        @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
         <x-partials.icon-command />
@@ -28,23 +26,24 @@
             </main>
             <x-partials.layout.footer />
         </div>
-        <template data-turbo-permanent>
-            @livewireScripts
-        </template>
+        @livewireScripts
+
+        <!-- MathJax -->
         <script>
-            document.addEventListener('turbo:before-render', (event) => {
-                // Si el navegador no soporta la API, continuamos de forma normal
-                if (!document.startViewTransition) {
-                    return;
+            MathJax = {
+                startup: {
+                    ready: () => {
+                        MathJax.startup.defaultReady();
+                        document.addEventListener('livewire:load', function () {
+                            MathJax.typesetPromise();
+                            Livewire.hook('message.processed', (message, component) => {
+                                MathJax.typesetPromise();
+                            });
+                        });
+                    }
                 }
-
-                event.preventDefault();
-
-                // Envolvemos el cambio de DOM en la transiciÃ³n
-                document.startViewTransition(() => {
-                    event.detail.resume();
-                });
-            });
+            };
         </script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </body>
 </html>

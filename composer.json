@@ -13,7 +13,8 @@
         "laravel/socialite": "^5.23",
         "laravel/tinker": "^2.10.1",
         "livewire/livewire": "^3.6",
-        "spatie/laravel-medialibrary": "^11.15"
+        "spatie/laravel-medialibrary": "^11.15",
+        "symfony/expression-language": "^7.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -36,7 +37,8 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helper/imageHelper.php"
+            "app/Helper/imageHelper.php",
+            "app/Helper/mathHelper.php"
         ]
     },
     "autoload-dev": {
