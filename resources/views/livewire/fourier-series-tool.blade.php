@@ -31,9 +31,9 @@
                 <div x-show="calculationMode === 'calculate'" x-transition class="space-y-4">
                     <h3 class="font-medium text-slate-900 dark:text-white">Función y Dominio</h3>
                     <x-app-ui.function-domain
-                        wire:function.defer="functionDefinition"
-                        wire:domainStart.defer="domainStart"
-                        wire:domainEnd.defer="domainEnd"
+                        wireFunction="functionDefinition"
+                        wireDomainStart="domainStart"
+                        wireDomainEnd="domainEnd"
                         functionName="function_definition"
                         functionPlaceholder="Ej: t"
                         domainStartName="domain_start"

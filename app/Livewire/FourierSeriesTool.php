@@ -2,11 +2,10 @@
 
 namespace App\Livewire;
 
+use App\Helper\MathHelper;
 use Livewire\Component;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Support\MathHelper; // ← nuestros helpers
-
 class FourierSeriesTool extends Component
 {
     // Estado de la UI
@@ -25,7 +24,7 @@ class FourierSeriesTool extends Component
     // Opciones de visualización
     public bool $renderOriginal = true;
     public bool $renderSeries   = true;
-    public int  $terms_n        = 10; // slider en la UI
+    public int  $terms_n        = 50; // slider en la UI
 
     // Salidas de depuración (MathML en crudo y moutput simbólico)
     public array $debugOutput          = []; // key => mathml
@@ -77,10 +76,16 @@ class FourierSeriesTool extends Component
         // 2) Construye queries para intervalo [a,b]
         $T = "({$b})-({$a})";
         $queries = [
-            'a0' => "(1/({$T})) * Integrate[{$f}, {t, {$a}, {$b}}]",
-            'an' => "(2/({$T})) * Integrate[{$f} * Cos[2*Pi*n*t/({$T})], {t, {$a}, {$b}}]",
-            'bn' => "(2/({$T})) * Integrate[{$f} * Sin[2*Pi*n*t/({$T})], {t, {$a}, {$b}}]",
+            'a0' => "(1/({$T})) * Integrate[({$f}), {t, {$a}, {$b}}]",
+            'an' => "(2/({$T})) * Integrate[({$f}) * Cos[2*Pi*n*t/({$T})], {t, {$a}, {$b}}]",
+            'bn' => "(2/({$T})) * Integrate[({$f}) * Sin[2*Pi*n*t/({$T})], {t, {$a}, {$b}}]",
         ];
+
+        $N = max(1, min(50, (int) $this->terms_n));
+        $zero = array_fill_keys(range(1, $N), 0.0);
+        $this->evaluated_a0 = $zero;
+        $this->evaluated_an = $zero;
+        $this->evaluated_bn = $zero;
 
         $N = max(1, min(50, (int)$this->terms_n)); // límite seguro
 
@@ -134,14 +139,16 @@ class FourierSeriesTool extends Component
 
             // --- BLOQUE 2: Conversión a EL + evaluación n=1..N ---
             try {
-                // Shortcut: si la expresión es '0', rellena con ceros sin evaluar
-                if (trim($best) === '0') {
-                    $vals = [];
-                    for ($n = 1; $n <= $N; $n++) $vals[$n] = 0.0;
+                $exprEL = MathHelper::wlToEL($best);
+                Log::info("Fourier {$key} expr (EL): {$exprEL}");
+
+                if (preg_match('/\bn\b/i', $exprEL)) {
+                    // depende de n -> evaluar para 1..N
+                    $vals = MathHelper::evalForNsEL($exprEL, $N);
                 } else {
-                    $exprEL = MathHelper::wlToEL($best);
-                    Log::info("Fourier {$key} expr (EL): {$exprEL}");
-                    $vals   = MathHelper::evalForNsEL($exprEL, $N);
+                    // escalar (incluye '0', '0.', 'exp(pi)/(2*pi)', etc.) -> evalúa 1 vez y replica
+                    $scalar = MathHelper::evalScalarEL($exprEL);
+                    $vals   = MathHelper::replicateScalar($scalar, $N);
                 }
 
                 if ($key === 'a0') $this->evaluated_a0 = $vals;
@@ -150,10 +157,7 @@ class FourierSeriesTool extends Component
 
                 Log::info("Fourier {$key} n=1..{$N}", $vals);
             } catch (\Throwable $e) {
-                Log::error("Evaluation error for {$key}: ".$e->getMessage(), [
-                    'best' => $best,
-                    // 'exprEL' => $exprEL ?? null,
-                ]);
+                Log::error("Evaluation error for {$key}: ".$e->getMessage(), ['best' => $best]);
             }
         }
 
@@ -213,8 +217,9 @@ class FourierSeriesTool extends Component
             foreach ($pods as $pod) {
                 if (($pod['id'] ?? '') === $want) {
                     foreach (($pod['subpods'] ?? []) as $sub) {
-                        if (!empty($sub['moutput'])) {
-                            return trim($sub['moutput']);
+                        if (array_key_exists('moutput', $sub)) {
+                            $val = (string)$sub['moutput'];      // "0" OK
+                            if ($val !== '') return trim($val);
                         }
                     }
                 }

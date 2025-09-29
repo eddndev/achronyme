@@ -6,16 +6,19 @@
     'functionId' => null,
     'functionPlaceholder' => '',
     'functionValue' => '',
+    'wireFunction' => '',
 
     'domainStartName',
     'domainStartId' => null,
     'domainStartPlaceholder' => 'a',
     'domainStartValue' => '',
+    'wireDomainStart' => '',
 
     'domainEndName',
     'domainEndId' => null,
     'domainEndPlaceholder' => 'b',
     'domainEndValue' => '',
+    'wireDomainEnd' => '',
 ])
 
 @php
@@ -43,7 +46,7 @@
                 placeholder="{{ $functionPlaceholder }}"
                 value="{{ $functionValue }}"
                 class="-ml-px {{ $inputClasses }} rounded-tr-md"
-                {{ $attributes->whereStartsWith('wire:function') }}
+                @if($wireFunction) wire:model.defer="{{ $wireFunction }}" @endif
             />
         </div>
 
@@ -56,7 +59,7 @@
                 placeholder="{{ $domainStartPlaceholder }}"
                 value="{{ $domainStartValue }}"
                 class="{{ $inputClasses }} rounded-bl-md"
-                {{ $attributes->whereStartsWith('wire:domainStart') }}
+                @if($wireDomainStart) wire:model.defer="{{ $wireDomainStart }}" @endif
             />
             <input
                 type="text"
@@ -65,7 +68,7 @@
                 placeholder="{{ $domainEndPlaceholder }}"
                 value="{{ $domainEndValue }}"
                 class="-ml-px {{ $inputClasses }} rounded-br-md"
-                {{ $attributes->whereStartsWith('wire:domainEnd') }}
+                @if($wireDomainEnd) wire:model.defer="{{ $wireDomainEnd }}" @endif
             />
         </div>
     </div>
