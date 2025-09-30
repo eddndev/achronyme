@@ -21,6 +21,7 @@
         "vite": "^7.0.4"
     },
     "dependencies": {
-        "@tailwindplus/elements": "^1.0.13"
+        "@tailwindplus/elements": "^1.0.13",
+        "chart.js": "^4.5.0"
     }
 }
