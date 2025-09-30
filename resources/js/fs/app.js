@@ -7,6 +7,7 @@ function initFourierChart() {
         return; // Exit if the chart canvas is not on the page
     }
 
+    // Initialize a global chart instance
     const chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -16,13 +17,11 @@ function initFourierChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-                duration: 400 // Smoother animation
-            },
+            animation: false, // Disable animations for smoother real-time updates
             scales: {
                 x: {
                     title: { display: true, text: 't' },
-                    ticks: { maxTicksLimit: 15 }
+                    ticks: { maxTicksLimit: 20 }
                 },
                 y: {
                     title: { display: true, text: 'f(t)' }
@@ -43,7 +42,6 @@ function initFourierChart() {
     // A simple, safer function evaluator for the frontend rendering.
     const evaluateFunction = (funcStr, t) => {
         try {
-            // Create a function with a restricted scope to Math functions.
             const func = new Function('t', `
                 const { sin, cos, tan, exp, pow, PI } = Math;
                 const pi = PI;
@@ -53,42 +51,61 @@ function initFourierChart() {
             return isFinite(result) ? result : 0;
         } catch (e) {
             console.error("Error evaluating function:", e);
-            return 0; // Return 0 on any parsing/evaluation error
+            return 0;
         }
     };
 
-    Livewire.on('fourier-series-updated', ({ seriesCoeffs, domainStart, domainEnd, functionDefinition, renderOriginal, renderSeries }) => {
-        const STEPS = 400;
-        const stepSize = (domainEnd - domainStart) / STEPS;
+    /**
+     * Redraws the entire chart based on the latest data from the Livewire component.
+     * @param {object} data The component's snapshot data.
+     */
+    const redrawFourierSeries = (data) => {
+        if (!data || !data.seriesCoeffs) return;
+
+        const { seriesCoeffs, functionDefinition, renderOriginal, renderSeries, terms_n } = data;
+        const { a0, an, bn, period, domainStart } = seriesCoeffs;
+
+        // If there's no period, clear the chart and exit.
+        if (!period || period <= 0) {
+            chart.data.labels = [];
+            chart.data.datasets = [];
+            chart.update();
+            return;
+        }
+
+        const STEPS = 500; // Increased steps for a smoother curve over two periods
+        const plotDomainStart = domainStart;
+        const plotDomainEnd = domainStart + 2 * period; // Plot over two full periods
+        const stepSize = (plotDomainEnd - plotDomainStart) / STEPS;
+
         const labels = [];
         const seriesData = [];
         const originalData = [];
 
-        const T = domainEnd - domainStart;
-        if (T <= 0) return; // Avoid division by zero or infinite loops
-
         for (let i = 0; i <= STEPS; i++) {
-            const t = domainStart + i * stepSize;
+            const t = plotDomainStart + i * stepSize;
             labels.push(t.toFixed(2));
 
             // 1. Reconstruct the Fourier Series signal if requested
             if (renderSeries) {
-                // This is the key logic from the refactoring plan
-                let y = seriesCoeffs.a0 / 2;
-                const N = seriesCoeffs.an ? Object.keys(seriesCoeffs.an).length : 0;
-
-                for (let n = 1; n <= N; n++) {
-                    const an = seriesCoeffs.an[n] || 0;
-                    const bn = seriesCoeffs.bn[n] || 0;
-                    y += an * Math.cos(2 * Math.PI * n * t / T);
-                    y += bn * Math.sin(2 * Math.PI * n * t / T);
+                let y = a0 / 2;
+                const limit = terms_n; // Use the slider's current value
+                for (let n = 1; n <= limit; n++) {
+                    if (an[n] !== undefined && bn[n] !== undefined) {
+                        y += an[n] * Math.cos(2 * Math.PI * n * t / period);
+                        y += bn[n] * Math.sin(2 * Math.PI * n * t / period);
+                    }
                 }
                 seriesData.push(y);
             }
 
-            // 2. Evaluate the original function if requested
+            // 2. Evaluate the original function (made periodic) if requested
             if (renderOriginal) {
-                originalData.push(evaluateFunction(functionDefinition, t));
+                // Map `t` from the extended domain back to the base domain [domainStart, domainStart + period)
+                let t_mod = t;
+                while (t_mod >= domainStart + period) { t_mod -= period; }
+                while (t_mod < domainStart) { t_mod += period; }
+                originalData.push(evaluateFunction(functionDefinition, t_mod));
             }
         }
 
@@ -96,7 +113,7 @@ function initFourierChart() {
         const datasets = [];
         if (renderSeries) {
             datasets.push({
-                label: 'Serie de Fourier',
+                label: `Serie de Fourier (N=${terms_n})`,
                 data: seriesData,
                 borderColor: 'rgb(234, 179, 8)',
                 borderWidth: 2,
@@ -105,22 +122,42 @@ function initFourierChart() {
         }
         if (renderOriginal) {
             datasets.push({
-                label: 'Función Original',
+                label: 'Función Original (Periódica)',
                 data: originalData,
                 borderColor: 'rgb(59, 130, 246)',
                 borderWidth: 2,
                 tension: 0.1,
-                borderDash: [5, 5] // Dashed line for original function
+                borderDash: [5, 5]
             });
         }
 
         chart.data.labels = labels;
         chart.data.datasets = datasets;
-        chart.update();
+        chart.update('none'); // 'none' prevents animation, making slider updates smooth
+    };
+
+    // Use Livewire hooks for robust component lifecycle management
+    Livewire.hook('component:init', ({ component, cleanup }) => {
+        // This hook is for a specific component, check its name
+        if (component.name !== 'fourier-series-tool') return;
+
+        // Initial draw when the component is loaded
+        redrawFourierSeries(component.snapshot.data);
+
+        // Listen for updates (e.g., when the slider is moved)
+        const handleUpdate = () => {
+            redrawFourierSeries(component.snapshot.data);
+        };
+        component.on('updated', handleUpdate);
+
+        // Clean up the listener when the component is destroyed
+        cleanup(() => {
+            // In a real SPA, you'd remove the listener here.
+        });
     });
 }
 
-// Ensure Livewire is initialized before we set up our listeners
+// Ensure Livewire is fully initialized before we set up our listeners
 document.addEventListener('livewire:init', () => {
     initFourierChart();
 });
