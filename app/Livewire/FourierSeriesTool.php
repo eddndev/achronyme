@@ -28,10 +28,9 @@ class FourierSeriesTool extends Component
 
     // Salidas de depuración (MathML en crudo y moutput simbólico)
     public array $debugOutput          = []; // key => mathml
-    public array $moutputCoefficients  = []; // key => moutput
 
     // Salidas evaluadas (listas para servir/descargar)
-    public array $evaluated_a0 = [];  // [n=>valor]
+    public float $evaluated_a0 = 0.0;  // [n=>valor]
     public array $evaluated_an = [];  // [n=>valor]
     public array $evaluated_bn = [];  // [n=>valor]
 
@@ -54,12 +53,20 @@ class FourierSeriesTool extends Component
         }
 
         // Limpia buffers
-        $this->debugOutput         = [];
-        $this->moutputCoefficients = [];
-        $this->evaluated_a0 = $this->evaluated_an = $this->evaluated_bn = [];
-        $this->seriesCoeffs = ['a0'=>[], 'an'=>[], 'bn'=>[]];
+        $this->debugOutput = [];
+        $this->evaluated_a0 = 0.0;
+        $this->evaluated_an = $this->evaluated_bn = [];
+        $this->seriesCoeffs = ['a0' => 0.0, 'an' => [], 'bn' => []];
 
-        // 1) Normaliza entradas de la UI a sintaxis Wolfram segura
+        // Obtener los valores numéricos de los límites de forma segura
+        $a_val = floatval(str_ireplace('pi', (string)\M_PI, $this->domainStart ?: '-pi'));
+        $b_val = floatval(str_ireplace('pi', (string)\M_PI, $this->domainEnd ?: 'pi'));
+        $T_val = $b_val - $a_val;
+
+        // Crear la función PHP callable a partir de la definición del usuario
+        $phpFunction = MathHelper::createPhpCallable($this->functionDefinition ?: 't');
+
+        // 1) Normaliza entradas de la UI a sintaxis Wolfram segura (para visualización)
         try {
             $f = MathHelper::normalizeFunctionForWolfram($this->functionDefinition ?: 't');
             $a = MathHelper::normalizeLimitForWolfram($this->domainStart   ?: '-Pi');
@@ -73,7 +80,7 @@ class FourierSeriesTool extends Component
             return;
         }
 
-        // 2) Construye queries para intervalo [a,b]
+        // 2) Construye queries para intervalo [a,b] para Wolfram (SOLO VISUALIZACIÓN)
         $T = "({$b})-({$a})";
         $queries = [
             'a0' => "(1/({$T})) * Integrate[({$f}), {t, {$a}, {$b}}]",
@@ -81,25 +88,14 @@ class FourierSeriesTool extends Component
             'bn' => "(2/({$T})) * Integrate[({$f}) * Sin[2*Pi*n*t/({$T})], {t, {$a}, {$b}}]",
         ];
 
-        $N = max(1, min(50, (int) $this->terms_n));
-        $zero = array_fill_keys(range(1, $N), 0.0);
-        $this->evaluated_a0 = $zero;
-        $this->evaluated_an = $zero;
-        $this->evaluated_bn = $zero;
-
-        $N = max(1, min(50, (int)$this->terms_n)); // límite seguro
-
         foreach ($queries as $key => $query) {
-            $pods = null;
-            $best = null;
-
-            // --- BLOQUE 1: Llamada a Wolfram + extracción de formatos ---
+            // --- BLOQUE 1: Llamada a Wolfram para obtener MathML ---
             try {
                 $params = [
                     'appid'  => $appId,
                     'input'  => $query,
                     'output' => 'json',
-                    'format' => 'mathml,moutput', // nos aseguramos de pedir moutput
+                    'format' => 'mathml', // Ya no pedimos moutput
                 ];
 
                 $response = Http::timeout(30)->get('https://api.wolframalpha.com/v2/query', $params);
@@ -108,65 +104,69 @@ class FourierSeriesTool extends Component
                 }
 
                 $data = $response->json();
-                Log::debug("Full Wolfram API response for '{$key}'", $data);
-
                 if (!(bool)($data['queryresult']['success'] ?? false) || empty($data['queryresult']['pods'])) {
-                    Log::warning("Wolfram query for '{$key}' not successful or no pods.", [
-                        'query' => $query,
-                        'response' => $data,
-                    ]);
+                    Log::warning("Wolfram query for '{$key}' not successful or no pods.", ['query' => $query]);
                     continue;
                 }
 
                 $pods = $data['queryresult']['pods'];
-
-                // Mantén tu extractor tal cual (prefiere DefiniteIntegral / Result)
                 $formats = $this->extractFormats($pods);
-                $this->debugOutput[$key]         = $formats['mathml'];
-                $this->moutputCoefficients[$key] = $formats['moutput'];
+                $this->debugOutput[$key] = $formats['mathml'];
 
-                // Elige el mejor moutput evaluable (Result → DefiniteIntegral → …)
-                $best = $this->pickBestMoutput($pods);
-                if ($best === null) {
-                    Log::warning("No evaluable moutput for {$key}");
-                    continue;
-                }
-                Log::info("Fourier {$key} expr (moutput): {$best}");
             } catch (\Throwable $e) {
                 Log::error("Wolfram API error for {$key}: ".$e->getMessage(), ['query' => $query]);
-                continue;
-            }
-
-            // --- BLOQUE 2: Conversión a EL + evaluación n=1..N ---
-            try {
-                $exprEL = MathHelper::wlToEL($best);
-                Log::info("Fourier {$key} expr (EL): {$exprEL}");
-
-                if (preg_match('/\bn\b/i', $exprEL)) {
-                    // depende de n -> evaluar para 1..N
-                    $vals = MathHelper::evalForNsEL($exprEL, $N);
-                } else {
-                    // escalar (incluye '0', '0.', 'exp(pi)/(2*pi)', etc.) -> evalúa 1 vez y replica
-                    $scalar = MathHelper::evalScalarEL($exprEL);
-                    $vals   = MathHelper::replicateScalar($scalar, $N);
-                }
-
-                if ($key === 'a0') $this->evaluated_a0 = $vals;
-                if ($key === 'an') $this->evaluated_an = $vals;
-                if ($key === 'bn') $this->evaluated_bn = $vals;
-
-                Log::info("Fourier {$key} n=1..{$N}", $vals);
-            } catch (\Throwable $e) {
-                Log::error("Evaluation error for {$key}: ".$e->getMessage(), ['best' => $best]);
             }
         }
 
-        // 3) Deja armado lo que la UI podría necesitar directamente
+        // --- BLOQUE 2: CÁLCULO NUMÉRICO DE COEFICIENTES ---
+        if ($T_val == 0) {
+            Log::warning("Domain has zero length (T=0). Coefficients will be zero.");
+            $this->evaluated_a0 = 0.0;
+            $this->evaluated_an = [];
+            $this->evaluated_bn = [];
+        } else {
+            // 1. Cálculo de a0 (como escalar)
+            $integral_a0 = MathHelper::integrateNumerically($phpFunction, $a_val, $b_val);
+            $this->evaluated_a0 = (1 / $T_val) * $integral_a0;
+            Log::info("Fourier a0 (numeric): {$this->evaluated_a0}");
+
+            // 2. Cálculo de an y bn (en un bucle)
+            $N = max(1, min(50, (int)$this->terms_n));
+            $this->evaluated_an = [];
+            $this->evaluated_bn = [];
+
+            for ($n = 1; $n <= $N; $n++) {
+                // Integrando para an
+                $integrand_an = static fn($t) => $phpFunction($t) * cos(2 * M_PI * $n * $t / $T_val);
+                $integral_an = MathHelper::integrateNumerically($integrand_an, $a_val, $b_val);
+                $this->evaluated_an[$n] = (2 / $T_val) * $integral_an;
+
+                // Integrando para bn
+                $integrand_bn = static fn($t) => $phpFunction($t) * sin(2 * M_PI * $n * $t / $T_val);
+                $integral_bn = MathHelper::integrateNumerically($integrand_bn, $a_val, $b_val);
+                $this->evaluated_bn[$n] = (2 / $T_val) * $integral_bn;
+            }
+            Log::info("Fourier an n=1..{$N}", $this->evaluated_an);
+            Log::info("Fourier bn n=1..{$N}", $this->evaluated_bn);
+        }
+
+        // 3. Actualizar la estructura para la vista
         $this->seriesCoeffs = [
-            'a0' => $this->evaluated_a0,
+            'a0' => $this->evaluated_a0, // Ahora es un escalar
             'an' => $this->evaluated_an,
             'bn' => $this->evaluated_bn,
         ];
+
+        // 4. Despachar evento para el frontend
+        $this->dispatch(
+            'fourier-series-updated',
+            seriesCoeffs: $this->seriesCoeffs,
+            domainStart: $a_val,
+            domainEnd: $b_val,
+            functionDefinition: $this->functionDefinition ?: 't',
+            renderOriginal: (bool)$this->renderOriginal,
+            renderSeries: (bool)$this->renderSeries,
+        );
 
         // Por si quieres forzar a que “calcule y grafique”
         $this->renderOriginal = (bool)$this->renderOriginal;
@@ -204,36 +204,6 @@ class FourierSeriesTool extends Component
         }
 
         return $formats;
-    }
-
-    /**
-     * Prioriza un moutput “evaluable” del conjunto de pods.
-     * Orden: Result → DefiniteIntegral → ExpandedForm → AlternateForm → cualquier otro.
-     */
-    protected function pickBestMoutput(array $pods): ?string
-    {
-        $order = ['Result', 'DefiniteIntegral', 'ExpandedForm', 'AlternateForm'];
-        foreach ($order as $want) {
-            foreach ($pods as $pod) {
-                if (($pod['id'] ?? '') === $want) {
-                    foreach (($pod['subpods'] ?? []) as $sub) {
-                        if (array_key_exists('moutput', $sub)) {
-                            $val = (string)$sub['moutput'];      // "0" OK
-                            if ($val !== '') return trim($val);
-                        }
-                    }
-                }
-            }
-        }
-        // Fallback: primer moutput disponible
-        foreach ($pods as $pod) {
-            foreach (($pod['subpods'] ?? []) as $sub) {
-                if (!empty($sub['moutput'])) {
-                    return trim($sub['moutput']);
-                }
-            }
-        }
-        return null;
     }
 
     public function render()

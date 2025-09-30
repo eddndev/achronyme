@@ -116,223 +116,63 @@ class MathHelper
         return $s;
     }
 
-    /**
-     * Convierte moutput (Wolfram Language) a una expresión evaluable por ExpressionLanguage.
-     * - Pi->pi, ^->**, mapea Sin[...], Cos[...], Sinh[...], etc. a sin(...), cos(...), sinh(...).
-     * - Inserta multiplicación implícita (2 n -> 2*n, n pi -> n*pi).
-     */
-    public static function wlToEL(string $s): string
-    {
-        // 1) Normalizaciones WL -> intermedio
-        //    Convierte funciones WL a llamadas con '(' en vez de '['
-        $s = preg_replace([
-            '/\bSin\[/i','/\bCos\[/i','/\bTan\[/i',
-            '/\bSinh\[/i','/\bCosh\[/i','/\bTanh\[/i',
-            '/\bSech\[/i','/\bCsch\[/i','/\bCoth\[/i',
-            '/\bExp\[/i','/\bLog\[/i','/\bAbs\[/i','/\bSqrt\[/i',
-        ], [
-            'sin(','cos(','tan(',
-            'sinh(','cosh(','tanh(',
-            'sech(','csch(','coth(',
-            'exp(','log(','abs(','sqrt(',
-        ], $s);
-
-        // Corchetes -> paréntesis
-        $s = str_replace(['[',']'], ['(',')'], $s);
-        // Pi -> pi, ^ -> ** (operador de potencia)
-        $s = str_replace(['π','Pi','^'], ['pi','pi','**'], $s);
-        // Quitar espacios (ya no nos afecta porque tokenizaremos)
-        $s = preg_replace('/\s+/', '', $s);
-
-        $s = preg_replace('/\bE\s*\*\*\s*\(([^)]+)\)/', 'exp($1)', $s);
-        // 2) E**algo_simple (pi, n, número o paréntesis simple)
-        $s = preg_replace('/\bE\s*\*\*\s*([A-Za-z0-9_\.]+|\([^()]*\))/', 'exp($1)', $s);
-        // 3) E suelta -> exp(1)
-        $s = preg_replace('/\bE\b/', 'exp(1)', $s);
-
-        // 2) Tokeniza con reglas que reconocen funciones, n, pi, números, paréntesis y operadores
-        $tokens = self::tokenizeEL($s);
-
-        // 3) Reconstruye inyectando multiplicación implícita cuando corresponda
-        $out = self::rebuildWithImplicitMultiplication($tokens);
-
-        return $out;
-    }
-
-    /** Evalúa una expresión EL que NO depende de n (ej. 0, 1/pi, exp(pi)/(2*pi)). */
-    public static function evalScalarEL(string $exprEL): float
-    {
-        $el = self::getEL();
-        $v = $el->evaluate($exprEL, ['pi' => \M_PI]); // si usaste exp(1) ya no necesitas 'e'
-        $eps = 1e-12;
-        if (is_numeric($v)) {
-            if (abs($v) < $eps) $v = 0.0;
-            if (abs($v - round($v)) < $eps) $v = (float) round($v);
-        }
-        return (float) $v;
-    }
-
-    /** Replica un escalar en un arreglo [1..N] => valor. */
-    public static function replicateScalar(float $value, int $N): array
-    {
-        $out = [];
-        for ($n = 1; $n <= $N; $n++) $out[$n] = $value;
-        return $out;
-    }
-
-
-    /** Tokeniza una cadena EL en números, identificadores (funciones, n, pi), paréntesis y operadores. */
-    private static function tokenizeEL(string $s): array
-    {
-        $funcs = ['sinh','cosh','tanh','sech','csch','coth','sin','cos','tan','sqrt','exp','log','abs'];
-        // ordenar por longitud desc para hacer matching codicioso
-        usort($funcs, fn($a,$b) => strlen($b) <=> strlen($a));
-
-        $tokens = [];
-        $i = 0; $len = strlen($s);
-
-        while ($i < $len) {
-            // ** operador
-            if ($i+1 < $len && $s[$i] === '*' && $s[$i+1] === '*') { $tokens[]='**'; $i+=2; continue; }
-
-            $ch = $s[$i];
-
-            // números (enteros o decimales)
-            if (preg_match('/\G\d+(\.\d+)?/A', $s, $m, 0, $i)) {
-                $tokens[] = $m[0];
-                $i += strlen($m[0]);
-                continue;
-            }
-
-            // paréntesis u operadores simples
-            if (strpos('()+-*/', $ch) !== false) { $tokens[] = $ch; $i++; continue; }
-
-            // funciones (codicioso)
-            $matched = false;
-            foreach ($funcs as $fn) {
-                $L = strlen($fn);
-                if ($i + $L <= $len && strncasecmp($s, $fn, $L) === 0) {
-                    $tokens[] = strtolower($fn);
-                    $i += $L;
-                    $matched = true;
-                    break;
-                }
-            }
-            if ($matched) continue;
-
-            // constantes/variables
-            if ($i+1 < $len && strncasecmp($s, 'pi', 2) === 0) { $tokens[]='pi'; $i+=2; continue; }
-            if ($ch === 'n' || $ch === 'N') { $tokens[]='n'; $i++; continue; }
-
-            // run de letras desconocidas -> intenta descomponer en (n|pi|funciones)
-            if (preg_match('/\G[A-Za-z_]+/A', $s, $m, 0, $i)) {
-                $run = $m[0]; $rlen = strlen($run); $j = 0;
-                while ($j < $rlen) {
-                    $subMatched = false;
-                    foreach ($funcs as $fn) {
-                        $L = strlen($fn);
-                        if ($j + $L <= $rlen && strncasecmp(substr($run, $j, $L), $fn, $L) === 0) {
-                            $tokens[] = strtolower($fn);
-                            $j += $L;
-                            $subMatched = true;
-                            break;
-                        }
-                    }
-                    if ($subMatched) continue;
-
-                    if ($j + 2 <= $rlen && strncasecmp(substr($run, $j, 2), 'pi', 2) === 0) {
-                        $tokens[] = 'pi'; $j += 2; continue;
-                    }
-                    if (strtolower($run[$j]) === 'n') { $tokens[]='n'; $j++; continue; }
-
-                    // si llegamos aquí, hay un símbolo que no reconocemos
-                    throw new \InvalidArgumentException("Token no reconocido en '{$run}' cerca de '".substr($run, $j)."'");
-                }
-                $i += $rlen;
-                continue;
-            }
-
-            throw new \InvalidArgumentException("Carácter no reconocido: '{$ch}'");
-        }
-
-        return $tokens;
-    }
-
-    /** Inserta '*' entre tokens donde hay multiplicación implícita. */
-    private static function rebuildWithImplicitMultiplication(array $tokens): string
-    {
-        $funcs = ['sinh','cosh','tanh','sech','csch','coth','sin','cos','tan','sqrt','exp','log','abs'];
-
-        $isNum   = fn($t) => (bool) preg_match('/^\d+(\.\d+)?$/', $t);
-        $isIdent = fn($t) => (bool) preg_match('/^[A-Za-z_][A-Za-z_0-9]*$/', $t);
-        $isFunc  = fn($t) => $isIdent($t) && in_array(strtolower($t), $funcs, true);
-        $isSym   = fn($t) => $t === 'n' || $t === 'pi';
-
-        $out = '';
-        $prev = null;
-
-        foreach ($tokens as $tok) {
-            if ($prev !== null) {
-                $prevIsNum   = $isNum($prev);
-                $prevIsSym   = $isSym($prev);
-                $prevIsFunc  = $isFunc($prev);
-                $prevIsClose = ($prev === ')');
-
-                $curIsNum    = $isNum($tok);
-                $curIsSym    = $isSym($tok);
-                $curIsFunc   = $isFunc($tok);
-                $curIsOpen   = ($tok === '(');
-
-                $mustMultiply =
-                    // (num|n|pi|')') seguido de (num|n|pi|'('|func)
-                    (($prevIsNum || $prevIsSym || $prevIsClose) && ($curIsNum || $curIsSym || $curIsOpen || $curIsFunc))
-                    ||
-                    // función seguida de símbolo/num/otra función (ej. sin n, cos 2x, etc.)
-                    ($prevIsFunc && ($curIsNum || $curIsSym || $curIsFunc))
-                    ||
-                    // símbolo seguido de apertura de paréntesis: n(…)
-                    ($prevIsSym && $curIsOpen)
-                    ||
-                    // cierre de paréntesis seguido de función: )sin(
-                    ($prevIsClose && $curIsFunc);
-
-                // pero jamás entre función y su '(' inmediato: sin (
-                if ($prevIsFunc && $curIsOpen) {
-                    $mustMultiply = false;
-                }
-
-                if ($mustMultiply) {
-                    $out .= '*';
-                }
-            }
-
-            $out .= $tok;
-            $prev = $tok;
-        }
-
-        return $out;
-    }
-
-
 
     /**
-     * Evalúa una expresión EL para n = 1..N y devuelve [n => valor].
+     * Crea una función callable de PHP a partir de una expresión matemática en formato texto.
+     * Utiliza ExpressionLanguage para una evaluación segura.
+     *
+     * @param string $expression La expresión matemática con 't' como variable.
+     * @return callable Una función que acepta un float $t y devuelve un float.
      */
-    public static function evalForNsEL(string $exprEL, int $N = 50): array
+    public static function createPhpCallable(string $expression): callable
     {
-        $el = self::getEL();
-        $vals = [];
-        for ($n = 1; $n <= $N; $n++) {
-            $v = $el->evaluate($exprEL, ['n' => $n, 'pi' => \M_PI]);
-            // Limpieza de ruido numérico
-            $eps = 1e-12;
-            if (is_numeric($v)) {
-                if (abs($v) < $eps) $v = 0.0;
-                if (abs($v - round($v)) < $eps) $v = (float) round($v);
+        // Reemplaza el operador de potencia '^' por '**' que ExpressionLanguage entiende.
+        $expression = str_replace('^', '**', $expression);
+
+        return static function (float $t) use ($expression): float {
+            $el = self::getEL(); // Reutiliza tu singleton de ExpressionLanguage
+            try {
+                // Evalúa la expresión pasando 't' y 'pi' como variables.
+                return (float) $el->evaluate($expression, [
+                    't' => $t,
+                    'pi' => \M_PI,
+                ]);
+            } catch (\Throwable $e) {
+                // En caso de un error de sintaxis en la función del usuario, devuelve 0.
+                return 0.0;
             }
-            $vals[$n] = $v;
+        };
+    }
+
+    /**
+     * Calcula la integral definida de una función usando la regla de Simpson 1/3.
+     *
+     * @param callable $function La función a integrar (acepta un float, devuelve un float).
+     * @param float $a Límite inferior de integración.
+     * @param float $b Límite superior de integración.
+     * @param int $steps El número de intervalos (debe ser par, se ajustará si es necesario).
+     * @return float El valor aproximado de la integral.
+     */
+    public static function integrateNumerically(callable $function, float $a, float $b, int $steps = 1000): float
+    {
+        // La regla de Simpson requiere un número par de intervalos.
+        if ($steps % 2 !== 0) {
+            $steps++;
         }
-        return $vals;
+
+        $h = ($b - $a) / $steps;
+        $sum = $function($a) + $function($b);
+
+        for ($i = 1; $i < $steps; $i++) {
+            $x = $a + $i * $h;
+            if ($i % 2 !== 0) {
+                $sum += 4 * $function($x); // Términos impares
+            } else {
+                $sum += 2 * $function($x); // Términos pares
+            }
+        }
+
+        return ($h / 3) * $sum;
     }
 
     /** ExpressionLanguage singleton con funciones registradas (incluye hiperbólicas). */

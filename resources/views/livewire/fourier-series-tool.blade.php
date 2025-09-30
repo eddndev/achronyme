@@ -54,6 +54,13 @@
 
         <div class="px-4 py-6 sm:px-6 lg:pl-8 xl:flex-1 xl:pl-6">
             <!-- Main content -->
+            <div class="mb-8">
+                <h3 class="font-medium text-slate-900 dark:text-white">Visualización de la Serie</h3>
+                <div class="mt-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                    <canvas id="fourierChart" class="w-full"></canvas>
+                </div>
+            </div>
+
             @if (isset($debugOutput) && $debugOutput)
             <div class="mt-6">
                 <h3 class="font-medium text-slate-900 dark:text-white">Resultados de los Coeficientes</h3>
