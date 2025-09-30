@@ -122,7 +122,7 @@
                 wire:model.defer="renderSeries"
             />
 
-            <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" wire:model.defer="terms_n" />
+            <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" wire:model.live="terms_n" />
 
             <x-primary-button type="button" class="w-full flex justify-center items-center" wire:click="calculate" wire:loading.attr="disabled">
                 <span>Calcular y Graficar</span>
