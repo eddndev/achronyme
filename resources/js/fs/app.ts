@@ -1,3 +1,4 @@
+import './fourier-state';
 import { Chart, registerables, ChartConfiguration } from 'chart.js';
 import * as math from 'mathjs'; // Import math.js
 Chart.register(...registerables);
