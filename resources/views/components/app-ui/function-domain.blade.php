@@ -5,20 +5,17 @@
     'functionName',
     'functionId' => null,
     'functionPlaceholder' => '',
-    'functionValue' => '',
-    'wireFunction' => '',
+    'functionErrorModel' => null,
 
     'domainStartName',
     'domainStartId' => null,
     'domainStartPlaceholder' => 'a',
-    'domainStartValue' => '',
-    'wireDomainStart' => '',
+    'domainStartErrorModel' => null,
 
     'domainEndName',
     'domainEndId' => null,
     'domainEndPlaceholder' => 'b',
-    'domainEndValue' => '',
-    'wireDomainEnd' => '',
+    'domainEndErrorModel' => null,
 ])
 
 @php
@@ -37,39 +34,57 @@
 
     <div class="@if($label) mt-2 @endif">
         {{-- Top Row: f(t) input --}}
-        <div class="flex">
-            <div class="{{ $addonClasses }} rounded-tl-md">{{ $functionAddon }}</div>
+        <div class="flex" x-data="{ funcError: {{ $functionErrorModel ?? 'null' }} }">
+            <div class="{{ $addonClasses }} rounded-tl-md" :class="funcError ? 'outline-red-300 dark:outline-red-700 text-red-500 dark:text-red-400' : ''">{{ $functionAddon }}</div>
             <input
                 type="text"
                 name="{{ $functionName }}"
                 id="{{ $funcId }}"
                 placeholder="{{ $functionPlaceholder }}"
-                value="{{ $functionValue }}"
+                x-model="functionDefinition"
                 class="-ml-px {{ $inputClasses }} rounded-tr-md"
-                @if($wireFunction) wire:model.defer="{{ $wireFunction }}" @endif
+                :class="funcError ? 'outline-red-300 focus:outline-red-600 dark:outline-red-700 dark:focus:outline-red-500' : ''"
             />
+            <template x-if="funcError">
+                <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-3 size-5 self-center justify-self-end text-red-500 sm:size-4 dark:text-red-400">
+                <path d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" fill-rule="evenodd" />
+                </svg>
+            </template>
         </div>
+        <template x-if="{{ $functionErrorModel ?? 'null' }}">
+            <p id="{{ $funcId }}-error" class="mt-1 text-sm text-red-600 dark:text-red-400" x-text="{{ $functionErrorModel }}"></p>
+        </template>
 
         {{-- Bottom Row: Domain [a, b] inputs --}}
         <div class="flex -mt-px">
-            <input
-                type="text"
-                name="{{ $domainStartName }}"
-                id="{{ $startId }}"
-                placeholder="{{ $domainStartPlaceholder }}"
-                value="{{ $domainStartValue }}"
-                class="{{ $inputClasses }} rounded-bl-md"
-                @if($wireDomainStart) wire:model.defer="{{ $wireDomainStart }}" @endif
-            />
-            <input
-                type="text"
-                name="{{ $domainEndName }}"
-                id="{{ $endId }}"
-                placeholder="{{ $domainEndPlaceholder }}"
-                value="{{ $domainEndValue }}"
-                class="-ml-px {{ $inputClasses }} rounded-br-md"
-                @if($wireDomainEnd) wire:model.defer="{{ $wireDomainEnd }}" @endif
-            />
+            <div class="grow" x-data="{ startError: {{ $domainStartErrorModel ?? 'null' }} }">
+                <input
+                    type="text"
+                    name="{{ $domainStartName }}"
+                    id="{{ $startId }}"
+                    placeholder="{{ $domainStartPlaceholder }}"
+                    x-model="domainStart"
+                    class="{{ $inputClasses }} rounded-bl-md"
+                    :class="startError ? 'outline-red-300 focus:outline-red-600 dark:outline-red-700 dark:focus:outline-red-500' : ''"
+                />
+                <template x-if="startError">
+                    <p id="{{ $startId }}-error" class="mt-1 text-sm text-red-600 dark:text-red-400" x-text="startError"></p>
+                </template>
+            </div>
+            <div class="grow -ml-px" x-data="{ endError: {{ $domainEndErrorModel ?? 'null' }} }">
+                <input
+                    type="text"
+                    name="{{ $domainEndName }}"
+                    id="{{ $endId }}"
+                    placeholder="{{ $domainEndPlaceholder }}"
+                    x-model="domainEnd"
+                    class="{{ $inputClasses }} rounded-br-md"
+                    :class="endError ? 'outline-red-300 focus:outline-red-600 dark:outline-red-700 dark:focus:outline-red-500' : ''"
+                />
+                <template x-if="endError">
+                    <p id="{{ $endId }}-error" class="mt-1 text-sm text-red-600 dark:text-red-400" x-text="endError"></p>
+                </template>
+            </div>
         </div>
     </div>
 </div>

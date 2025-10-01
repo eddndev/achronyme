@@ -1,6 +1,7 @@
 
 import { calculateCoefficients } from './fourier';
 import * as math from 'mathjs';
+import { validateConstant, validateFunction } from './validation';
 
 // --- Interfaces de Tipos ---
 
@@ -27,6 +28,12 @@ interface FourierState {
     calculationMode: 'calculate' | 'coefficients';
     isLoading: boolean;
     errorMessage: string;
+    functionError: string | null;
+    domainStartError: string | null;
+    domainEndError: string | null;
+    coeffA0Error: string | null;
+    coeffAnError: string | null;
+    coeffBnError: string | null;
 
     // Modelo de datos
     functionDefinition: string;
@@ -42,6 +49,7 @@ interface FourierState {
 
     // Métodos
     init(): void;
+    validate(): boolean;
     calculateAndRedraw(): Promise<void>;
     evaluateCoefficientExpressions(): void;
     prepareAndRedraw(recalculate?: boolean): void;
@@ -57,6 +65,12 @@ function fourierState(): FourierState {
         calculationMode: 'calculate',
         isLoading: false,
         errorMessage: '',
+        functionError: null,
+        domainStartError: null,
+        domainEndError: null,
+        coeffA0Error: null,
+        coeffAnError: null,
+        coeffBnError: null,
 
         // --- Modelo de datos ---
         functionDefinition: 't',
@@ -79,16 +93,62 @@ function fourierState(): FourierState {
         // --- Métodos ---
         init() {
             console.log('[Alpine] Initializing fourierState...');
-            this.prepareAndRedraw();
+            // Llama a la inicialización del gráfico y le pasa los datos iniciales.
+            // El propio init del gráfico se encargará del primer dibujado.
+            window.FourierSeriesChart.init(this.getChartData());
 
             this.$watch('renderOriginal', () => this.prepareAndRedraw());
             this.$watch('renderSeries', () => this.prepareAndRedraw());
             this.$watch('terms_n', () => this.prepareAndRedraw(false));
         },
 
+        validate() {
+            this.functionError = this.domainStartError = this.domainEndError = null;
+            this.coeffA0Error = this.coeffAnError = this.coeffBnError = null;
+            this.errorMessage = '';
+
+            let hasError = false;
+
+            if (this.calculationMode === 'calculate') {
+                const funcValidation = validateFunction(this.functionDefinition);
+                if (!funcValidation.isValid) {
+                    this.functionError = funcValidation.error!;
+                    hasError = true;
+                }
+
+                const startValidation = validateConstant(this.domainStart);
+                if (!startValidation.isValid) {
+                    this.domainStartError = startValidation.error!;
+                    hasError = true;
+                }
+
+                const endValidation = validateConstant(this.domainEnd);
+                if (!endValidation.isValid) {
+                    this.domainEndError = endValidation.error!;
+                    hasError = true;
+                }
+            } else {
+                const a0Validation = validateConstant(this.coeff_a0_str);
+                if (!a0Validation.isValid) {
+                    this.coeffA0Error = a0Validation.error!;
+                    hasError = true;
+                }
+                // Basic validation for an/bn, more complex validation in evaluateCoefficientExpressions
+                if (!this.coeff_an_str.trim()) this.coeffAnError = 'El campo no puede estar vacío.';
+                if (!this.coeff_bn_str.trim()) this.coeffBnError = 'El campo no puede estar vacío.';
+                if(this.coeffAnError || this.coeffBnError) hasError = true;
+            }
+
+            return !hasError;
+        },
+
         async calculateAndRedraw() {
             this.isLoading = true;
-            this.errorMessage = '';
+            if (!this.validate()) {
+                this.isLoading = false;
+                return;
+            }
+
             try {
                 if (this.calculationMode === 'calculate') {
                     const result = calculateCoefficients(

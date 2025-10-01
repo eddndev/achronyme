@@ -18,25 +18,26 @@
                     [
                         'value' => 'coefficients',
                         'title' => 'Ingresar coeficientes',
-                        'description' => 'Introduce manualmente los valores de los coeficientes de la serie.'
+                        'description' => 'Introduce manually los valores de los coeficientes de la serie.'
                     ]
                 ];
                 @endphp
-                <div @change="calculationMode = $event.target.value">
+                <div>
                     <x-app-ui.radio-list
                         legend="Modo de cálculo"
                         name="calculation_mode"
                         :options="$calcOptions"
                         checkedValue="calculate"
+                        x-model="calculationMode"
                     />
                 </div>
 
                 <div x-show="calculationMode === 'calculate'" x-transition class="space-y-4">
                     <h3 class="font-medium text-slate-900 dark:text-white">Función y Dominio</h3>
                     <x-app-ui.function-domain
-                        wireFunction="functionDefinition"
-                        wireDomainStart="domainStart"
-                        wireDomainEnd="domainEnd"
+                        xModelFunction="functionDefinition"
+                        xModelDomainStart="domainStart"
+                        xModelDomainEnd="domainEnd"
                         functionName="function_definition"
                         functionPlaceholder="Ej: t"
                         domainStartName="domain_start"
@@ -48,9 +49,9 @@
 
                 <div x-show="calculationMode === 'coefficients'" x-transition class="space-y-4">
                     <h3 class="font-medium text-slate-900 dark:text-white">Coeficientes de Fourier</h3>
-                    <x-app-ui.input-text label="Coeficiente a₀" name="coeff_a0" placeholder="Ej: 1/2" wire:model.defer="coeff_a0" />
-                    <x-app-ui.input-text label="Coeficiente aₙ" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" wire:model.defer="coeff_an" />
-                    <x-app-ui.input-text label="Coeficiente bₙ" name="coeff_bn" placeholder="Ej: 0" wire:model.defer="coeff_bn" />
+                    <x-app-ui.input-text label="Coeficiente" name="coeff_a0" placeholder="Ej: 1/2" x-model="coeff_a0" />
+                    <x-app-ui.input-text label="Coeficiente" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" x-model="coeff_an" />
+                    <x-app-ui.input-text label="Coeficiente" name="coeff_bn" placeholder="Ej: 0" x-model="coeff_bn" />
                 </div>
             </div>
         </div>
@@ -86,7 +87,7 @@
                     legend="Opciones de visualización"
                     :options="$renderOriginalOption"
                     :checkedValues="['original']"
-                    wire:model.defer="renderOriginal"
+                    x-model="renderOriginal"
                 />
             </div>
 
@@ -103,18 +104,14 @@
             <x-app-ui.checkbox-list
                 :options="$renderSeriesOption"
                 :checkedValues="['series']"
-                wire:model.defer="renderSeries"
+                x-model="renderSeries"
             />
 
-            <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" wire:model.live="terms_n" />
+            <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" x-model="terms_n" />
 
-            <x-primary-button type="button" class="w-full flex justify-center items-center" wire:click="calculate" wire:loading.attr="disabled">
-                <span>Calcular y Graficar</span>
-                <svg wire:loading.delay wire:target="calculate" class="animate-spin ml-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </x-primary-button>
+            <x-app-ui.button type="button" @click="calculateAndRedraw()" is-loading="isLoading" loading-text="Calculando...">
+                Calcular
+            </x-app-ui.button>
         </div>
     </div>
 </div>
