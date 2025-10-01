@@ -1,13 +1,7 @@
+@props(['tools' => []])
+
 <x-partials.icon-command />
 <div x-data @keydown.window.prevent.cmd.k="$refs.dialog.showModal()" @keydown.window.prevent.ctrl.k="$refs.dialog.showModal()">
-@php
-$tools = [
-    ['title' => 'Transformada de Fourier', 'description' => 'Calcular el espectro de magnitud y fase', 'url' => '#', 'icon' => 'icon-fx'],
-    ['title' => 'Serie de Fourier', 'description' => 'Analizar funciones periódicas', 'url' => '#', 'icon' => 'icon-sf'],
-    ['title' => 'Convolución', 'description' => 'Visualizar la convolución de dos señales', 'url' => '#', 'icon' => 'icon-conv'],
-    ['title' => 'GitHub', 'description' => 'Ver el código fuente del proyecto', 'url' => '#', 'icon' => 'icon-github'],
-];
-@endphp
 
 <div class="mt-8 text-center">
     <button command="show-modal" commandfor="dialog" class="w-72 md:w-lg inline-flex items-center justify-between gap-x-1.5 rounded-lg bg-white/80 dark:bg-slate-800/75 px-3 py-4 text-sm font-semibold text-slate-900 dark:text-white shadow-sm ring-1 ring-inset ring-slate-200 dark:ring-slate-800 hover:bg-white/90 dark:hover:bg-slate-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-blue-600">

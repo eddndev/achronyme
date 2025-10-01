@@ -20,7 +20,7 @@ class ToolController extends Controller
      */
     public function fourierTransform(): View
     {
-        return view('ft.index');
+        return view('tools.fourier.ft.index');
     }
 
     /**
@@ -28,6 +28,6 @@ class ToolController extends Controller
      */
     public function convolution(): View
     {
-        return view('conv.index');
+        return view('tools.analytics.conv.index');
     }
 }
