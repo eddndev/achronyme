@@ -9,6 +9,12 @@
 
         <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <script>
+            window.deferLoadingAlpine = (start) => {
+                window.addEventListener('livewire:init', start)
+            }
+        </script>
+
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -26,6 +32,7 @@
             </main>
             <x-partials.layout.footer />
         </div>
+        @stack('scripts')
         @livewireScripts
 
         <!-- MathJax -->

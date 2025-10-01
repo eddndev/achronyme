@@ -1,5 +1,8 @@
-<!-- 3 column wrapper -->
-<div class="mx-auto w-full max-w-7xl grow lg:flex xl:px-2" x-data="{ calculationMode: 'calculate' }">
+<div 
+    class="mx-auto w-full max-w-7xl grow lg:flex xl:px-2"
+    x-data="fourierState()"
+    x-init="init()"
+>
     <!-- Left sidebar & main wrapper -->
     <div class="flex-1 xl:flex">
         <div class="border-b border-gray-200 p-6 sm:px-6 lg:pl-8 xl:w-96 xl:shrink-0 xl:border-r xl:border-b-0 xl:pl-6 dark:border-white/10">
@@ -61,26 +64,7 @@
                 </div>
             </div>
 
-            @if (isset($debugOutput) && $debugOutput)
-            <div class="mt-6">
-                <h3 class="font-medium text-slate-900 dark:text-white">Resultados de los Coeficientes</h3>
-                <div class="mt-2 space-y-6">
-                    @foreach($debugOutput as $key => $value)
-                        <div class="flex items-start">
-                            <span class="font-bold w-12 text-right pr-4 pt-2">{{ $key }} =</span>
-                            <div class="p-4 bg-slate-100 dark:bg-slate-800 rounded-md overflow-x-auto flex-1">
-                                {!! $value !!}
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
 
-                <h3 class="mt-8 font-medium text-slate-900 dark:text-white">Raw MathML Output</h3>
-                <pre class="mt-2 text-xs bg-slate-100 dark:bg-slate-800 p-4 rounded-md overflow-x-auto">@php print_r(collect($debugOutput)->map(fn ($item) => htmlspecialchars($item))->all()) @endphp</pre>
-
-
-            </div>
-            @endif
         </div>
     </div>
 

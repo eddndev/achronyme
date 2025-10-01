@@ -12,7 +12,7 @@ class ToolController extends Controller
      */
     public function fourierSeries(): View
     {
-        return view('fs.index');
+        return view('tools.fourier.fs.index');
     }
 
     /**

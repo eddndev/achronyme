@@ -58,11 +58,11 @@
         </div>
     </div>
 
-    <livewire:fourier-series-tool />
+    @include('tools.fourier.fs.fourier-series')
 </div>
 
 @push('scripts')
-    @vite('resources/js/fs/app.js')
+    @vite('resources/js/fs/app.ts')
 @endpush
 
 </x-app-layout>

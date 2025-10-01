@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    // Base Options
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "jsx": "preserve",
+
+    // Strictness
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Path Aliases for cleaner imports
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["resources/js/*"]
+    }
+  },
+  "include": [
+    "resources/js/**/*.ts",
+    "resources/js/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "vendor",
+    "public"
+  ]
+}
