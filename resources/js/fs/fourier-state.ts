@@ -36,6 +36,8 @@ interface FourierState {
     // Estado de la UI
     calculationMode: 'calculate' | 'coefficients';
     isLoading: boolean;
+    isResizing: boolean;
+    resizeTimeout: number | null;
     errorMessage: string;
 
     // Modelo de datos
@@ -51,6 +53,7 @@ interface FourierState {
 
     // Métodos
     init(): void;
+    handleResize(): void;
     addFunction(): void;
     removeFunction(id: number): void;
     validate(): boolean;
@@ -255,13 +258,11 @@ function fourierState(): FourierState {
         evaluateCoefficientExpressions() {
             try {
                 this.errorMessage = '';
-                if (this.functions.length === 0) {
-                    this.piecewiseCoeffs = null;
-                    return;
-                };
 
-                const domainStart = math.evaluate(this.functions[0].domainStart);
-                const domainEnd = math.evaluate(this.functions[this.functions.length - 1].domainEnd);
+                // For manual coefficient mode, we assume a standard period of 2*PI around the origin.
+                // This decouples it from the potentially stale domain of the function calculation mode.
+                const domainStart = -Math.PI;
+                const domainEnd = Math.PI;
                 const period = domainEnd - domainStart;
 
                 if (period <= 0) throw new Error("El período total debe ser positivo.");

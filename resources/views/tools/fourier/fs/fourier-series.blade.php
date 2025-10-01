@@ -32,54 +32,48 @@
                     />
                 </div>
                 <div x-show="calculationMode === 'calculate'" x-transition>
-                    
-                    @php
-                    $renderOriginalOption = [
-                        [
-                            'name' => 'render_options[original]',
-                            'value' => 'original',
-                            'title' => 'Renderizar función original',
-                            'description' => 'Muestra la gráfica de f(t).'
-                        ]
-                    ];
-                    @endphp
-                    <x-app-ui.checkbox-list
-                        legend="Opciones de visualización"
-                        :options="$renderOriginalOption"
-                        :checkedValues="['original']"
-                        x-model="renderOriginal"
-                    />
+                    <fieldset>
+                        <legend class="text-sm font-medium leading-6 text-slate-900 dark:text-white">Opciones de visualización</legend>
+                        <div class="mt-2 space-y-4">
+                            <div class="relative flex items-start">
+                                <div class="flex h-6 items-center">
+                                    <x-app-ui.checkbox id="render_original" value="original" x-model="renderOriginal" />
+                                </div>
+                                <div class="ml-3 text-sm leading-6">
+                                    <label for="render_original" class="font-medium text-slate-900 dark:text-white">Renderizar función original</label>
+                                    <p class="text-slate-500 dark:text-slate-400">Muestra la gráfica de f(t).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset>
                 </div>
 
-                @php
-                $renderSeriesOption = [
-                    [
-                        'name' => 'render_options[series]',
-                        'value' => 'series',
-                        'title' => 'Renderizar serie de Fourier',
-                        'description' => 'Muestra la gráfica de la aproximación.'
-                    ]
-                ];
-                @endphp
-                <x-app-ui.checkbox-list
-                    :options="$renderSeriesOption"
-                    :checkedValues="['series']"
-                    x-model="renderSeries"
-                />
+                <fieldset>
+                    <div class="mt-6 space-y-4">
+                        <div class="relative flex items-start">
+                            <div class="flex h-6 items-center">
+                                <x-app-ui.checkbox id="render_series" value="series" x-model="renderSeries" />
+                            </div>
+                            <div class="ml-3 text-sm leading-6">
+                                <label for="render_series" class="font-medium text-slate-900 dark:text-white">Renderizar serie de Fourier</label>
+                                <p class="text-slate-500 dark:text-slate-400">Muestra la gráfica de la aproximación.</p>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
 
                 <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" x-model="terms_n" />
             </div>
             
         </div>
 
-        <div class="px-4 py-6 sm:px-6 lg:pl-8 xl:flex-1 xl:pl-6">
+        <div class="min-w-0 px-4 py-6 sm:px-6 lg:pl-8 xl:flex-1 xl:pl-6">
             <!-- Main content -->
             <div class="mb-8">
-                <div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                <div class="relative bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                     <canvas id="fourierChart" class="w-full"></canvas>
                 </div>
             </div>
-
 
         </div>
     </div>
@@ -134,9 +128,11 @@
                 <x-app-ui.input-text label="Coeficiente aₙ" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" x-model="coeff_an_str" />
                 <x-app-ui.input-text label="Coeficiente bₙ" name="coeff_bn" placeholder="Ej: 0" x-model="coeff_bn_str" />
             </div>
-            <x-app-ui.button type="button" @click="calculateAndRedraw()" is-loading="isLoading" loading-text="Calculando...">
-                Calcular
-            </x-app-ui.button>
+            <div class="flex">
+                <x-app-ui.button class="h-12" type="button" @click="calculateAndRedraw()" loading-text="Calculando...">
+                    Calcular
+                </x-app-ui.button>
+            </div>
         </div>
     </div>
 </div>

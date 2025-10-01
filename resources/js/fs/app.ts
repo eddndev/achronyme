@@ -94,9 +94,24 @@ window.FourierSeriesChart = {
         const allDataPoints: number[] = [];
         const STEPS_PER_PERIOD = 500;
 
-        // Determine the full plotting range from the functions array
-        const plotDomainStart = functions.length > 0 ? math.evaluate(functions[0].domainStart) : 0;
-        const plotDomainEnd = functions.length > 0 ? math.evaluate(functions[functions.length - 1].domainEnd) : 1;
+        // --- Domain Calculation ---
+        let plotDomainStart: number;
+        let plotDomainEnd: number;
+
+        // If we are showing the original function, its domain is the authority.
+        // Otherwise, if we are only showing the series, its domain is the authority.
+        if (shouldRenderOriginal) {
+            plotDomainStart = functions.length > 0 ? math.evaluate(functions[0].domainStart) : 0;
+            plotDomainEnd = functions.length > 0 ? math.evaluate(functions[functions.length - 1].domainEnd) : 1;
+        } else if (shouldRenderSeries) {
+            plotDomainStart = piecewiseCoeffs!.domainStart;
+            plotDomainEnd = piecewiseCoeffs!.domainStart + piecewiseCoeffs!.period;
+        } else {
+            // Default fallback domain if nothing is being rendered
+            plotDomainStart = -Math.PI;
+            plotDomainEnd = Math.PI;
+        }
+
         const totalPeriod = plotDomainEnd - plotDomainStart;
         const stepSize = totalPeriod > 0 ? totalPeriod / STEPS_PER_PERIOD : 0.1;
 

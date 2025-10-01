@@ -1,6 +1,5 @@
 @props([
     'type' => 'submit',
-    'isLoading' => false,
     'loadingText' => 'Cargando...'
 ])
 
@@ -15,17 +14,11 @@
         btn-purple-blue
     '
     ]) }} 
-    :disabled="{{ $isLoading }}"
+    :disabled="isLoading"
 >
-    <div class="z-10 flex items-center justify-center">
-        <template x-if="{{ $isLoading }}">
-            <div class="flex items-center justify-center">
-                <x-app-ui.loading-spinner class="h-5 w-5 mr-2" />
-                <span x-text="'{{ $loadingText }}'"></span>
-            </div>
-        </template>
-        <template x-if="!{{ $isLoading }}">
-            <span>{{ $slot }}</span>
-        </template>
+    <div x-show="isLoading" class="flex items-center justify-center">
+        <x-app-ui.loading-spinner class="h-5 w-5 mr-2" />
+        <span x-text="'{{ $loadingText }}'"></span>
     </div>
+    <span x-show="!isLoading">{{ $slot }}</span>
 </button>
