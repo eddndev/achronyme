@@ -49,7 +49,7 @@
                 </div>
 
                 <fieldset>
-                    <div class="mt-6 space-y-4">
+                    <div class="space-y-4">
                         <div class="relative flex items-start">
                             <div class="flex h-6 items-center">
                                 <x-app-ui.checkbox id="render_series" value="series" x-model="renderSeries" />
@@ -90,6 +90,15 @@
 
                 <template x-for="(func, index) in functions" :key="func.id">
                     <div class="relative">
+                        <template x-if="functions.length > 1">
+                            <div class="absolute -top-2 -right-2 z-10">
+                                <x-app-ui.danger-circular-button
+                                    icon="trash"
+                                    @click.prevent="removeFunction(func.id)"
+                                    title="Eliminar función"
+                                />
+                            </div>
+                        </template>
                         <x-app-ui.function-domain
                             x-model-function="func.definition"
                             x-model-domain-start="func.domainStart"
@@ -103,24 +112,17 @@
                             ::is-domain-start-disabled="index > 0"
                             ::index="index"
                         />
-                        <template x-if="functions.length > 1">
-                            <div class="absolute top-1 right-1">
-                                <x-app-ui.circular-button
-                                    icon="trash"
-                                    @click.prevent="removeFunction(func.id)"
-                                    class="!bg-red-500 hover:!bg-red-600 focus:!ring-red-500"
-                                    title="Eliminar función"
-                                />
-                            </div>
-                        </template>
                     </div>
                 </template>
 
                 <div class="pt-2">
-                    <button type="button" @click.prevent="addFunction()" class="inline-flex items-center gap-x-1.5 rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 dark:bg-white/10 dark:text-white dark:ring-slate-700 dark:hover:bg-white/20">
-                        <svg class="size-5 -ml-0.5" fill="currentColor"><use href="#icon-plus"></use></svg>
-                        Añadir función
-                    </button>
+                    <x-app-ui.secondary-button type="button" @click.prevent="addFunction()">
+                        <div class="flex space-x-2 items-center">
+                            <svg class="size-5 -ml-0.5" fill="currentColor"><use href="#icon-plus"></use></svg>
+                            <div>Agregar función</div>
+                        </div>    
+
+                    </x-app-ui.secondary-button>
                 </div>
             </div>
 

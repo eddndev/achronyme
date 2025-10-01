@@ -88,6 +88,25 @@
         transition: all 0.3s ease-in-out;
     }
 
+    .btn-danger {
+        /*
+        |--------------------------------------------------------------------------
+        | Botón de Peligro con Gradiente Metálico Rojo
+        |--------------------------------------------------------------------------
+        | Usa el token --color-danger como base y variantes tonales de rojo
+        | para crear un efecto similar al btn-purple-blue
+        */
+        background-image: linear-gradient(
+            170deg,
+            #FCA5A5,                    /* Borde superior brillante (red-300) */
+            #F87171 15%,                /* Banda de luz principal (red-400) */
+            var(--color-danger) 50%,    /* Tono medio y color principal */
+            #B91C1C 90%,                /* Sombra profunda (red-700) */
+            #7F1D1D 100%                /* Borde inferior oscuro (red-900) */
+        );
+        transition: all 0.3s ease-in-out;
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Capa 3: Brillo Dinámico (Sheen)
@@ -96,7 +115,8 @@
     | que se anima al pasar el cursor, simulando un reflejo en una
     | superficie pulida.
     */
-    .btn-purple-blue::before {
+    .btn-purple-blue::before,
+    .btn-danger::before {
         content: '';
         position: absolute;
         top: 50%;
@@ -117,17 +137,20 @@
     /* --- ESTADOS DE INTERACCIÓN --- */
 
     /* Hover: El botón se ilumina y el brillo aparece */
-    .btn-purple-blue:hover {
+    .btn-purple-blue:hover,
+    .btn-danger:hover {
         filter: brightness(1.15);
     }
 
-    .btn-purple-blue:hover::before {
+    .btn-purple-blue:hover::before,
+    .btn-danger:hover::before {
         transform: translate(-50%, -50%) scale(1);
         opacity: 1;
     }
 
     /* Active (Click): El botón se presiona */
-    .btn-purple-blue:active {
+    .btn-purple-blue:active,
+    .btn-danger:active {
         transform: scale(0.97);
         filter: brightness(0.9);
         transition-duration: 0.1s;

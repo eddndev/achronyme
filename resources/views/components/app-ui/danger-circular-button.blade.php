@@ -8,9 +8,9 @@
     'class' => '
         rounded-full p-2 text-white shadow-xs
         transition-all duration-300
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-blue-500
+        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500
         dark:focus:ring-offset-slate-800
-        btn-purple-blue
+        btn-danger
     '
     ]) }}
     :disabled="isLoading"

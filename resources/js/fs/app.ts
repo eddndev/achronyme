@@ -217,12 +217,16 @@ window.FourierSeriesChart = {
             const range = finalMax - finalMin;
             const padding = range * 0.1;
 
-            this.chart.options.scales.y.min = finalMin - padding;
-            this.chart.options.scales.y.max = finalMax + padding;
+            if (this.chart.options.scales?.y) {
+                this.chart.options.scales.y.min = finalMin - padding;
+                this.chart.options.scales.y.max = finalMax + padding;
+            }
         } else {
             this.resetScales();
-            delete this.chart.options.scales.y.min;
-            delete this.chart.options.scales.y.max;
+            if (this.chart.options.scales?.y) {
+                delete this.chart.options.scales.y.min;
+                delete this.chart.options.scales.y.max;
+            }
         }
 
         this.chart.data.labels = labels;
