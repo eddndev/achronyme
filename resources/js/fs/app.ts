@@ -4,7 +4,7 @@ import * as math from 'mathjs';
 
 Chart.register(...registerables);
 
-// --- Interfaces --- 
+// --- Interfaces ---
 interface SeriesCoefficients {
     a0: number;
     an: number[];
@@ -76,7 +76,7 @@ window.FourierSeriesChart = {
     },
 
     redraw(data: FourierChartData) {
-        if (!this.chart || !data || !data.functions || data.functions.length === 0) {
+        if (!this.chart || !data || !data.functions) {
             console.warn('Redraw failed: Chart instance or data is missing.');
             if(this.chart) {
                 this.chart.data.labels = [];
@@ -88,16 +88,15 @@ window.FourierSeriesChart = {
 
         const { functions, renderOriginal, renderSeries, terms_n, piecewiseCoeffs } = data;
         const shouldRenderSeries = renderSeries.includes('series') && !!piecewiseCoeffs;
-        const shouldRenderOriginal = renderOriginal.includes('original');
+        const shouldRenderOriginal = renderOriginal.includes('original') && functions.length > 0;
 
         const datasets = [];
         const allDataPoints: number[] = [];
         const STEPS_PER_PERIOD = 500;
-        const colors = ['rgb(59, 130, 246)', 'rgb(234, 179, 8)', 'rgb(16, 185, 129)', 'rgb(239, 68, 68)', 'rgb(139, 92, 246)'];
 
         // Determine the full plotting range from the functions array
-        const plotDomainStart = math.evaluate(functions[0].domainStart);
-        const plotDomainEnd = math.evaluate(functions[functions.length - 1].domainEnd);
+        const plotDomainStart = functions.length > 0 ? math.evaluate(functions[0].domainStart) : 0;
+        const plotDomainEnd = functions.length > 0 ? math.evaluate(functions[functions.length - 1].domainEnd) : 1;
         const totalPeriod = plotDomainEnd - plotDomainStart;
         const stepSize = totalPeriod > 0 ? totalPeriod / STEPS_PER_PERIOD : 0.1;
 
@@ -108,36 +107,48 @@ window.FourierSeriesChart = {
 
         // --- Original Function(s) Plotting ---
         if (shouldRenderOriginal) {
-            functions.forEach((func, index) => {
-                const domainStart = math.evaluate(func.domainStart);
-                const domainEnd = math.evaluate(func.domainEnd);
-                const color = colors[index % colors.length];
-
-                const originalData: (number | null)[] = [];
-                let compiledUserFunc: math.EvalFunction | null = null;
-                try { compiledUserFunc = math.parse(func.definition).compile(); } catch (e) { /* ignore */ } 
-
-                if (compiledUserFunc) {
-                    for (const tStr of labels) {
-                        const t = parseFloat(tStr);
-                        // Use a small tolerance for floating point comparisons
-                        if (t >= domainStart - 1e-9 && t <= domainEnd + 1e-9) {
-                            const val = this.evaluateCompiledFunction(compiledUserFunc, t);
-                            originalData.push(val);
-                            if (isFinite(val)) allDataPoints.push(val);
-                        } else {
-                            originalData.push(null); // Gap in data
-                        }
-                    }
-                    datasets.push({
-                        label: `f(t) ${index + 1}`,
-                        data: originalData,
-                        borderColor: color,
-                        borderWidth: 2,
-                        borderDash: [5, 5],
-                        tension: 0.1
-                    });
+            // Compile all functions first and store them with their domains
+            const compiledFunctions = functions.map(func => {
+                try {
+                    return {
+                        compiled: math.parse(func.definition).compile(),
+                        start: math.evaluate(func.domainStart),
+                        end: math.evaluate(func.domainEnd)
+                    };
+                } catch (e) {
+                    return null;
                 }
+            }).filter(f => f !== null) as { compiled: math.EvalFunction; start: number; end: number }[];
+
+            // Create a single data array for the entire piecewise function
+            const originalData: (number | null)[] = [];
+
+            // Iterate through all time steps (labels)
+            for (const tStr of labels) {
+                const t = parseFloat(tStr);
+                let value: number | null = null;
+
+                // Find the correct function piece for the current time t
+                const activeFunc = compiledFunctions.find(f => t >= f.start - 1e-9 && t <= f.end + 1e-9);
+
+                if (activeFunc) {
+                    const val = this.evaluateCompiledFunction(activeFunc.compiled, t);
+                    if (isFinite(val)) {
+                        value = val;
+                        allDataPoints.push(val);
+                    }
+                }
+                originalData.push(value);
+            }
+
+            // Push a single dataset for the original function
+            datasets.push({
+                label: `f(t)`,
+                data: originalData,
+                borderColor: 'rgb(59, 130, 246)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                tension: 0.1
             });
         }
 

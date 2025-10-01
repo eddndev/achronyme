@@ -130,9 +130,9 @@
 
             <div x-show="calculationMode === 'coefficients'" x-transition class="space-y-4">
                 <h3 class="font-medium text-slate-900 dark:text-white">Coeficientes de Fourier</h3>
-                <x-app-ui.input-text label="Coeficiente" name="coeff_a0" placeholder="Ej: 1/2" x-model="coeff_a0" />
-                <x-app-ui.input-text label="Coeficiente" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" x-model="coeff_an" />
-                <x-app-ui.input-text label="Coeficiente" name="coeff_bn" placeholder="Ej: 0" x-model="coeff_bn" />
+                <x-app-ui.input-text label="Coeficiente a₀" name="coeff_a0" placeholder="Ej: 1/2" x-model="coeff_a0_str" />
+                <x-app-ui.input-text label="Coeficiente aₙ" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" x-model="coeff_an_str" />
+                <x-app-ui.input-text label="Coeficiente bₙ" name="coeff_bn" placeholder="Ej: 0" x-model="coeff_bn_str" />
             </div>
             <x-app-ui.button type="button" @click="calculateAndRedraw()" is-loading="isLoading" loading-text="Calculando...">
                 Calcular
