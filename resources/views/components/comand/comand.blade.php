@@ -35,7 +35,7 @@
                 <div class="p-2">
                 <h2 class="mt-4 mb-2 px-3 text-xs font-semibold text-gray-900 dark:text-gray-200">Nuevas Herramientas</h2>
                 <div class="text-sm text-gray-700 dark:text-gray-300">
-                  <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                  <a href="{{ route('fourier-series') }}" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
                         <use href="#icon-sf" />
                     </svg>
@@ -44,7 +44,7 @@
                   </a>
                 </div>
                 <div class="text-sm text-gray-700 dark:text-gray-300">
-                  <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                  <a href="{{ route('fourier-transform') }}" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
                       <use href="#icon-fx" />
                     </svg>
@@ -53,7 +53,7 @@
                   </a>
                 </div>
                 <div class="text-sm text-gray-700 dark:text-gray-300">
-                  <a href="#" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
+                  <a href="{{ route('convolution') }}" class="group flex cursor-default items-center rounded-md px-3 py-2 select-none focus:outline-hidden aria-selected:bg-gray-900/5 aria-selected:text-gray-900 dark:aria-selected:bg-white/5 dark:aria-selected:text-white">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 flex-none text-gray-900/40 group-aria-selected:text-gray-900 dark:text-gray-500 dark:group-aria-selected:text-white">
                       <use href="#icon-conv" />
                     </svg>
