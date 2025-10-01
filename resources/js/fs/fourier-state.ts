@@ -1,4 +1,3 @@
-
 import { calculateCoefficients } from './fourier';
 import * as math from 'mathjs';
 import { validateConstant, validateFunction } from './validation';
@@ -13,13 +12,23 @@ interface SeriesCoefficients {
     domainStart: number;
 }
 
+interface FunctionInput {
+    id: number;
+    definition: string;
+    domainStart: string;
+    domainEnd: string;
+    definitionError: string | null;
+    domainStartError: string | null;
+    domainEndError: string | null;
+}
+
 // Datos que espera la librería del gráfico (definidos en app.ts)
 interface FourierChartData {
-    seriesCoeffs: SeriesCoefficients;
-    functionDefinition: string;
-    renderOriginal: boolean;
-    renderSeries: boolean;
+    functions: FunctionInput[];
+    renderOriginal: string[];
+    renderSeries: string[];
     terms_n: number;
+    piecewiseCoeffs: SeriesCoefficients | null;
 }
 
 // Estado completo del componente Alpine
@@ -28,27 +37,22 @@ interface FourierState {
     calculationMode: 'calculate' | 'coefficients';
     isLoading: boolean;
     errorMessage: string;
-    functionError: string | null;
-    domainStartError: string | null;
-    domainEndError: string | null;
-    coeffA0Error: string | null;
-    coeffAnError: string | null;
-    coeffBnError: string | null;
 
     // Modelo de datos
-    functionDefinition: string;
-    domainStart: string;
-    domainEnd: string;
+    functions: FunctionInput[];
+    nextId: number;
+    piecewiseCoeffs: SeriesCoefficients | null;
     coeff_a0_str: string;
     coeff_an_str: string;
     coeff_bn_str: string;
-    renderOriginal: boolean;
-    renderSeries: boolean;
+    renderOriginal: string[];
+    renderSeries: string[];
     terms_n: number;
-    seriesCoeffs: SeriesCoefficients;
 
     // Métodos
     init(): void;
+    addFunction(): void;
+    removeFunction(id: number): void;
     validate(): boolean;
     calculateAndRedraw(): Promise<void>;
     evaluateCoefficientExpressions(): void;
@@ -65,78 +69,147 @@ function fourierState(): FourierState {
         calculationMode: 'calculate',
         isLoading: false,
         errorMessage: '',
-        functionError: null,
-        domainStartError: null,
-        domainEndError: null,
-        coeffA0Error: null,
-        coeffAnError: null,
-        coeffBnError: null,
 
         // --- Modelo de datos ---
-        functionDefinition: 't',
-        domainStart: '-pi',
-        domainEnd: 'pi',
+        nextId: 2,
+        functions: [
+            {
+                id: 1,
+                definition: 't',
+                domainStart: '-pi',
+                domainEnd: 'pi',
+                definitionError: null,
+                domainStartError: null,
+                domainEndError: null,
+            }
+        ],
+        piecewiseCoeffs: null,
         coeff_a0_str: '0',
         coeff_an_str: '(2*(-1)^(n+1))/n',
         coeff_bn_str: '0',
-        renderOriginal: true,
-        renderSeries: true,
+        renderOriginal: ['original'],
+        renderSeries: ['series'],
         terms_n: 10,
-        seriesCoeffs: {
-            a0: 0,
-            an: [],
-            bn: [],
-            period: 2 * Math.PI,
-            domainStart: -Math.PI,
-        },
 
         // --- Métodos ---
         init() {
             console.log('[Alpine] Initializing fourierState...');
-            // Llama a la inicialización del gráfico y le pasa los datos iniciales.
-            // El propio init del gráfico se encargará del primer dibujado.
-            window.FourierSeriesChart.init(this.getChartData());
 
-            this.$watch('renderOriginal', () => this.prepareAndRedraw());
-            this.$watch('renderSeries', () => this.prepareAndRedraw());
+            // First, initialize the chart with empty data. This ensures the chart object
+            // exists before we try to draw the actual data on it.
+            window.FourierSeriesChart.init({
+                functions: [],
+                renderOriginal: [],
+                renderSeries: [],
+                terms_n: this.terms_n,
+                piecewiseCoeffs: null
+            });
+
+            // Now that the chart instance exists, calculate the initial state and draw it.
+            this.calculateAndRedraw();
+
+            this.$watch('renderOriginal', () => this.prepareAndRedraw(false));
+            this.$watch('renderSeries', () => this.prepareAndRedraw(false));
             this.$watch('terms_n', () => this.prepareAndRedraw(false));
+
+            this.$watch('calculationMode', (newMode) => {
+                if (newMode === 'coefficients') {
+                    // When switching to coefficient mode, hide the original function
+                    this.renderOriginal = [];
+                } else {
+                    // When switching back to calculate mode, show it again by default
+                    this.renderOriginal = ['original'];
+                }
+                // Redraw the chart with the new settings
+                this.prepareAndRedraw(false);
+            });
+        },
+
+        addFunction() {
+            const lastFunc = this.functions[this.functions.length - 1];
+            this.functions.push({
+                id: this.nextId++,
+                definition: '0',
+                domainStart: lastFunc.domainEnd, // Auto-fill for continuity
+                domainEnd: '', // User needs to fill this
+                definitionError: null,
+                domainStartError: null,
+                domainEndError: null,
+            });
+        },
+
+        removeFunction(id: number) {
+            if (this.functions.length > 1) {
+                const funcIndex = this.functions.findIndex(f => f.id === id);
+                if (funcIndex > -1) {
+                    // If we remove a function in the middle, update the next one's start
+                    if (funcIndex > 0 && funcIndex < this.functions.length - 1) {
+                        const prevFunc = this.functions[funcIndex - 1];
+                        const nextFunc = this.functions[funcIndex + 1];
+                        if (nextFunc) {
+                            nextFunc.domainStart = prevFunc.domainEnd;
+                        }
+                    }
+                    this.functions = this.functions.filter(f => f.id !== id);
+                }
+            }
         },
 
         validate() {
-            this.functionError = this.domainStartError = this.domainEndError = null;
-            this.coeffA0Error = this.coeffAnError = this.coeffBnError = null;
             this.errorMessage = '';
-
             let hasError = false;
 
-            if (this.calculationMode === 'calculate') {
-                const funcValidation = validateFunction(this.functionDefinition);
+            // Reset all errors first
+            this.functions.forEach(func => {
+                func.definitionError = null;
+                func.domainStartError = null;
+                func.domainEndError = null;
+            });
+
+            if (this.functions.length === 0) {
+                this.errorMessage = "Debe haber al menos una función definida.";
+                return false;
+            }
+
+            for (let i = 0; i < this.functions.length; i++) {
+                const func = this.functions[i];
+
+                const funcValidation = validateFunction(func.definition);
                 if (!funcValidation.isValid) {
-                    this.functionError = funcValidation.error!;
+                    func.definitionError = funcValidation.error!;
                     hasError = true;
                 }
 
-                const startValidation = validateConstant(this.domainStart);
+                const startValidation = validateConstant(func.domainStart);
                 if (!startValidation.isValid) {
-                    this.domainStartError = startValidation.error!;
+                    func.domainStartError = startValidation.error!;
                     hasError = true;
                 }
 
-                const endValidation = validateConstant(this.domainEnd);
+                const endValidation = validateConstant(func.domainEnd);
                 if (!endValidation.isValid) {
-                    this.domainEndError = endValidation.error!;
+                    func.domainEndError = endValidation.error!;
                     hasError = true;
                 }
-            } else {
-                const a0Validation = validateConstant(this.coeff_a0_str);
-                if (!a0Validation.isValid) {
-                    this.coeffA0Error = a0Validation.error!;
-                    hasError = true;
+
+                // Continuity validation
+                if (i > 0) {
+                    const prevFunc = this.functions[i - 1];
+                    try {
+                        // Only validate continuity if both domain strings are valid constants
+                        if (validateConstant(prevFunc.domainEnd).isValid && validateConstant(func.domainStart).isValid) {
+                            const prevEnd = math.evaluate(prevFunc.domainEnd);
+                            const currentStart = math.evaluate(func.domainStart);
+                            if (prevEnd !== currentStart) {
+                                hasError = true;
+                                const errorMsg = `Debe coincidir con el dominio anterior (${prevEnd})`;
+                                func.domainStartError = func.domainStartError ? `${func.domainStartError}. ${errorMsg}`: errorMsg;
+                            }
+                        }
+                    } catch (e) {
+                        // Errors will be caught by individual constant validation
+                    }
                 }
-                // Basic validation for an/bn, more complex validation in evaluateCoefficientExpressions
-                if (!this.coeff_an_str.trim()) this.coeffAnError = 'El campo no puede estar vacío.';
-                if (!this.coeff_bn_str.trim()) this.coeffBnError = 'El campo no puede estar vacío.';
-                if(this.coeffAnError || this.coeffBnError) hasError = true;
             }
 
             return !hasError;
@@ -144,6 +217,9 @@ function fourierState(): FourierState {
 
         async calculateAndRedraw() {
             this.isLoading = true;
+            this.errorMessage = '';
+            window.FourierSeriesChart.resetScales();
+
             if (!this.validate()) {
                 this.isLoading = false;
                 return;
@@ -151,24 +227,26 @@ function fourierState(): FourierState {
 
             try {
                 if (this.calculationMode === 'calculate') {
-                    const result = calculateCoefficients(
-                        this.functionDefinition,
-                        this.domainStart,
-                        this.domainEnd,
-                        this.terms_n
-                    );
+                    const result = calculateCoefficients(this.functions);
                     if (result.success) {
-                        this.seriesCoeffs = result.coeffs;
+                        this.piecewiseCoeffs = result.coeffs;
                     } else {
                         throw new Error(result.error || 'Ocurrió un error desconocido.');
                     }
-                } else {
+                } else { // 'coefficients' mode
                     this.evaluateCoefficientExpressions();
+                    if (this.errorMessage) { // if evaluate had an error
+                        this.isLoading = false;
+                        return;
+                    }
                 }
-                this.prepareAndRedraw();
+                // We have new coefficients, just redraw.
+                window.FourierSeriesChart.redraw(this.getChartData());
             } catch (error: any) {
                 console.error('[Alpine] Calculation Error:', error);
                 this.errorMessage = error.message;
+                this.piecewiseCoeffs = null; // Clear coefficients on error
+                window.FourierSeriesChart.redraw(this.getChartData()); // Redraw to clear the series
             } finally {
                 this.isLoading = false;
             }
@@ -176,51 +254,62 @@ function fourierState(): FourierState {
 
         evaluateCoefficientExpressions() {
             try {
-                const a = math.evaluate(this.domainStart);
-                const b = math.evaluate(this.domainEnd);
-                this.seriesCoeffs.period = b - a;
-                this.seriesCoeffs.domainStart = a;
-                this.seriesCoeffs.a0 = math.evaluate(this.coeff_a0_str);
+                this.errorMessage = '';
+                if (this.functions.length === 0) {
+                    this.piecewiseCoeffs = null;
+                    return;
+                };
 
-                const an_node = math.parse(this.coeff_an_str);
-                const an_code = an_node.compile();
-                const bn_node = math.parse(this.coeff_bn_str);
-                const bn_code = bn_node.compile();
+                const domainStart = math.evaluate(this.functions[0].domainStart);
+                const domainEnd = math.evaluate(this.functions[this.functions.length - 1].domainEnd);
+                const period = domainEnd - domainStart;
 
-                this.seriesCoeffs.an = [0];
-                this.seriesCoeffs.bn = [0];
+                if (period <= 0) throw new Error("El período total debe ser positivo.");
 
-                for (let n = 1; n <= this.terms_n; n++) {
-                    this.seriesCoeffs.an[n] = an_code.evaluate({ n, pi: Math.PI });
-                    this.seriesCoeffs.bn[n] = bn_code.evaluate({ n, pi: Math.PI });
+                const a0_val = math.evaluate(this.coeff_a0_str);
+                const an_expr = math.parse(this.coeff_an_str).compile();
+                const bn_expr = math.parse(this.coeff_bn_str).compile();
+
+                const an_vals: number[] = [];
+                const bn_vals: number[] = [];
+                for (let n = 1; n <= 50; n++) { // Using hardcoded 50 like fourier.ts
+                    an_vals[n] = an_expr.evaluate({ n });
+                    bn_vals[n] = bn_expr.evaluate({ n });
                 }
-            } catch (error: any) {
-                throw new Error(`Error al evaluar expresiones: ${error.message}`);
+
+                this.piecewiseCoeffs = {
+                    a0: a0_val,
+                    an: an_vals,
+                    bn: bn_vals,
+                    period: period,
+                    domainStart: domainStart,
+                };
+
+            } catch (e: any) {
+                this.errorMessage = `Error en la expresión del coeficiente: ${e.message}`;
+                this.piecewiseCoeffs = null;
             }
         },
 
         prepareAndRedraw(recalculate = true) {
-            if (this.calculationMode === 'coefficients' && recalculate) {
-                try {
-                    this.evaluateCoefficientExpressions();
-                } catch (error: any) {
-                    this.errorMessage = error.message;
-                    return;
-                }
+            if (recalculate) {
+                this.calculateAndRedraw();
+                return;
             }
+            // This is called by watchers, just redraw with existing data.
             window.FourierSeriesChart.redraw(this.getChartData());
         },
 
         getChartData(): FourierChartData {
             return {
-                seriesCoeffs: this.seriesCoeffs,
-                functionDefinition: this.functionDefinition,
+                functions: this.functions,
                 renderOriginal: this.renderOriginal,
                 renderSeries: this.renderSeries,
                 terms_n: this.terms_n,
+                piecewiseCoeffs: this.piecewiseCoeffs,
             };
         },
-    } as FourierState;
+    } as unknown as FourierState;
 }
 
 // Extender la interfaz global de Window para incluir nuestra función

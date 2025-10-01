@@ -1,13 +1,24 @@
 import * as math from 'mathjs';
 
-// 1. Port de la integración numérica (Regla de Simpson)
+const MAX_TERMS = 50;
+
+// --- Interfaces ---
+// To avoid dependency cycles, we define the needed shape here.
+interface FunctionInput {
+    definition: string;
+    domainStart: string;
+    domainEnd: string;
+}
+
+// --- Numeric Integration (Simpson's Rule) ---
 function integrateNumerically(
     fn: (t: number) => number,
     a: number,
     b: number,
     steps: number = 1000
 ): number {
-    if (steps % 2 !== 0) steps++; // Debe ser par
+    if (a === b) return 0;
+    if (steps % 2 !== 0) steps++; // Steps must be even for Simpson's rule
     const h = (b - a) / steps;
     let sum = fn(a) + fn(b);
 
@@ -18,53 +29,71 @@ function integrateNumerically(
     return (h / 3) * sum;
 }
 
-// 2. Función principal para calcular los coeficientes
+// --- Main Coefficient Calculation for Piecewise Functions ---
 export function calculateCoefficients(
-    functionStr: string,
-    domainStartStr: string,
-    domainEndStr: string,
-    numTerms: number
+    functions: FunctionInput[]
 ) {
     try {
-        // Evaluar límites y período
-        const a = math.evaluate(domainStartStr);
-        const b = math.evaluate(domainEndStr);
-        const period = b - a;
+        if (!functions || functions.length === 0) {
+            throw new Error("No se proporcionaron funciones para el cálculo.");
+        }
 
-        if (period <= 0) throw new Error("El período debe ser positivo.");
+        // 1. Compile functions and evaluate domains
+        const compiledFuncs = functions.map(f => {
+            try {
+                return {
+                    userFunc: math.parse(f.definition).compile(),
+                    a: math.evaluate(f.domainStart),
+                    b: math.evaluate(f.domainEnd)
+                };
+            } catch (e: any) {
+                throw new Error(`Error al procesar la función "${f.definition}" o sus dominios: ${e.message}`);
+            }
+        });
 
-        // Compilar la función del usuario de forma segura
-        const node = math.parse(functionStr);
-        const code = node.compile();
-        const userFunc = (t: number) => code.evaluate({ t });
+        // 2. Determine total period
+        const totalDomainStart = compiledFuncs[0].a;
+        const totalDomainEnd = compiledFuncs[compiledFuncs.length - 1].b;
+        const period = totalDomainEnd - totalDomainStart;
 
-        // Calcular a0
-        const integral_a0 = integrateNumerically(userFunc, a, b);
-        const a0 = (1 / period) * integral_a0;
+        if (period <= 0) {
+            throw new Error("El período total (desde el inicio del primer dominio hasta el fin del último) debe ser positivo.");
+        }
 
-        // Calcular an y bn
+        // 3. Calculate coefficients by summing integrals over each piece
         const an: number[] = [];
         const bn: number[] = [];
 
-        for (let n = 1; n <= numTerms; n++) {
-            // Integrando para an
-            const integrand_an = (t: number) => userFunc(t) * Math.cos(2 * Math.PI * n * t / period);
-            const integral_an = integrateNumerically(integrand_an, a, b);
-            an[n] = (2 / period) * integral_an;
+        // Calculate a0
+        let integral_a0 = 0;
+        for (const f of compiledFuncs) {
+            integral_a0 += integrateNumerically(t => f.userFunc.evaluate({ t }), f.a, f.b);
+        }
+        const a0 = (2 / period) * integral_a0;
 
-            // Integrando para bn
-            const integrand_bn = (t: number) => userFunc(t) * Math.sin(2 * Math.PI * n * t / period);
-            const integral_bn = integrateNumerically(integrand_bn, a, b);
+        // Calculate an and bn for n=1 to MAX_TERMS
+        for (let n = 1; n <= MAX_TERMS; n++) {
+            let integral_an = 0;
+            let integral_bn = 0;
+
+            for (const f of compiledFuncs) {
+                const integrand_an = (t: number) => f.userFunc.evaluate({ t }) * Math.cos(2 * Math.PI * n * t / period);
+                integral_an += integrateNumerically(integrand_an, f.a, f.b);
+
+                const integrand_bn = (t: number) => f.userFunc.evaluate({ t }) * Math.sin(2 * Math.PI * n * t / period);
+                integral_bn += integrateNumerically(integrand_bn, f.a, f.b);
+            }
+            an[n] = (2 / period) * integral_an;
             bn[n] = (2 / period) * integral_bn;
         }
-        
+
         return {
             success: true,
-            coeffs: { a0, an, bn, period, domainStart: a },
+            coeffs: { a0, an, bn, period, domainStart: totalDomainStart },
         };
 
-    } catch (error) {
-        console.error("Error en el cálculo:", error);
+    } catch (error: any) {
+        console.error("Error en el cálculo de coeficientes:", error);
         return { success: false, error: error.message };
     }
 }
