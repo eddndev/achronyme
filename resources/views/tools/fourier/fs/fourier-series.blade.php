@@ -71,7 +71,9 @@
             <!-- Main content -->
             <div class="mb-8">
                 <div class="relative bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-                    <canvas id="fourierChart" class="w-full"></canvas>
+                    <div class="relative w-full" style="height: 500px; max-width: 100%;" id="chartContainer">
+                        <canvas id="fourierChart"></canvas>
+                    </div>
                 </div>
             </div>
 

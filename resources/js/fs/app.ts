@@ -41,8 +41,10 @@ window.FourierSeriesChart = {
 
     init(initialData: FourierChartData) {
         const ctx = document.getElementById('fourierChart') as HTMLCanvasElement;
-        if (!ctx) {
-            console.error('Chart canvas #fourierChart not found!');
+        const container = document.getElementById('chartContainer');
+
+        if (!ctx || !container) {
+            console.error('Chart canvas or container not found!');
             return;
         }
 
@@ -52,6 +54,11 @@ window.FourierSeriesChart = {
 
         this.resetScales();
 
+        // Set canvas dimensions to match container
+        ctx.style.width = '100%';
+        ctx.style.height = '100%';
+        ctx.style.maxWidth = '100%';
+
         const chartConfig: ChartConfiguration = {
             type: 'line',
             data: { labels: [], datasets: [] },
@@ -59,6 +66,7 @@ window.FourierSeriesChart = {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                resizeDelay: 100,
                 scales: {
                     x: { title: { display: true, text: 't' }, ticks: { maxTicksLimit: 20 } },
                     y: { title: { display: true, text: 'f(t)' } }

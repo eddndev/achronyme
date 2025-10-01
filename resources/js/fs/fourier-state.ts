@@ -39,6 +39,7 @@ interface FourierState {
     isResizing: boolean;
     resizeTimeout: number | null;
     errorMessage: string;
+    resizeObserver: ResizeObserver | null;
 
     // Modelo de datos
     functions: FunctionInput[];
@@ -72,6 +73,7 @@ function fourierState(): FourierState {
         calculationMode: 'calculate',
         isLoading: false,
         errorMessage: '',
+        resizeObserver: null,
 
         // --- Modelo de datos ---
         nextId: 2,
@@ -107,6 +109,18 @@ function fourierState(): FourierState {
                 terms_n: this.terms_n,
                 piecewiseCoeffs: null
             });
+
+            // Setup ResizeObserver for responsive chart resizing
+            const chartContainer = document.getElementById('chartContainer');
+            if (chartContainer) {
+                this.resizeObserver = new ResizeObserver(() => {
+                    if (window.FourierSeriesChart.chart) {
+                        window.FourierSeriesChart.chart.resize();
+                    }
+                });
+                this.resizeObserver.observe(chartContainer);
+                console.log('[Alpine] ResizeObserver attached to chart container');
+            }
 
             // Now that the chart instance exists, calculate the initial state and draw it.
             this.calculateAndRedraw();
