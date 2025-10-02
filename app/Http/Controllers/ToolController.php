@@ -28,6 +28,6 @@ class ToolController extends Controller
      */
     public function convolution(): View
     {
-        return view('tools.analytics.conv.index');
+        return view('tools.convolution.index');
     }
 }

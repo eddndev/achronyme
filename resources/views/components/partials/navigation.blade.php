@@ -20,8 +20,8 @@
       </button>
     </div>
     <el-popover-group class="hidden lg:flex lg:gap-x-12">
-      <a href="#" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Fourier</a>
-      <a href="#" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Convolución</a>
+      <a href="{{ route('fourier-series') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Serie de Fourier</a>
+      <a href="{{ route('convolution') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Convolución</a>
       <div class="relative">
         
         <button popovertarget="desktop-menu-product" class="flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900 dark:text-white">
@@ -40,7 +40,7 @@
                 </svg>
               </div>
               <div class="flex-auto">
-                <a href="#" class="block font-semibold text-gray-900 dark:text-white">
+                <a href="{{ route('fourier-transform') }}" class="block font-semibold text-gray-900 dark:text-white">
                   Transformada de Fourier
                   <span class="absolute inset-0"></span>
                 </a>
@@ -54,7 +54,7 @@
                 </svg>
               </div>
               <div class="flex-auto">
-                <a href="#" class="block font-semibold text-gray-900 dark:text-white">
+                <a href="{{ route('fourier-series') }}" class="block font-semibold text-gray-900 dark:text-white">
                   Serie de Fourier
                   <span class="absolute inset-0"></span>
                 </a>
@@ -68,7 +68,7 @@
                 </svg>
               </div>
               <div class="flex-auto">
-                <a href="#" class="block font-semibold text-gray-900 dark:text-white">
+                <a href="{{ route('convolution') }}" class="block font-semibold text-gray-900 dark:text-white">
                   Convolución
                   <span class="absolute inset-0"></span>
                 </a>
@@ -79,8 +79,47 @@
         </el-popover>
       </div>
 
-      
-      <a href="https://github.com/eddndev/achronyme" target="_blank" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Documentación</a>
+      <div class="relative">
+        <button popovertarget="desktop-menu-docs" class="flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900 dark:text-white">
+          Documentación
+          <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5 flex-none text-gray-400 dark:text-gray-500">
+            <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
+          </svg>
+        </button>
+
+        <el-popover id="desktop-menu-docs" anchor="bottom" popover class="w-screen max-w-md overflow-hidden rounded-lg bg-white shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(3)] backdrop:bg-transparent open:block data-closed:translate-y-1 data-closed:opacity-0 data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
+          <div class="p-4">
+            <div class="group relative flex items-center gap-x-6 rounded-lg p-4 text-sm/6 hover:bg-gray-50 dark:hover:bg-white/5">
+              <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-700/50 dark:group-hover:bg-gray-700">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-indigo-600 dark:text-gray-400 dark:group-hover:text-white">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+              </div>
+              <div class="flex-auto">
+                <a href="#" class="block font-semibold text-gray-900 dark:text-white">
+                  Documentación del Sitio
+                  <span class="absolute inset-0"></span>
+                </a>
+                <p class="mt-1 text-gray-600 dark:text-gray-400">Aprende a usar las herramientas de procesamiento de señales.</p>
+              </div>
+            </div>
+            <div class="group relative flex items-center gap-x-6 rounded-lg p-4 text-sm/6 hover:bg-gray-50 dark:hover:bg-white/5">
+              <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-700/50 dark:group-hover:bg-gray-700">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-indigo-600 dark:text-gray-400 dark:group-hover:text-white">
+                  <use href="#icon-github" />
+                </svg>
+              </div>
+              <div class="flex-auto">
+                <a href="https://github.com/eddndev/achronyme" target="_blank" class="block font-semibold text-gray-900 dark:text-white">
+                  Repositorio GitHub
+                  <span class="absolute inset-0"></span>
+                </a>
+                <p class="mt-1 text-gray-600 dark:text-gray-400">Revisa el código fuente y danos una ⭐ estrella.</p>
+              </div>
+            </div>
+          </div>
+        </el-popover>
+      </div>
     </el-popover-group>
     <div class="hidden lg:flex lg:flex-1 lg:justify-end">
       <a href="{{ route('login') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Iniciar Sesión <span aria-hidden="true">&rarr;</span></a>
@@ -137,7 +176,22 @@
                   </a>
                 </div>
                 <div class="space-y-2 py-6">
-                  <a href="https://github.com/eddndev/achronyme" target="_blank" class="-mx-3 block rounded-lg px-3 py-2 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Documentación</a>
+                  <a href="#" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
+                    <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-800 dark:group-hover:bg-gray-700">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-purple-blue-600 dark:text-gray-300 dark:group-hover:text-white">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                      </svg>
+                    </div>
+                    Documentación del Sitio
+                  </a>
+                  <a href="https://github.com/eddndev/achronyme" target="_blank" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
+                    <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-800 dark:group-hover:bg-gray-700">
+                      <svg viewBox="0 0 24 24" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-purple-blue-600 dark:text-gray-300 dark:group-hover:text-white">
+                        <use href="#icon-github" />
+                      </svg>
+                    </div>
+                    Repositorio GitHub ⭐
+                  </a>
                 </div>
                 <div class="py-6">
                   <a href="{{ route('login') }}" class="-mx-3 block rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Iniciar Sesión</a>
