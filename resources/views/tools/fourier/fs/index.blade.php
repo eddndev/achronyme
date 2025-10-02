@@ -12,7 +12,7 @@ $breadcrumbs = [
             Volver
         </x-secondary-button>
         <x-primary-button class="ml-3">
-            Guardar
+            Exportar
         </x-primary-button>
     </x-slot>
 
