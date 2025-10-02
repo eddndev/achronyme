@@ -6,6 +6,51 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 gsap.registerPlugin(ScrollTrigger);
 
+// Theme Toggle System
+function initTheme() {
+    // Check for saved theme preference or default to 'system'
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    applyTheme(savedTheme);
+
+    // Sync checkbox state with current theme
+    const checkbox = document.getElementById('theme-toggle');
+    if (checkbox) {
+        const isDark = document.documentElement.classList.contains('dark');
+        checkbox.checked = isDark;
+    }
+
+    // Expose toggle function globally
+    window.toggleTheme = function(theme) {
+        localStorage.setItem('theme', theme);
+        applyTheme(theme);
+    };
+}
+
+function applyTheme(theme) {
+    const html = document.documentElement;
+
+    if (theme === 'dark') {
+        html.classList.add('dark');
+    } else if (theme === 'light') {
+        html.classList.remove('dark');
+    } else { // system
+        // Check system preference
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            html.classList.add('dark');
+        } else {
+            html.classList.remove('dark');
+        }
+    }
+}
+
+// Listen for system theme changes when in 'system' mode
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    if (savedTheme === 'system') {
+        applyTheme('system');
+    }
+});
+
 function initAnimations() {
     if (document.querySelector('.animated-gradient')) {
         gsap.to('.animated-gradient', {
@@ -72,6 +117,7 @@ function updateStickyOffset() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initAnimations();
     updateStickyOffset();
 });

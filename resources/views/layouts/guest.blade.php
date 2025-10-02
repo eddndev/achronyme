@@ -12,6 +12,26 @@
         <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
+        {{-- Theme initialization script - MUST run before page renders to prevent flash --}}
+        <script>
+            (function() {
+                const savedTheme = localStorage.getItem('theme') || 'system';
+                const html = document.documentElement;
+
+                if (savedTheme === 'dark') {
+                    html.classList.add('dark');
+                } else if (savedTheme === 'light') {
+                    html.classList.remove('dark');
+                } else {
+                    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                        html.classList.add('dark');
+                    } else {
+                        html.classList.remove('dark');
+                    }
+                }
+            })();
+        </script>
+
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         <template data-turbo-permanent>

@@ -121,8 +121,71 @@
         </el-popover>
       </div>
     </el-popover-group>
-    <div class="hidden lg:flex lg:flex-1 lg:justify-end">
-      <a href="{{ route('login') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Iniciar Sesión <span aria-hidden="true">&rarr;</span></a>
+    <div class="hidden lg:flex lg:flex-1 lg:justify-end lg:items-center lg:gap-x-4">
+      {{-- Theme Toggle --}}
+      <div x-data="{ isDark: localStorage.getItem('theme') === 'dark' || (localStorage.getItem('theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches) }" class="group relative inline-flex w-11 shrink-0 rounded-full bg-gray-200 p-0.5 inset-ring inset-ring-gray-900/5 outline-offset-2 outline-purple-blue-600 transition-colors duration-200 ease-in-out focus-within:outline-2 dark:bg-white/5 dark:inset-ring-white/10 dark:outline-purple-blue-500 dark:focus-within:outline-purple-blue-500"
+        :class="{ 'bg-purple-blue-600 dark:bg-purple-blue-500': isDark }">
+        <span
+          class="relative size-5 rounded-full bg-white shadow-xs ring-1 ring-gray-900/5 transition-transform duration-200 ease-in-out"
+          :class="{ 'translate-x-5': isDark }"
+        >
+          <span
+            aria-hidden="true"
+            class="absolute inset-0 flex size-full items-center justify-center transition-opacity duration-200 ease-in"
+            :class="isDark ? 'opacity-0 duration-100 ease-out' : 'opacity-100'"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" class="size-3 text-gray-400 dark:text-gray-600">
+              <use href="#icon-sun" />
+            </svg>
+          </span>
+          <span
+            aria-hidden="true"
+            class="absolute inset-0 flex size-full items-center justify-center transition-opacity duration-100 ease-out"
+            :class="isDark ? 'opacity-100 duration-200 ease-in' : 'opacity-0'"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" class="size-3 text-purple-blue-600 dark:text-purple-blue-500">
+              <use href="#icon-moon" />
+            </svg>
+          </span>
+        </span>
+        <button
+          @click="isDark = !isDark; window.toggleTheme(isDark ? 'dark' : 'light')"
+          type="button"
+          aria-label="Toggle dark mode"
+          class="absolute inset-0 appearance-none focus:outline-hidden"
+        ></button>
+      </div>
+
+      {{-- Account Menu --}}
+      @auth
+        <el-dropdown>
+          <button class="flex items-center gap-x-1 text-sm/6 font-semibold text-gray-900 dark:text-white">
+            Cuenta
+            <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5 flex-none text-gray-400 dark:text-gray-500">
+              <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
+            </svg>
+          </button>
+          <el-menu anchor="bottom end" popover class="w-56 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg outline-1 outline-black/5 transition transition-discrete [--anchor-gap:--spacing(2)] data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in dark:divide-white/10 dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
+            <div class="px-4 py-3">
+              <p class="text-sm text-gray-700 dark:text-gray-400">Sesión iniciada como</p>
+              <p class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ Auth::user()->email }}</p>
+            </div>
+            <div class="py-1">
+              <a href="{{ route('dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 focus:bg-gray-100 focus:text-gray-900 focus:outline-hidden dark:text-gray-300 dark:focus:bg-white/5 dark:focus:text-white">Dashboard</a>
+              <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-gray-700 focus:bg-gray-100 focus:text-gray-900 focus:outline-hidden dark:text-gray-300 dark:focus:bg-white/5 dark:focus:text-white">Perfil</a>
+              <a href="#" class="block px-4 py-2 text-sm text-gray-700 focus:bg-gray-100 focus:text-gray-900 focus:outline-hidden dark:text-gray-300 dark:focus:bg-white/5 dark:focus:text-white">Configuración</a>
+            </div>
+            <div class="py-1">
+              <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="block w-full px-4 py-2 text-left text-sm text-gray-700 focus:bg-gray-100 focus:text-gray-900 focus:outline-hidden dark:text-gray-300 dark:focus:bg-white/5 dark:focus:text-white">Cerrar Sesión</button>
+              </form>
+            </div>
+          </el-menu>
+        </el-dropdown>
+      @else
+        <a href="{{ route('login') }}" class="text-sm/6 font-semibold text-gray-900 dark:text-white">Iniciar Sesión <span aria-hidden="true">&rarr;</span></a>
+      @endauth
     </div>
   </nav>
   <el-dialog>
@@ -194,7 +257,18 @@
                   </a>
                 </div>
                 <div class="py-6">
-                  <a href="{{ route('login') }}" class="-mx-3 block rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Iniciar Sesión</a>
+                  @auth
+                    <div class="space-y-1">
+                      <a href="{{ route('dashboard') }}" class="-mx-3 block rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Dashboard</a>
+                      <a href="{{ route('profile.edit') }}" class="-mx-3 block rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Perfil</a>
+                      <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="-mx-3 block w-full text-left rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Cerrar Sesión</button>
+                      </form>
+                    </div>
+                  @else
+                    <a href="{{ route('login') }}" class="-mx-3 block rounded-lg px-3 py-2.5 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">Iniciar Sesión</a>
+                  @endauth
                 </div>
               </div>
             </div>
