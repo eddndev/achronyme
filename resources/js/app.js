@@ -1,5 +1,4 @@
 import './bootstrap';
-import './fs/app.js';
 import '@tailwindplus/elements';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';

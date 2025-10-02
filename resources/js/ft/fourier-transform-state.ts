@@ -1,4 +1,4 @@
-import * as math from 'mathjs';
+import { parse, evaluate } from 'mathjs';
 import { validateConstant, validateFunction } from '../utils/validation';
 import {
     calculateFourierTransform,
@@ -183,8 +183,8 @@ function fourierTransformState(): FourierTransformState {
                     const prevFunc = this.functions[i - 1];
                     try {
                         if (validateConstant(prevFunc.domainEnd).isValid && validateConstant(func.domainStart).isValid) {
-                            const prevEnd = math.evaluate(prevFunc.domainEnd);
-                            const currentStart = math.evaluate(func.domainStart);
+                            const prevEnd = evaluate(prevFunc.domainEnd);
+                            const currentStart = evaluate(func.domainStart);
                             if (prevEnd !== currentStart) {
                                 hasError = true;
                                 const errorMsg = `Debe coincidir con el dominio anterior (${prevEnd})`;
@@ -214,9 +214,9 @@ function fourierTransformState(): FourierTransformState {
 
                 // 1. Compile functions
                 const compiledFunctions: CompiledFunction[] = this.functions.map(func => ({
-                    compiled: math.parse(func.definition).compile(),
-                    domainStart: math.evaluate(func.domainStart),
-                    domainEnd: math.evaluate(func.domainEnd)
+                    compiled: parse(func.definition).compile(),
+                    domainStart: evaluate(func.domainStart),
+                    domainEnd: evaluate(func.domainEnd)
                 }));
 
                 // 2. Generate time domain data for plotting

@@ -1,4 +1,4 @@
-import * as math from 'mathjs';
+import { parse, evaluate } from 'mathjs';
 import { integrateNumerically } from '../utils/numerical-integration';
 
 const MAX_TERMS = 50;
@@ -24,9 +24,9 @@ export function calculateCoefficients(
         const compiledFuncs = functions.map(f => {
             try {
                 return {
-                    userFunc: math.parse(f.definition).compile(),
-                    a: math.evaluate(f.domainStart),
-                    b: math.evaluate(f.domainEnd)
+                    userFunc: parse(f.definition).compile(),
+                    a: evaluate(f.domainStart),
+                    b: evaluate(f.domainEnd)
                 };
             } catch (e: any) {
                 throw new Error(`Error al procesar la función "${f.definition}" o sus dominios: ${e.message}`);

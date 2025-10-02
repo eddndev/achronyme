@@ -1,6 +1,6 @@
 import './fourier-state';
 import { Chart, registerables, ChartConfiguration } from 'chart.js';
-import * as math from 'mathjs';
+import { parse, evaluate, type EvalFunction } from 'mathjs';
 
 Chart.register(...registerables);
 
@@ -109,8 +109,8 @@ window.FourierSeriesChart = {
         // If we are showing the original function, its domain is the authority.
         // Otherwise, if we are only showing the series, its domain is the authority.
         if (shouldRenderOriginal) {
-            plotDomainStart = functions.length > 0 ? math.evaluate(functions[0].domainStart) : 0;
-            plotDomainEnd = functions.length > 0 ? math.evaluate(functions[functions.length - 1].domainEnd) : 1;
+            plotDomainStart = functions.length > 0 ? evaluate(functions[0].domainStart) : 0;
+            plotDomainEnd = functions.length > 0 ? evaluate(functions[functions.length - 1].domainEnd) : 1;
         } else if (shouldRenderSeries) {
             plotDomainStart = piecewiseCoeffs!.domainStart;
             plotDomainEnd = piecewiseCoeffs!.domainStart + piecewiseCoeffs!.period;
@@ -134,14 +134,14 @@ window.FourierSeriesChart = {
             const compiledFunctions = functions.map(func => {
                 try {
                     return {
-                        compiled: math.parse(func.definition).compile(),
-                        start: math.evaluate(func.domainStart),
-                        end: math.evaluate(func.domainEnd)
+                        compiled: parse(func.definition).compile(),
+                        start: evaluate(func.domainStart),
+                        end: evaluate(func.domainEnd)
                     };
                 } catch (e) {
                     return null;
                 }
-            }).filter(f => f !== null) as { compiled: math.EvalFunction; start: number; end: number }[];
+            }).filter(f => f !== null) as { compiled: EvalFunction; start: number; end: number }[];
 
             // Create a single data array for the entire piecewise function
             const originalData: (number | null)[] = [];
@@ -234,7 +234,7 @@ window.FourierSeriesChart = {
         this.chart.update('none');
     },
 
-    evaluateCompiledFunction(compiledFunc: math.EvalFunction, t: number): number {
+    evaluateCompiledFunction(compiledFunc: EvalFunction, t: number): number {
         try {
             const result = compiledFunc.evaluate({ t, pi: Math.PI });
             return typeof result === 'number' && isFinite(result) ? result : NaN;
@@ -254,7 +254,7 @@ declare global {
             init: (initialData: FourierChartData) => void;
             redraw: (data: FourierChartData) => void;
             resetScales: () => void;
-            evaluateCompiledFunction: (compiledFunc: math.EvalFunction, t: number) => number;
+            evaluateCompiledFunction: (compiledFunc: EvalFunction, t: number) => number;
         };
     }
 }

@@ -1,6 +1,33 @@
 {
+  "_alpine-l0sNRNKZ.js": {
+    "file": "assets/alpine-l0sNRNKZ.js",
+    "name": "alpine"
+  },
+  "_chart-Co7ClN-s.js": {
+    "file": "assets/chart-Co7ClN-s.js",
+    "name": "chart"
+  },
+  "_elements-N1xEy-Kg.js": {
+    "file": "assets/elements-N1xEy-Kg.js",
+    "name": "elements"
+  },
+  "_gsap-DKtf60Sy.js": {
+    "file": "assets/gsap-DKtf60Sy.js",
+    "name": "gsap"
+  },
+  "_mathjs-CqmDO44L.js": {
+    "file": "assets/mathjs-CqmDO44L.js",
+    "name": "mathjs"
+  },
+  "_validation-BT8GwmWI.js": {
+    "file": "assets/validation-BT8GwmWI.js",
+    "name": "validation",
+    "imports": [
+      "_mathjs-CqmDO44L.js"
+    ]
+  },
   "resources/css/app.css": {
-    "file": "assets/app-CscqTyke.css",
+    "file": "assets/app-p7xZ89AS.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "names": [
@@ -8,9 +35,46 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-B7k3udg5.js",
+    "file": "assets/app-DKEQY6dl.js",
     "name": "app",
     "src": "resources/js/app.js",
-    "isEntry": true
+    "isEntry": true,
+    "imports": [
+      "_elements-N1xEy-Kg.js",
+      "_gsap-DKtf60Sy.js"
+    ]
+  },
+  "resources/js/convolution/app.ts": {
+    "file": "assets/app-De_2VVls.js",
+    "name": "app",
+    "src": "resources/js/convolution/app.ts",
+    "isEntry": true,
+    "imports": [
+      "_validation-BT8GwmWI.js",
+      "_mathjs-CqmDO44L.js",
+      "_chart-Co7ClN-s.js"
+    ]
+  },
+  "resources/js/fs/app.ts": {
+    "file": "assets/app-B5Frk6qY.js",
+    "name": "app",
+    "src": "resources/js/fs/app.ts",
+    "isEntry": true,
+    "imports": [
+      "_validation-BT8GwmWI.js",
+      "_mathjs-CqmDO44L.js",
+      "_chart-Co7ClN-s.js"
+    ]
+  },
+  "resources/js/ft/app.ts": {
+    "file": "assets/app-DY4PBK4B.js",
+    "name": "app",
+    "src": "resources/js/ft/app.ts",
+    "isEntry": true,
+    "imports": [
+      "_validation-BT8GwmWI.js",
+      "_mathjs-CqmDO44L.js",
+      "_chart-Co7ClN-s.js"
+    ]
   }
 }

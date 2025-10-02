@@ -1,5 +1,5 @@
 import { calculateCoefficients } from './fourier';
-import * as math from 'mathjs';
+import { evaluate, parse } from 'mathjs';
 import { validateConstant, validateFunction } from '../utils/validation';
 
 // --- Interfaces de Tipos ---
@@ -222,8 +222,8 @@ function fourierState(): FourierState {
                     try {
                         // Only validate continuity if both domain strings are valid constants
                         if (validateConstant(prevFunc.domainEnd).isValid && validateConstant(func.domainStart).isValid) {
-                            const prevEnd = math.evaluate(prevFunc.domainEnd);
-                            const currentStart = math.evaluate(func.domainStart);
+                            const prevEnd = evaluate(prevFunc.domainEnd);
+                            const currentStart = evaluate(func.domainStart);
                             if (prevEnd !== currentStart) {
                                 hasError = true;
                                 const errorMsg = `Debe coincidir con el dominio anterior (${prevEnd})`;
@@ -326,9 +326,9 @@ function fourierState(): FourierState {
 
                 if (period <= 0) throw new Error("El período total debe ser positivo.");
 
-                const a0_val = math.evaluate(this.coeff_a0_str);
-                const an_expr = math.parse(this.coeff_an_str).compile();
-                const bn_expr = math.parse(this.coeff_bn_str).compile();
+                const a0_val = evaluate(this.coeff_a0_str);
+                const an_expr = parse(this.coeff_an_str).compile();
+                const bn_expr = parse(this.coeff_bn_str).compile();
 
                 const an_vals: number[] = [];
                 const bn_vals: number[] = [];

@@ -1,4 +1,4 @@
-import * as math from 'mathjs';
+import { parse, evaluate } from 'mathjs';
 import { validateConstant, validateFunction } from '../utils/validation';
 import {
     calculateConvolution,
@@ -133,7 +133,7 @@ function convolutionState(): ConvolutionState {
         // --- Computed Properties ---
         get tInitialNumeric(): number {
             try {
-                return math.evaluate(this.tInitial);
+                return evaluate(this.tInitial);
             } catch (e) {
                 return -10; // Fallback
             }
@@ -141,7 +141,7 @@ function convolutionState(): ConvolutionState {
 
         get tFinalNumeric(): number {
             try {
-                return math.evaluate(this.tFinal);
+                return evaluate(this.tFinal);
             } catch (e) {
                 return 10; // Fallback
             }
@@ -299,8 +299,8 @@ function convolutionState(): ConvolutionState {
                     const prevFunc = this.functionsF[i - 1];
                     try {
                         if (validateConstant(prevFunc.domainEnd).isValid && validateConstant(func.domainStart).isValid) {
-                            const prevEnd = math.evaluate(prevFunc.domainEnd);
-                            const currentStart = math.evaluate(func.domainStart);
+                            const prevEnd = evaluate(prevFunc.domainEnd);
+                            const currentStart = evaluate(func.domainStart);
                             if (prevEnd !== currentStart) {
                                 hasError = true;
                                 const errorMsg = `Debe coincidir con el dominio anterior (${prevEnd})`;
@@ -345,8 +345,8 @@ function convolutionState(): ConvolutionState {
                     const prevFunc = this.functionsG[i - 1];
                     try {
                         if (validateConstant(prevFunc.domainEnd).isValid && validateConstant(func.domainStart).isValid) {
-                            const prevEnd = math.evaluate(prevFunc.domainEnd);
-                            const currentStart = math.evaluate(func.domainStart);
+                            const prevEnd = evaluate(prevFunc.domainEnd);
+                            const currentStart = evaluate(func.domainStart);
                             if (prevEnd !== currentStart) {
                                 hasError = true;
                                 const errorMsg = `Debe coincidir con el dominio anterior (${prevEnd})`;
@@ -378,8 +378,8 @@ function convolutionState(): ConvolutionState {
 
                 // Check that tFinal > tInitial
                 if (tInitialValidation.isValid && tFinalValidation.isValid) {
-                    const tInit = math.evaluate(this.tInitial);
-                    const tFin = math.evaluate(this.tFinal);
+                    const tInit = evaluate(this.tInitial);
+                    const tFin = evaluate(this.tFinal);
                     if (tFin <= tInit) {
                         this.tFinal_error = 't final debe ser mayor que t inicial';
                         hasError = true;
@@ -404,16 +404,16 @@ function convolutionState(): ConvolutionState {
 
                 // 1. Compile functions f(t)
                 const compiledF: CompiledFunction[] = this.functionsF.map(func => ({
-                    compiled: math.parse(func.definition).compile(),
-                    domainStart: math.evaluate(func.domainStart),
-                    domainEnd: math.evaluate(func.domainEnd)
+                    compiled: parse(func.definition).compile(),
+                    domainStart: evaluate(func.domainStart),
+                    domainEnd: evaluate(func.domainEnd)
                 }));
 
                 // 2. Compile functions g(t)
                 const compiledG: CompiledFunction[] = this.functionsG.map(func => ({
-                    compiled: math.parse(func.definition).compile(),
-                    domainStart: math.evaluate(func.domainStart),
-                    domainEnd: math.evaluate(func.domainEnd)
+                    compiled: parse(func.definition).compile(),
+                    domainStart: evaluate(func.domainStart),
+                    domainEnd: evaluate(func.domainEnd)
                 }));
 
                 // 3. Determine time range for convolution
@@ -421,8 +421,8 @@ function convolutionState(): ConvolutionState {
 
                 if (this.manualRange) {
                     tRange = [
-                        math.evaluate(this.tInitial),
-                        math.evaluate(this.tFinal)
+                        evaluate(this.tInitial),
+                        evaluate(this.tFinal)
                     ];
                 } else {
                     tRange = calculateAutomaticRange(compiledF, compiledG);

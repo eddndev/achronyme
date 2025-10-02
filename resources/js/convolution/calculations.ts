@@ -5,7 +5,7 @@
  * using numerical integration (Simpson's Rule).
  */
 
-import * as math from 'mathjs';
+import { type EvalFunction } from 'mathjs';
 import { integrateNumerically } from '../utils/numerical-integration';
 
 // --- Interfaces ---
@@ -14,7 +14,7 @@ import { integrateNumerically } from '../utils/numerical-integration';
  * Compiled piecewise function segment
  */
 export interface CompiledFunction {
-    compiled: math.EvalFunction;
+    compiled: EvalFunction;
     domainStart: number;
     domainEnd: number;
 }
