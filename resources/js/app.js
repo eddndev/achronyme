@@ -40,4 +40,38 @@ function initAnimations() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', initAnimations);
+function updateStickyOffset() {
+    const header = document.querySelector('header');
+    if (!header) return;
+
+    // Calculate navbar height and set CSS variable
+    const updateOffset = () => {
+        const navHeight = header.offsetHeight;
+        const navTop = window.innerWidth >= 1024 ? 24 : 0; // lg:top-6 = 24px
+        const totalOffset = navHeight + navTop + 16; // +16px for spacing
+        document.documentElement.style.setProperty('--sticky-top-offset', `${totalOffset}px`);
+    };
+
+    // Initial calculation
+    updateOffset();
+
+    // Update on resize with debounce
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(updateOffset, 150);
+    });
+
+    // Update on scroll (navbar might change height due to sticky behavior)
+    ScrollTrigger.create({
+        trigger: document.body,
+        start: 'top top',
+        end: 'bottom bottom',
+        onUpdate: updateOffset
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initAnimations();
+    updateStickyOffset();
+});

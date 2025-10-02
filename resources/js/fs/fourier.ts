@@ -1,4 +1,5 @@
 import * as math from 'mathjs';
+import { integrateNumerically } from '../utils/numerical-integration';
 
 const MAX_TERMS = 50;
 
@@ -8,25 +9,6 @@ interface FunctionInput {
     definition: string;
     domainStart: string;
     domainEnd: string;
-}
-
-// --- Numeric Integration (Simpson's Rule) ---
-function integrateNumerically(
-    fn: (t: number) => number,
-    a: number,
-    b: number,
-    steps: number = 1000
-): number {
-    if (a === b) return 0;
-    if (steps % 2 !== 0) steps++; // Steps must be even for Simpson's rule
-    const h = (b - a) / steps;
-    let sum = fn(a) + fn(b);
-
-    for (let i = 1; i < steps; i++) {
-        const x = a + i * h;
-        sum += (i % 2 !== 0) ? 4 * fn(x) : 2 * fn(x);
-    }
-    return (h / 3) * sum;
 }
 
 // --- Main Coefficient Calculation for Piecewise Functions ---

@@ -21,11 +21,15 @@ export function validateConstant(constStr: string): { isValid: boolean; error?: 
 }
 
 /**
- * Validates a string as a mathematical function of 't'.
+ * Validates a string as a mathematical function.
  * @param funcStr The string to validate.
+ * @param domainVar The domain variable (default: 't'). Can be 'n', 'x', 'omega', etc.
  * @returns An object with `isValid` and an optional `error` message.
  */
-export function validateFunction(funcStr: string): { isValid: boolean; error?: string } {
+export function validateFunction(
+    funcStr: string,
+    domainVar: string = 't'
+): { isValid: boolean; error?: string } {
      if (!funcStr.trim()) {
         return { isValid: false, error: 'La función no puede estar vacía.' };
     }
@@ -33,16 +37,17 @@ export function validateFunction(funcStr: string): { isValid: boolean; error?: s
         const node = math.parse(funcStr);
         const symbols = node.filter(n => n.isSymbolNode).map(n => n.name);
 
-        // Check for unknown symbols other than 't' and allowed constants
-        const allowedSymbols = new Set(['t', 'pi', 'e']);
+        // Check for unknown symbols other than the domain variable and allowed constants
+        const allowedSymbols = new Set([domainVar, 'pi', 'e', 'i']);
         const unknownSymbols = symbols.filter(s => !allowedSymbols.has(s) && !(s in math));
         if (unknownSymbols.length > 0) {
             return { isValid: false, error: `Símbolo desconocido: ${unknownSymbols.join(', ')}` };
         }
 
-        // It should be a function of 't' or a constant function
-        // We can try to evaluate with a dummy 't' to see if it works
-        node.compile().evaluate({ t: 1 });
+        // It should be a function of the domain variable or a constant function
+        // Try to evaluate with a dummy value to see if it works
+        const testScope = { [domainVar]: 1 };
+        node.compile().evaluate(testScope);
 
         return { isValid: true };
     } catch (e: any) {

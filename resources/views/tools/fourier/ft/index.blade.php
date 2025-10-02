@@ -1,25 +1,24 @@
-<x-app-layout title="Fourier Transform">
+@php
+$breadcrumbs = [
+    ['name' => 'Herramientas', 'url' => route('home')],
+    ['name' => 'PDS', 'url' => '#'],
+    ['name' => 'Transformada de Fourier', 'url' => '#']
+];
+@endphp
 
-<div class="flex min-h-full flex-col">
-<!-- 3 column wrapper -->
-    <div class="mx-auto w-full max-w-7xl grow lg:flex xl:px-2">
-        <!-- Left sidebar & main wrapper -->
-        <div class="flex-1 xl:flex">
-            <div class="border-b border-gray-200 px-4 py-6 sm:px-6 lg:pl-8 xl:w-64 xl:shrink-0 xl:border-r xl:border-b-0 xl:pl-6 dark:border-white/10">
-                <!-- Left column area -->
-            </div>
+<x-tool-layout title="Transformada de Fourier" :breadcrumbs="$breadcrumbs" icon="fx">
+    <x-slot:actions>
+        <x-secondary-button>
+            Volver
+        </x-secondary-button>
+        <x-primary-button class="ml-3">
+            Exportar
+        </x-primary-button>
+    </x-slot>
 
-            <div class="px-4 py-6 sm:px-6 lg:pl-8 xl:flex-1 xl:pl-6">
-                <!-- Main area -->
-                
-            </div>
-        </div>
+    @include('tools.fourier.ft.fourier-transform')
 
-        <div class="shrink-0 border-t border-gray-200 px-4 py-6 sm:px-6 lg:w-96 lg:border-t-0 lg:border-l lg:pr-8 xl:pr-6 dark:border-white/10">
-            <!-- Right column area -->
-
-        </div>
-    </div>
-</div>
-
-</x-app-layout>
+    <x-slot:scripts>
+        @vite('resources/js/ft/app.ts')
+    </x-slot>
+</x-tool-layout>

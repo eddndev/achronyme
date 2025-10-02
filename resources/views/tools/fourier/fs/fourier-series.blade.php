@@ -1,12 +1,7 @@
-<div 
-    class="mx-auto w-full max-w-7xl grow lg:flex xl:px-2"
-    x-data="fourierState()"
-    x-init="init()"
->
-    <!-- Left sidebar & main wrapper -->
-    <div class="flex-1 xl:flex">
-        <div class="border-b border-gray-200 p-6 sm:px-6 lg:pl-8 xl:w-96 xl:shrink-0 xl:border-r xl:border-b-0 xl:pl-6 dark:border-white/10">
-            <!-- Left sidebar content -->
+<div x-data="fourierState()" x-init="init()">
+    <x-three-column-tool>
+        {{-- Left Sidebar: Controls --}}
+        <x-slot:leftSidebar>
             <div class="space-y-6">
                 @php
                 $calcOptions = [
@@ -31,6 +26,7 @@
                         x-model="calculationMode"
                     />
                 </div>
+
                 <div x-show="calculationMode === 'calculate'" x-transition>
                     <fieldset>
                         <legend class="text-sm font-medium leading-6 text-slate-900 dark:text-white">Opciones de visualización</legend>
@@ -64,79 +60,91 @@
 
                 <x-app-ui.slider label="Número de términos (N)" name="num_terms" min="1" max="50" step="1" value="10" x-model="terms_n" />
             </div>
-            
-        </div>
+        </x-slot>
 
-        <div class="min-w-0 px-4 py-6 sm:px-6 lg:pl-8 xl:flex-1 xl:pl-6">
-            <!-- Main content -->
-            <div class="mb-8">
-                <div class="relative bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-                    <div class="relative w-full" style="height: 500px; max-width: 100%;" id="chartContainer">
-                        <canvas id="fourierChart"></canvas>
-                    </div>
+        {{-- Center: Chart --}}
+        <div class="mb-8">
+            <div class="relative bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                <div class="relative w-full" style="height: 500px; max-width: 100%;" id="chartContainer">
+                    <canvas id="fourierChart"></canvas>
                 </div>
             </div>
-
         </div>
-    </div>
 
-    <div class="shrink-0 border-t border-gray-200 p-6 sm:px-6 lg:w-96 lg:border-t-0 lg:border-l lg:pr-8 xl:pr-6 dark:border-white/10">
-        <!-- Right sidebar content -->
-        <div class="space-y-6">
-            
+        {{-- Right Sidebar: Inputs --}}
+        <x-slot:rightSidebar>
+            <div class="space-y-6">
+                <div x-show="calculationMode === 'calculate'" x-transition class="space-y-4">
+                    <h3 class="font-medium text-slate-900 dark:text-white">Funciones y Dominios</h3>
 
-            <div x-show="calculationMode === 'calculate'" x-transition class="space-y-4">
-                <h3 class="font-medium text-slate-900 dark:text-white">Funciones y Dominios</h3>
+                    <template x-for="(func, index) in functions" :key="func.id">
+                        <div class="relative">
+                            <template x-if="functions.length > 1">
+                                <div class="absolute -top-2 -right-2 z-10">
+                                    <x-app-ui.danger-circular-button
+                                        icon="trash"
+                                        @click.prevent="removeFunction(func.id)"
+                                        title="Eliminar función"
+                                    />
+                                </div>
+                            </template>
+                            <x-app-ui.function-domain
+                                x-model-function="func.definition"
+                                x-model-domain-start="func.domainStart"
+                                x-model-domain-end="func.domainEnd"
+                                function-placeholder="Ej: t"
+                                domain-start-placeholder="-pi"
+                                domain-end-placeholder="pi"
+                                :function-error-model="'func.definitionError'"
+                                :domain-start-error-model="'func.domainStartError'"
+                                :domain-end-error-model="'func.domainEndError'"
+                                ::is-domain-start-disabled="index > 0"
+                                ::index="index"
+                            />
+                        </div>
+                    </template>
 
-                <template x-for="(func, index) in functions" :key="func.id">
-                    <div class="relative">
-                        <template x-if="functions.length > 1">
-                            <div class="absolute -top-2 -right-2 z-10">
-                                <x-app-ui.danger-circular-button
-                                    icon="trash"
-                                    @click.prevent="removeFunction(func.id)"
-                                    title="Eliminar función"
-                                />
+                    <div class="pt-2">
+                        <x-app-ui.secondary-button type="button" @click.prevent="addFunction()">
+                            <div class="flex space-x-2 items-center">
+                                <svg class="size-5 -ml-0.5" fill="currentColor"><use href="#icon-plus"></use></svg>
+                                <div>Agregar función</div>
                             </div>
-                        </template>
-                        <x-app-ui.function-domain
-                            x-model-function="func.definition"
-                            x-model-domain-start="func.domainStart"
-                            x-model-domain-end="func.domainEnd"
-                            function-placeholder="Ej: t"
-                            domain-start-placeholder="-pi"
-                            domain-end-placeholder="pi"
-                            :function-error-model="'func.definitionError'"
-                            :domain-start-error-model="'func.domainStartError'"
-                            :domain-end-error-model="'func.domainEndError'"
-                            ::is-domain-start-disabled="index > 0"
-                            ::index="index"
-                        />
+                        </x-app-ui.secondary-button>
                     </div>
-                </template>
+                </div>
 
-                <div class="pt-2">
-                    <x-app-ui.secondary-button type="button" @click.prevent="addFunction()">
-                        <div class="flex space-x-2 items-center">
-                            <svg class="size-5 -ml-0.5" fill="currentColor"><use href="#icon-plus"></use></svg>
-                            <div>Agregar función</div>
-                        </div>    
+                <div x-show="calculationMode === 'coefficients'" x-transition class="space-y-4">
+                    <h3 class="font-medium text-slate-900 dark:text-white">Coeficientes de Fourier</h3>
+                    <x-app-ui.input-text
+                        label="Coeficiente a₀"
+                        name="coeff_a0"
+                        placeholder="Ej: 1/2"
+                        x-model="coeff_a0_str"
+                        error-model="coeff_a0_error"
+                    />
+                    <x-app-ui.input-text
+                        label="Coeficiente aₙ"
+                        name="coeff_an"
+                        placeholder="Ej: (2/(n*pi))*sin(n*pi/2)"
+                        x-model="coeff_an_str"
+                        error-model="coeff_an_error"
+                    />
+                    <x-app-ui.input-text
+                        label="Coeficiente bₙ"
+                        name="coeff_bn"
+                        placeholder="Ej: 0"
+                        x-model="coeff_bn_str"
+                        error-model="coeff_bn_error"
+                    />
+                </div>
 
-                    </x-app-ui.secondary-button>
+                <div class="flex">
+                    <x-app-ui.button class="h-12" type="button" @click="calculateAndRedraw()" loading-text="Calculando...">
+                        Calcular
+                    </x-app-ui.button>
                 </div>
             </div>
-
-            <div x-show="calculationMode === 'coefficients'" x-transition class="space-y-4">
-                <h3 class="font-medium text-slate-900 dark:text-white">Coeficientes de Fourier</h3>
-                <x-app-ui.input-text label="Coeficiente a₀" name="coeff_a0" placeholder="Ej: 1/2" x-model="coeff_a0_str" />
-                <x-app-ui.input-text label="Coeficiente aₙ" name="coeff_an" placeholder="Ej: (2/(n*pi))*sin(n*pi/2)" x-model="coeff_an_str" />
-                <x-app-ui.input-text label="Coeficiente bₙ" name="coeff_bn" placeholder="Ej: 0" x-model="coeff_bn_str" />
-            </div>
-            <div class="flex">
-                <x-app-ui.button class="h-12" type="button" @click="calculateAndRedraw()" loading-text="Calculando...">
-                    Calcular
-                </x-app-ui.button>
-            </div>
-        </div>
-    </div>
+        </x-slot>
+    </x-three-column-tool>
 </div>

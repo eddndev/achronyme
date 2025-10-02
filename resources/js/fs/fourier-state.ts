@@ -1,6 +1,6 @@
 import { calculateCoefficients } from './fourier';
 import * as math from 'mathjs';
-import { validateConstant, validateFunction } from './validation';
+import { validateConstant, validateFunction } from '../utils/validation';
 
 // --- Interfaces de Tipos ---
 
@@ -48,6 +48,9 @@ interface FourierState {
     coeff_a0_str: string;
     coeff_an_str: string;
     coeff_bn_str: string;
+    coeff_a0_error: string | null;
+    coeff_an_error: string | null;
+    coeff_bn_error: string | null;
     renderOriginal: string[];
     renderSeries: string[];
     terms_n: number;
@@ -58,6 +61,7 @@ interface FourierState {
     addFunction(): void;
     removeFunction(id: number): void;
     validate(): boolean;
+    validateCoefficients(): boolean;
     calculateAndRedraw(): Promise<void>;
     evaluateCoefficientExpressions(): void;
     prepareAndRedraw(recalculate?: boolean): void;
@@ -92,6 +96,9 @@ function fourierState(): FourierState {
         coeff_a0_str: '0',
         coeff_an_str: '(2*(-1)^(n+1))/n',
         coeff_bn_str: '0',
+        coeff_a0_error: null,
+        coeff_an_error: null,
+        coeff_bn_error: null,
         renderOriginal: ['original'],
         renderSeries: ['series'],
         terms_n: 10,
@@ -232,12 +239,50 @@ function fourierState(): FourierState {
             return !hasError;
         },
 
+        validateCoefficients() {
+            this.errorMessage = '';
+            let hasError = false;
+
+            // Reset coefficient errors first
+            this.coeff_a0_error = null;
+            this.coeff_an_error = null;
+            this.coeff_bn_error = null;
+
+            // Validate a0 as constant
+            const a0Validation = validateConstant(this.coeff_a0_str);
+            if (!a0Validation.isValid) {
+                this.coeff_a0_error = a0Validation.error!;
+                hasError = true;
+            }
+
+            // Validate an as function of 'n'
+            const anValidation = validateFunction(this.coeff_an_str, 'n');
+            if (!anValidation.isValid) {
+                this.coeff_an_error = anValidation.error!;
+                hasError = true;
+            }
+
+            // Validate bn as function of 'n'
+            const bnValidation = validateFunction(this.coeff_bn_str, 'n');
+            if (!bnValidation.isValid) {
+                this.coeff_bn_error = bnValidation.error!;
+                hasError = true;
+            }
+
+            return !hasError;
+        },
+
         async calculateAndRedraw() {
             this.isLoading = true;
             this.errorMessage = '';
             window.FourierSeriesChart.resetScales();
 
-            if (!this.validate()) {
+            // Validate based on current mode
+            const isValid = this.calculationMode === 'calculate'
+                ? this.validate()
+                : this.validateCoefficients();
+
+            if (!isValid) {
                 this.isLoading = false;
                 return;
             }
