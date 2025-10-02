@@ -13,7 +13,7 @@
         </div>
         <div class="ml-4 hidden items-center gap-x-1.5 sm:flex">
             <kbd class="inline-flex items-center justify-center rounded bg-slate-200/75 dark:bg-slate-700/75 p-1 font-sans text-xs font-medium text-slate-500 dark:text-slate-400">
-                <svg class="size-3.5 text-slate-500 dark:text-slate-400" fill="currentColor"><use href="#icon-command" /></svg>
+                Ctrl
             </kbd>
             <kbd class="inline-flex items-center justify-center rounded bg-slate-200/75 dark:bg-slate-700/75 p-1 font-sans text-xs font-medium text-slate-500 dark:text-slate-400">K</kbd>
         </div>
