@@ -8,7 +8,6 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^12.0",
-        "laravel/nova": "^5.7",
         "laravel/sanctum": "^4.2",
         "laravel/socialite": "^5.23",
         "laravel/tinker": "^2.10.1",
@@ -21,7 +20,6 @@
         "laravel-lang/lang": "^15.25",
         "laravel-lang/publisher": "^16.7",
         "laravel/breeze": "^2.3",
-        "laravel/nova-devtool": "^1.8",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
         "laravel/sail": "^1.41",
@@ -37,8 +35,7 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helper/imageHelper.php",
-            "app/Helper/mathHelper.php"
+            "app/Helper/imageHelper.php"
         ]
     },
     "autoload-dev": {
@@ -86,9 +83,5 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true,
-    "repositories": [
-    { 
-        "type": "composer", "url": "https://nova.laravel.com" }
-    ]
+    "prefer-stable": true
 }
