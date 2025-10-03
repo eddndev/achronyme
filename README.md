@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/images/logo.png" alt="Achronyme Logo" width="200">
+  <img src="./assets/logo.svg" alt="Achronyme Logo" width="200">
   <br/>
   <h1>
     <b>Achronyme</b>
