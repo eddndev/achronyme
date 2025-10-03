@@ -50,9 +50,9 @@
             <div>
                 <x-input-label for="email" :value="__('Email')" />
                 <div class="mt-2">
-                    <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" />
+                    <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" :aria-invalid="$errors->has('email') ? 'true' : 'false'" aria-describedby="email-error" />
                 </div>
-                <x-input-error :messages="$errors->get('email')" class="mt-2" />
+                <x-input-error id="email-error" :messages="$errors->get('email')" class="mt-2" />
             </div>
 
             <!-- Password -->
@@ -62,10 +62,12 @@
                     <x-text-input id="password" class="block mt-1 w-full"
                                 type="password"
                                 name="password"
-                                required autocomplete="current-password" />
+                                required autocomplete="current-password"
+                                :aria-invalid="$errors->has('password') ? 'true' : 'false'"
+                                aria-describedby="password-error" />
 
                 </div>
-                <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                <x-input-error id="password-error" :messages="$errors->get('password')" class="mt-2" />
             </div>
 
             <!-- Remember Me -->
@@ -73,14 +75,14 @@
                 <div class="flex gap-3">
                     <div class="flex h-6 shrink-0 items-center">
                         <div class="group grid size-4 grid-cols-1">
-                            <input id="remember-me" type="checkbox" name="remember-me" class="col-start-1 row-start-1 appearance-none rounded-sm border border-slate-300 bg-white checked:border-purple-blue-600 checked:bg-purple-blue-600 indeterminate:border-purple-blue-600 indeterminate:bg-purple-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-blue-600 disabled:border-slate-300 disabled:bg-slate-100 disabled:checked:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:checked:border-purple-blue-500 dark:checked:bg-purple-blue-500 dark:indeterminate:border-purple-blue-500 dark:indeterminate:bg-purple-blue-500 dark:focus-visible:outline-purple-blue-500 forced-colors:appearance-auto" />
+                            <input id="remember" type="checkbox" name="remember" class="col-start-1 row-start-1 appearance-none rounded-sm border border-slate-300 bg-white checked:border-purple-blue-600 checked:bg-purple-blue-600 indeterminate:border-purple-blue-600 indeterminate:bg-purple-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-blue-600 disabled:border-slate-300 disabled:bg-slate-100 disabled:checked:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:checked:border-purple-blue-500 dark:checked:bg-purple-blue-500 dark:indeterminate:border-purple-blue-500 dark:indeterminate:bg-purple-blue-500 dark:focus-visible:outline-purple-blue-500 forced-colors:appearance-auto" />
                             <svg viewBox="0 0 14 14" fill="none" class="pointer-events-none col-start-1 row-start-1 size-3.5 self-center justify-self-center stroke-white group-has-disabled:stroke-gray-950/25 dark:group-has-disabled:stroke-white/25">
                             <path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-has-checked:opacity-100" />
                             <path d="M3 7H11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-has-indeterminate:opacity-100" />
                             </svg>
                         </div>
                     </div>
-                    <label for="remember-me" class="block text-sm/6 text-slate-800 dark:text-slate-200">{{ __('Remember me') }}</label>
+                    <label for="remember" class="block text-sm/6 text-slate-800 dark:text-slate-200">{{ __('Remember me') }}</label>
                 </div>
 
                 <div class="text-sm/6">

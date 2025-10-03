@@ -49,18 +49,18 @@
             <div>
                 <x-input-label for="name" :value="__('Name')" />
                 <div class="mt-2">
-                    <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required autofocus autocomplete="name" />
+                    <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required autofocus autocomplete="name" :aria-invalid="$errors->has('name') ? 'true' : 'false'" aria-describedby="name-error" />
                 </div>
-                <x-input-error :messages="$errors->get('name')" class="mt-2" />
+                <x-input-error id="name-error" :messages="$errors->get('name')" class="mt-2" />
             </div>
 
             <!-- Email Address -->
             <div>
                 <x-input-label for="email" :value="__('Email')" />
                 <div class="mt-2">
-                    <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autocomplete="username" />
+                    <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autocomplete="username" :aria-invalid="$errors->has('email') ? 'true' : 'false'" aria-describedby="email-error" />
                 </div>
-                <x-input-error :messages="$errors->get('email')" class="mt-2" />
+                <x-input-error id="email-error" :messages="$errors->get('email')" class="mt-2" />
             </div>
 
             <!-- Password -->
@@ -70,9 +70,11 @@
                     <x-text-input id="password" class="block mt-1 w-full"
                                     type="password"
                                     name="password"
-                                    required autocomplete="new-password" />
+                                    required autocomplete="new-password"
+                                    :aria-invalid="$errors->has('password') ? 'true' : 'false'"
+                                    aria-describedby="password-error" />
                 </div>
-                <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                <x-input-error id="password-error" :messages="$errors->get('password')" class="mt-2" />
             </div>
 
             <!-- Confirm Password -->
@@ -81,9 +83,11 @@
                 <div class="mt-2">
                     <x-text-input id="password_confirmation" class="block mt-1 w-full"
                                     type="password"
-                                    name="password_confirmation" required autocomplete="new-password" />
+                                    name="password_confirmation" required autocomplete="new-password"
+                                    :aria-invalid="$errors->has('password_confirmation') ? 'true' : 'false'"
+                                    aria-describedby="password-confirmation-error" />
                 </div>
-                <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
+                <x-input-error id="password-confirmation-error" :messages="$errors->get('password_confirmation')" class="mt-2" />
             </div>
 
             <!-- Terms and Conditions -->
