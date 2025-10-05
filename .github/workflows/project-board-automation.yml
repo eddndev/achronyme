@@ -18,8 +18,8 @@ on:
     types: [opened, labeled, assigned, closed, reopened]
 
 env:
-  PROJECT_ID: PVT_kwHOCUkKF84BE0CO
-  PROJECT_NUMBER: 4  # Número del proyecto para gh CLI
+  # ✅ IDs configurados para el proyecto Achronyme - Development
+  PROJECT_ID: PVT_kwHOCUkKF84BE0CO  # ID largo del proyecto (usado en GraphQL Y gh CLI)
   STATUS_FIELD_ID: PVTSSF_lAHOCUkKF84BE0COzg2VJJA
   TODO_OPTION_ID: f75ad846
   IN_PROGRESS_OPTION_ID: 47fc9ee4
@@ -77,7 +77,7 @@ jobs:
 
           if [ -z "$ITEM_ID" ]; then
             echo "Issue not in project, adding it first..."
-            gh project item-add ${{ env.PROJECT_NUMBER }} --owner eddndev --url ${{ github.event.issue.html_url }}
+            gh project item-add ${{ env.PROJECT_ID }} --owner eddndev --url ${{ github.event.issue.html_url }}
 
             # Get the item ID again after adding
             ITEM_ID=$(gh api graphql -f query='
