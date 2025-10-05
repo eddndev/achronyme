@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentación
+    url: https://github.com/eddndev/achronyme/blob/main/docs/AGENTS.md
+    about: Lee la metodología completa del proyecto
+  - name: 💬 Discusión
+    url: https://github.com/eddndev/achronyme/discussions
+    about: Para preguntas generales y discusiones

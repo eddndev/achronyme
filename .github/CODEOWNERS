@@ -1,0 +1,29 @@
+# CODEOWNERS - Asignación Automática de Reviewers
+# Documentación: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Regla global: Eduardo es el owner por defecto de TODO
+* @eddndev
+
+# Documentación - Requiere review de Eduardo
+/docs/ @eddndev
+*.md @eddndev
+
+# Base de datos - Requiere review de Eduardo
+/database/ @eddndev
+**/migrations/ @eddndev
+
+# Workflows y CI/CD - Requiere review de Eduardo
+/.github/ @eddndev
+*.yml @eddndev
+*.yaml @eddndev
+
+# Archivos críticos - SIEMPRE requieren review de Eduardo
+/docs/AGENTS.md @eddndev
+/.github/workflows/ @eddndev
+/composer.json @eddndev
+/package.json @eddndev
+
+# Configuración - Requiere review de Eduardo
+*.config.js @eddndev
+*.config.ts @eddndev
+.env.example @eddndev

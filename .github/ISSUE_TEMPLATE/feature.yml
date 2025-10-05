@@ -1,0 +1,104 @@
+name: ✨ Feature Request
+description: Proponer una nueva funcionalidad
+title: "[Feature] "
+labels: ["Type: Feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 📝 Nueva Funcionalidad
+        Describe la funcionalidad que quieres implementar siguiendo la metodología de AGENTS.md
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📋 Descripción
+      description: ¿Qué funcionalidad quieres agregar y por qué es necesaria?
+      placeholder: |
+        Como [tipo de usuario]
+        Quiero [acción]
+        Para [beneficio/objetivo]
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: ✅ Criterios de Aceptación
+      description: ¿Cómo sabremos que esta funcionalidad está completa?
+      placeholder: |
+        - [ ] Criterio 1
+        - [ ] Criterio 2
+        - [ ] Criterio 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-tasks
+    attributes:
+      label: 🔧 Tareas Técnicas
+      description: Lista de tareas específicas para implementar
+      placeholder: |
+        - [ ] Tarea técnica 1
+        - [ ] Tarea técnica 2
+        - [ ] Tarea técnica 3
+    validations:
+      required: false
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 📦 Módulo
+      description: ¿A qué módulo pertenece esta funcionalidad?
+      options:
+        - Frontend
+        - Backend
+        - Database
+        - DevOps
+        - Design
+        - Docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🎯 Prioridad
+      description: ¿Qué prioridad tiene esta funcionalidad?
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: input
+    id: sprint
+    attributes:
+      label: 🏃 Sprint
+      description: ¿A qué sprint pertenece? (opcional - usar número solamente)
+      placeholder: "1"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 🔗 Referencias
+      description: Links a diseños, documentación, issues relacionadas
+      placeholder: |
+        - Figma: [URL]
+        - Docs: [URL]
+        - Related issue: #[NUM]
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: He leído la metodología en `docs/AGENTS.md`
+          required: true
+        - label: Esta funcionalidad sigue los principios del proyecto
+          required: true

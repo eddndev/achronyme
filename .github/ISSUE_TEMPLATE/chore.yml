@@ -1,0 +1,110 @@
+name: 🔧 Chore / Maintenance
+description: Tarea de mantenimiento, refactor, o configuración
+title: "[Chore] "
+labels: ["Type: Chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🔧 Tarea de Mantenimiento
+        Describe la tarea siguiendo la metodología de AGENTS.md
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📋 Descripción
+      description: ¿Qué tarea de mantenimiento necesita hacerse?
+      placeholder: |
+        Describe la tarea de mantenimiento, refactor, actualización de dependencias,
+        configuración, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chore-type
+    attributes:
+      label: 🏷️ Tipo de Tarea
+      description: ¿Qué tipo de mantenimiento es?
+      options:
+        - Refactoring
+        - Dependencies Update
+        - Configuration
+        - Documentation
+        - Testing
+        - CI/CD
+        - Performance
+        - Security
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: ✅ Criterios de Aceptación
+      description: ¿Cómo sabremos que esta tarea está completa?
+      placeholder: |
+        - [ ] Criterio 1
+        - [ ] Criterio 2
+        - [ ] Criterio 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-tasks
+    attributes:
+      label: 🔧 Tareas Técnicas
+      description: Lista de tareas específicas
+      placeholder: |
+        - [ ] Tarea técnica 1
+        - [ ] Tarea técnica 2
+        - [ ] Tarea técnica 3
+    validations:
+      required: false
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 📦 Módulo
+      description: ¿A qué módulo afecta?
+      options:
+        - Frontend
+        - Backend
+        - Database
+        - DevOps
+        - Design
+        - Docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🎯 Prioridad
+      description: ¿Qué prioridad tiene esta tarea?
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: input
+    id: sprint
+    attributes:
+      label: 🏃 Sprint
+      description: ¿A qué sprint pertenece? (opcional - usar número solamente)
+      placeholder: "1"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 🔗 Referencias
+      description: Links a documentación, issues relacionadas
+      placeholder: |
+        - Docs: [URL]
+        - Related issue: #[NUM]
+    validations:
+      required: false
