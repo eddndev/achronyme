@@ -2,7 +2,7 @@
 
 **Periodo:** 2025-10-05 - 2025-10-19 (2 semanas)
 
-**Épica Maestra en GitHub:** [Crear después del commit]
+**Épica Maestra en GitHub:** [#6 - Sprint 1: WASM Foundation](https://github.com/eddndev/achronyme/issues/6)
 
 ---
 
@@ -17,38 +17,32 @@ Establecer la fundación completa para la migración a WebAssembly: configurar e
 ## 2. Alcance y Tareas Incluidas
 
 ### Setup & Infrastructure
-- [ ] `#TBD` - Configurar Emscripten en el ambiente de desarrollo
-- [ ] `#TBD` - Configurar CMake build system completo
-- [ ] `#TBD` - Integrar build WASM con Vite pipeline
-- [ ] `#TBD` - Configurar sistema de testing (Google Test + Vitest)
+- [ ] [#7](https://github.com/eddndev/achronyme/issues/7) - Configurar Emscripten en el ambiente de desarrollo
+- [ ] [#8](https://github.com/eddndev/achronyme/issues/8) - Configurar CMake build system completo
+- [ ] [#9](https://github.com/eddndev/achronyme/issues/9) - Integrar build WASM con Vite pipeline
+- [ ] [#10](https://github.com/eddndev/achronyme/issues/10) - Configurar sistema de testing (Google Test + Vitest)
 
 ### Core Types & Utilities
-- [ ] `#TBD` - Implementar tipos base (Complex, Vector, Matrix)
-- [ ] `#TBD` - Implementar constantes matemáticas (PI, E, PHI, etc)
-- [ ] `#TBD` - Crear utilidades comunes (memory management, error handling)
+- [ ] [#11](https://github.com/eddndev/achronyme/issues/11) - Implementar tipos base (Complex, Vector, Matrix)
+- [ ] [#12](https://github.com/eddndev/achronyme/issues/12) - Implementar constantes matemáticas (PI, E, PHI, etc)
+- [ ] [#13](https://github.com/eddndev/achronyme/issues/13) - Crear utilidades comunes (memory management, error handling)
 
 ### Mathematical Parser
-- [ ] `#TBD` - Implementar Lexer (tokenización)
-- [ ] `#TBD` - Implementar Parser (análisis sintáctico)
-- [ ] `#TBD` - Implementar Evaluator (evaluación de expresiones)
-- [ ] `#TBD` - Implementar funciones matemáticas básicas (sin, cos, tan, log, exp, etc)
+- [ ] [#14](https://github.com/eddndev/achronyme/issues/14) - Implementar Lexer (tokenización)
+- [ ] [#15](https://github.com/eddndev/achronyme/issues/15) - Implementar Parser (análisis sintáctico)
+- [ ] [#16](https://github.com/eddndev/achronyme/issues/16) - Implementar Evaluator (evaluación de expresiones)
+- [ ] [#17](https://github.com/eddndev/achronyme/issues/17) - Implementar funciones matemáticas básicas (sin, cos, tan, log, exp, etc)
 
 ### JavaScript Bindings
-- [ ] `#TBD` - Crear bindings Emscripten para parser
-- [ ] `#TBD` - Crear wrapper TypeScript para WASM loader
-- [ ] `#TBD` - Implementar sistema de fallback a Math.js
-- [ ] `#TBD` - Crear API unificada de abstracción
+- [ ] [#18](https://github.com/eddndev/achronyme/issues/18) - Crear bindings Emscripten para parser
+- [ ] [#19](https://github.com/eddndev/achronyme/issues/19) - Crear wrapper TypeScript para WASM loader
+- [ ] [#20](https://github.com/eddndev/achronyme/issues/20) - Implementar sistema de fallback a Math.js
+- [ ] [#21](https://github.com/eddndev/achronyme/issues/21) - Crear API unificada de abstracción
 
 ### Testing & Optimization
-- [ ] `#TBD` - Escribir tests unitarios C++ para parser
-- [ ] `#TBD` - Escribir tests de integración TypeScript
-- [ ] `#TBD` - Configurar pipeline de optimización (wasm-opt + Brotli)
-- [ ] `#TBD` - Crear benchmarks de rendimiento
-
-### Documentation
-- [ ] `#TBD` - Documentar arquitectura WASM (ya creado)
-- [ ] `#TBD` - Crear guía de desarrollo para contributors
-- [ ] `#TBD` - Documentar API pública del parser
+- [ ] [#22](https://github.com/eddndev/achronyme/issues/22) - Escribir tests unitarios C++ para parser
+- [ ] [#23](https://github.com/eddndev/achronyme/issues/23) - Configurar pipeline de optimización (wasm-opt + Brotli)
+- [ ] [#24](https://github.com/eddndev/achronyme/issues/24) - Crear benchmarks de rendimiento
 
 ---
 
