@@ -1,0 +1,129 @@
+# ⚠️ TEMPLATE - Configurar antes de usar
+#
+# Este workflow automatiza el movimiento de issues en GitHub Projects v2
+#
+# PASOS PARA CONFIGURAR:
+# 1. Crear Personal Access Token con scopes 'repo' y 'project'
+# 2. Agregar como secret 'PROJECT_PAT' en el repositorio
+# 3. Obtener los IDs necesarios ejecutando:
+#    - PROJECT_ID: gh project list --owner [OWNER]
+#    - STATUS_FIELD_ID y OPTION_IDs: Ver docs/workflow/03-github-projects-setup.md
+# 4. Reemplazar los valores en la sección 'env' con tus IDs reales
+# 5. Reemplazar [OWNER] en línea 67 con tu username/org
+
+name: Project Board Automation
+
+on:
+  issues:
+    types: [opened, labeled, assigned, closed, reopened]
+
+env:
+  # ⚠️ REEMPLAZAR CON TUS IDs REALES
+  PROJECT_ID: YOUR_PROJECT_ID_HERE              # Ejemplo: PVT_kwHOCUkKF84BEw60
+  STATUS_FIELD_ID: YOUR_STATUS_FIELD_ID_HERE    # Ejemplo: PVTSSF_lAHOCUkKF84BEw60zg2S-xI
+  TODO_OPTION_ID: YOUR_TODO_OPTION_ID_HERE      # Ejemplo: f75ad846
+  IN_PROGRESS_OPTION_ID: YOUR_IN_PROGRESS_ID    # Ejemplo: 47fc9ee4
+  DONE_OPTION_ID: YOUR_DONE_OPTION_ID_HERE      # Ejemplo: 98236657
+
+jobs:
+  update-project-status:
+    name: Update Project Status
+    runs-on: ubuntu-latest
+    # No mover issues con label 'Epic' al tablero
+    if: ${{ !contains(github.event.issue.labels.*.name, 'Epic') }}
+    steps:
+      - name: Determine target status
+        id: status
+        run: |
+          if [[ "${{ github.event.action }}" == "opened" ]] || [[ "${{ github.event.action }}" == "reopened" ]]; then
+            echo "OPTION_ID=${{ env.TODO_OPTION_ID }}" >> $GITHUB_OUTPUT
+            echo "STATUS_NAME=Todo" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.action }}" == "assigned" ]] || [[ "${{ contains(github.event.issue.labels.*.name, 'Status: In Progress') }}" == "true" ]]; then
+            echo "OPTION_ID=${{ env.IN_PROGRESS_OPTION_ID }}" >> $GITHUB_OUTPUT
+            echo "STATUS_NAME=In Progress" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.action }}" == "closed" ]]; then
+            echo "OPTION_ID=${{ env.DONE_OPTION_ID }}" >> $GITHUB_OUTPUT
+            echo "STATUS_NAME=Done" >> $GITHUB_OUTPUT
+          else
+            echo "OPTION_ID=" >> $GITHUB_OUTPUT
+            echo "No status change needed"
+          fi
+
+      - name: Get project item ID
+        if: steps.status.outputs.OPTION_ID != ''
+        id: get-item
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT || secrets.GITHUB_TOKEN }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($projectId: ID!) {
+              node(id: $projectId) {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          id
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f projectId="${{ env.PROJECT_ID }}" \
+               --jq ".data.node.items.nodes[] | select(.content.id == \"${ISSUE_NODE_ID}\") | .id")
+
+          if [ -z "$ITEM_ID" ]; then
+            echo "Issue not in project, adding it first..."
+            # ⚠️ REEMPLAZAR [OWNER] con tu username u organización
+            gh project item-add ${{ env.PROJECT_ID }} --owner [OWNER] --url ${{ github.event.issue.html_url }}
+
+            # Get the item ID again after adding
+            ITEM_ID=$(gh api graphql -f query='
+              query($projectId: ID!) {
+                node(id: $projectId) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            id
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f projectId="${{ env.PROJECT_ID }}" \
+                 --jq ".data.node.items.nodes[] | select(.content.id == \"${ISSUE_NODE_ID}\") | .id")
+          fi
+
+          echo "ITEM_ID=${ITEM_ID}" >> $GITHUB_OUTPUT
+          echo "Found item ID: ${ITEM_ID}"
+
+      - name: Update project item status
+        if: steps.get-item.outputs.ITEM_ID != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          gh api graphql -f query='
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId
+                itemId: $itemId
+                fieldId: $fieldId
+                value: {singleSelectOptionId: $optionId}
+              }) {
+                projectV2Item {
+                  id
+                }
+              }
+            }' -f projectId="${{ env.PROJECT_ID }}" \
+               -f itemId="${{ steps.get-item.outputs.ITEM_ID }}" \
+               -f fieldId="${{ env.STATUS_FIELD_ID }}" \
+               -f optionId="${{ steps.status.outputs.OPTION_ID }}"
+
+          echo "✓ Issue moved to ${{ steps.status.outputs.STATUS_NAME }}"

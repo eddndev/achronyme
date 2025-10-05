@@ -1,0 +1,11 @@
+# ⚠️ TEMPLATE - Reemplazar URLs antes de usar
+# Reemplazar [OWNER] y [REPO] con los valores reales de tu repositorio
+
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentación
+    url: https://github.com/[OWNER]/[REPO]/blob/main/docs/AGENTS.md
+    about: Lee la metodología completa del proyecto
+  - name: 💬 Discusión
+    url: https://github.com/[OWNER]/[REPO]/discussions
+    about: Para preguntas generales y discusiones

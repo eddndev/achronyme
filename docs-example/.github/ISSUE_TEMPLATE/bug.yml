@@ -1,0 +1,106 @@
+name: 🐛 Bug Report
+description: Reportar un error o comportamiento inesperado
+title: "[Bug] "
+labels: ["Type: Bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Reporte de Bug
+        Describe el error siguiendo la metodología de AGENTS.md
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📋 Descripción del Bug
+      description: ¿Qué está fallando?
+      placeholder: Describe el error de forma clara y concisa
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: 🔄 Pasos para Reproducir
+      description: ¿Cómo podemos reproducir este error?
+      placeholder: |
+        1. Ir a '...'
+        2. Click en '...'
+        3. Scroll hasta '...'
+        4. Ver error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: ✅ Comportamiento Esperado
+      description: ¿Qué debería pasar en lugar del error?
+      placeholder: Describe qué esperabas que sucediera
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: ❌ Comportamiento Actual
+      description: ¿Qué está pasando realmente?
+      placeholder: Describe qué está pasando actualmente
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 📸 Screenshots
+      description: Si aplica, agrega screenshots del error
+      placeholder: Arrastra y suelta imágenes aquí
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 🌍 Entorno
+      description: ¿Dónde ocurre el error?
+      placeholder: |
+        - OS: [e.g. Windows 11, macOS 14]
+        - Browser: [e.g. Chrome 120, Firefox 121]
+        - Version: [e.g. 1.0.0]
+        - Device: [e.g. Desktop, iPhone 12]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 🚨 Severidad
+      description: ¿Qué tan crítico es este bug?
+      options:
+        - "High - Bloquea funcionalidad crítica"
+        - "Medium - Afecta UX pero hay workaround"
+        - "Low - Cosmético o edge case"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 📦 Módulo Afectado
+      description: ¿Qué módulo está afectado?
+      options:
+        - Frontend
+        - Backend
+        - Database
+        - DevOps
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📝 Contexto Adicional
+      description: Cualquier información adicional relevante
+      placeholder: Logs de consola, errores del servidor, etc.
+    validations:
+      required: false
