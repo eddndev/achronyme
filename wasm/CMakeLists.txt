@@ -136,12 +136,24 @@ if(EMSCRIPTEN)
         SUFFIX ".js"
     )
 
-    # Copy WASM file to dist/
+    # Ensure public/wasm/ directory exists
     add_custom_command(TARGET achronyme-core POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_SOURCE_DIR}/dist/achronyme-core.wasm"
-        "${CMAKE_SOURCE_DIR}/../public/wasm/"
-        COMMENT "Copying WASM to public/"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/../public/wasm"
+        COMMENT "Creating public/wasm/ directory if it doesn't exist"
+    )
+
+    # Copy WASM and JS files to public/ (only if they exist)
+    add_custom_command(TARGET achronyme-core POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE_DIR:achronyme-core>/achronyme-core.wasm"
+            "${CMAKE_SOURCE_DIR}/../public/wasm/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE_DIR:achronyme-core>/achronyme-core.js"
+            "${CMAKE_SOURCE_DIR}/../public/wasm/"
+        COMMENT "Copying WASM and JS files to public/wasm/"
+        BYPRODUCTS
+            "${CMAKE_SOURCE_DIR}/../public/wasm/achronyme-core.wasm"
+            "${CMAKE_SOURCE_DIR}/../public/wasm/achronyme-core.js"
     )
 endif()
 
