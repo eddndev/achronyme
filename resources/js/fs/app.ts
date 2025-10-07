@@ -111,9 +111,13 @@ window.FourierSeriesChart = {
         if (shouldRenderOriginal) {
             plotDomainStart = functions.length > 0 ? evaluate(functions[0].domainStart) : 0;
             plotDomainEnd = functions.length > 0 ? evaluate(functions[functions.length - 1].domainEnd) : 1;
+            // Extend to show 2 periods
+            const period = plotDomainEnd - plotDomainStart;
+            plotDomainEnd = plotDomainStart + (2 * period);
         } else if (shouldRenderSeries) {
             plotDomainStart = piecewiseCoeffs!.domainStart;
-            plotDomainEnd = piecewiseCoeffs!.domainStart + piecewiseCoeffs!.period;
+            // Extend to show 2 periods
+            plotDomainEnd = piecewiseCoeffs!.domainStart + (2 * piecewiseCoeffs!.period);
         } else {
             // Default fallback domain if nothing is being rendered
             plotDomainStart = -Math.PI;
@@ -143,6 +147,11 @@ window.FourierSeriesChart = {
                 }
             }).filter(f => f !== null) as { compiled: EvalFunction; start: number; end: number }[];
 
+            // Calculate the period of the original function
+            const originalPeriodStart = compiledFunctions[0].start;
+            const originalPeriodEnd = compiledFunctions[compiledFunctions.length - 1].end;
+            const period = originalPeriodEnd - originalPeriodStart;
+
             // Create a single data array for the entire piecewise function
             const originalData: (number | null)[] = [];
 
@@ -151,11 +160,17 @@ window.FourierSeriesChart = {
                 const t = parseFloat(tStr);
                 let value: number | null = null;
 
-                // Find the correct function piece for the current time t
-                const activeFunc = compiledFunctions.find(f => t >= f.start - 1e-9 && t <= f.end + 1e-9);
+                // Map t to its position within the period using modulo
+                // This makes the function repeat periodically
+                let tMapped = ((t - originalPeriodStart) % period);
+                if (tMapped < 0) tMapped += period; // Handle negative values
+                tMapped += originalPeriodStart;
+
+                // Find the correct function piece for the mapped time
+                const activeFunc = compiledFunctions.find(f => tMapped >= f.start - 1e-9 && tMapped <= f.end + 1e-9);
 
                 if (activeFunc) {
-                    const val = this.evaluateCompiledFunction(activeFunc.compiled, t);
+                    const val = this.evaluateCompiledFunction(activeFunc.compiled, tMapped);
                     if (isFinite(val)) {
                         value = val;
                         allDataPoints.push(val);

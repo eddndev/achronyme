@@ -5,7 +5,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "npm run wasm:build && vite build",
+        "build": "vite build",
+        "build:full": "npm run wasm:build && vite build",
         "wasm:build": "bash scripts/build-wasm.sh Release ON",
         "wasm:dev": "bash scripts/build-wasm.sh Debug OFF",
         "wasm:clean": "rm -rf wasm/build wasm/dist public/wasm/*.wasm*",

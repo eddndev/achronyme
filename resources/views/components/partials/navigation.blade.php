@@ -203,17 +203,36 @@
                 />
                 <p class="text-md font-bold text-gray-900 dark:text-white">Achronyme</p>
               </a>
-              <button type="button" command="close" commandfor="mobile-menu" class="-m-2.5 rounded-md p-2.5 text-gray-700 dark:text-gray-400">
-                <span class="sr-only">Close menu</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6">
-                  <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+              <div class="flex items-center gap-x-2">
+                {{-- Theme Toggle Mobile --}}
+                <div x-data="{ isDark: localStorage.getItem('theme') === 'dark' || (localStorage.getItem('theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches) }">
+                  <button
+                    @click="isDark = !isDark; window.toggleTheme(isDark ? 'dark' : 'light')"
+                    type="button"
+                    aria-label="Toggle dark mode"
+                    class="inline-flex items-center justify-center rounded-md p-2.5 text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
+                    <span class="sr-only">Toggle dark mode</span>
+                    <svg x-show="!isDark" viewBox="0 0 24 24" fill="currentColor" class="size-5">
+                      <use href="#icon-sun" />
+                    </svg>
+                    <svg x-show="isDark" viewBox="0 0 24 24" fill="currentColor" class="size-5">
+                      <use href="#icon-moon" />
+                    </svg>
+                  </button>
+                </div>
+                <button type="button" command="close" commandfor="mobile-menu" class="inline-flex items-center justify-center rounded-md p-2.5 text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                  <span class="sr-only">Close menu</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-5">
+                    <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="mt-6 flow-root">
               <div class="-my-6 divide-y divide-gray-500/10 dark:divide-white/10">
                 <div class="space-y-2 py-6">
-                  <a href="#" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
+                  <a href="{{ route('fourier-transform') }}" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
                     <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-800 dark:group-hover:bg-gray-700">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-purple-blue-600 dark:text-gray-300 dark:group-hover:text-white">
                         <use href="#icon-fx" />
@@ -221,7 +240,7 @@
                     </div>
                     Transformada de Fourier
                   </a>
-                  <a href="#" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
+                  <a href="{{ route('fourier-series') }}" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
                     <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-800 dark:group-hover:bg-gray-700">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-purple-blue-600 dark:text-gray-300 dark:group-hover:text-white">
                         <use href="#icon-sf" />
@@ -229,7 +248,7 @@
                     </div>
                     Serie de Fourier
                   </a>
-                  <a href="#" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
+                  <a href="{{ route('convolution') }}" class="group -mx-3 flex items-center gap-x-6 rounded-lg p-3 text-base/7 font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5">
                     <div class="flex size-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white dark:bg-gray-800 dark:group-hover:bg-gray-700">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6 text-gray-600 group-hover:text-purple-blue-600 dark:text-gray-300 dark:group-hover:text-white">
                         <use href="#icon-conv" />
