@@ -203,27 +203,27 @@
                 />
                 <p class="text-md font-bold text-gray-900 dark:text-white">Achronyme</p>
               </a>
-              <div class="flex items-center gap-x-3">
+              <div class="flex items-center gap-x-2">
                 {{-- Theme Toggle Mobile --}}
                 <div x-data="{ isDark: localStorage.getItem('theme') === 'dark' || (localStorage.getItem('theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches) }">
                   <button
                     @click="isDark = !isDark; window.toggleTheme(isDark ? 'dark' : 'light')"
                     type="button"
                     aria-label="Toggle dark mode"
-                    class="-m-2.5 rounded-md p-2.5 text-gray-700 dark:text-gray-400"
+                    class="inline-flex items-center justify-center rounded-md p-2.5 text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     <span class="sr-only">Toggle dark mode</span>
-                    <svg x-show="!isDark" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                    <svg x-show="!isDark" viewBox="0 0 24 24" fill="currentColor" class="size-5">
                       <use href="#icon-sun" />
                     </svg>
-                    <svg x-show="isDark" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                    <svg x-show="isDark" viewBox="0 0 24 24" fill="currentColor" class="size-5">
                       <use href="#icon-moon" />
                     </svg>
                   </button>
                 </div>
-                <button type="button" command="close" commandfor="mobile-menu" class="-m-2.5 rounded-md p-2.5 text-gray-700 dark:text-gray-400">
+                <button type="button" command="close" commandfor="mobile-menu" class="inline-flex items-center justify-center rounded-md p-2.5 text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                   <span class="sr-only">Close menu</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-6">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class="size-5">
                     <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </button>
