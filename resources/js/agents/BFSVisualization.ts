@@ -88,6 +88,11 @@ export class BFSVisualization {
     this.treeContainer = document.getElementById('tree-visualization');
     this.queueContainer = document.getElementById('queue-visualization');
 
+    // Inicializar el objeto reactivo de Alpine.js para la cola
+    if (typeof window !== 'undefined') {
+      (window as any).bfsQueueData = (window as any).Alpine?.reactive({ queue: [] }) || { queue: [] };
+    }
+
     console.log('[BFSVisualization] Initialized');
     this.attachEventListeners();
   }
@@ -268,30 +273,23 @@ export class BFSVisualization {
   }
 
   /**
-   * Actualiza la visualización de la cola
+   * Actualiza la visualización de la cola usando Alpine.js
    */
   private updateQueueVisualization(): void {
-    if (!this.queueContainer) return;
+    // Preparar los datos de la cola para Alpine.js
+    const queueData = this.state.queue.map(node => ({
+      id: node.id,
+      position: node.position,
+      depth: node.depth
+    }));
 
-    const queueCountEl = document.getElementById('queue-count');
-    if (queueCountEl) {
-      queueCountEl.textContent = `${this.state.queue.length} nodos`;
+    // Actualizar el objeto reactivo de Alpine.js
+    if (typeof window !== 'undefined') {
+      if (!(window as any).bfsQueueData) {
+        (window as any).bfsQueueData = (window as any).Alpine?.reactive({ queue: [] }) || { queue: [] };
+      }
+      (window as any).bfsQueueData.queue = queueData;
     }
-
-    if (this.state.queue.length === 0) {
-      this.queueContainer.innerHTML = '<div class="text-slate-400 dark:text-slate-500 text-center text-sm">La cola está vacía</div>';
-      return;
-    }
-
-    const queueHTML = this.state.queue.map((node, index) => `
-      <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
-        <span class="font-mono font-bold">(${node.position.row + 1},${node.position.col + 1})</span>
-        <span class="text-slate-500 dark:text-slate-400">· d=${node.depth}</span>
-      </span>
-      ${index < this.state.queue.length - 1 ? '<span class="text-slate-400 dark:text-slate-500 mx-1">→</span>' : ''}
-    `).join('');
-
-    this.queueContainer.innerHTML = `<div class="flex items-center flex-wrap gap-2 overflow-x-auto pb-2">${queueHTML}</div>`;
   }
 
   /**
@@ -314,10 +312,31 @@ export class BFSVisualization {
       .append('svg')
       .attr('width', '100%')
       .attr('height', '100%')
-      .attr('viewBox', `0 0 ${width} ${height}`);
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .style('cursor', 'grab');
 
+    // Crear grupo principal para zoom/pan
     this.g = this.svg.append('g')
       .attr('transform', 'translate(50, 50)');
+
+    // Configurar zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 4]) // Límites de zoom: 10% a 400%
+      .on('zoom', (event) => {
+        this.g?.attr('transform', event.transform);
+      });
+
+    // Aplicar zoom al SVG
+    this.svg.call(zoom as any)
+      .on('dblclick.zoom', null); // Deshabilitar zoom con doble clic
+
+    // Cambiar cursor durante el drag
+    this.svg.on('mousedown.cursor', () => {
+      this.svg?.style('cursor', 'grabbing');
+    });
+    this.svg.on('mouseup.cursor', () => {
+      this.svg?.style('cursor', 'grab');
+    });
 
     // Configurar layout de árbol
     const treeLayout = d3.tree<SearchNode>()
@@ -730,10 +749,12 @@ export class BFSVisualization {
     // Restablecer el mensaje de estado
     this.updateStatus('Presiona "Iniciar BFS" para comenzar la búsqueda');
 
-    // Limpiar visualizaciones
-    if (this.queueContainer) {
-      this.queueContainer.innerHTML = '<div class="text-slate-400 dark:text-slate-500 text-center text-sm">La cola está vacía</div>';
+    // Limpiar visualización de la cola usando Alpine.js
+    if (typeof window !== 'undefined' && (window as any).bfsQueueData) {
+      (window as any).bfsQueueData.queue = [];
     }
+
+    // Limpiar visualización del árbol
     if (this.treeContainer) {
       this.treeContainer.innerHTML = '<div class="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none">Árbol vacío</div>';
     }
@@ -745,9 +766,6 @@ export class BFSVisualization {
     if (visitedCountEl) visitedCountEl.textContent = '0';
     if (treeDepthEl) treeDepthEl.textContent = '0';
     if (pathLengthEl) pathLengthEl.textContent = '-';
-
-    const queueCountEl = document.getElementById('queue-count');
-    if (queueCountEl) queueCountEl.textContent = '0 nodos';
 
     // Ocultar todos los grupos de botones post-init y mostrar botones de inicio
     const startStepBtn = document.getElementById('start-bfs-step');

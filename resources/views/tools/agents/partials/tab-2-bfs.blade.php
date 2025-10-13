@@ -129,13 +129,28 @@
         </div>
 
         {{-- Visualización de la Cola --}}
-        <div class="space-y-2">
+        <div class="space-y-2" x-data="window.bfsQueueData || { queue: [] }">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <span class="text-purple-blue-600 dark:text-purple-blue-400">Cola (Queue):</span>
-                <span id="queue-count" class="text-sm bg-purple-blue-100 dark:bg-purple-blue-950/30 text-purple-blue-700 dark:text-purple-blue-300 px-2 py-1 rounded">0 nodos</span>
+                <span class="text-sm bg-purple-blue-100 dark:bg-purple-blue-950/30 text-purple-blue-700 dark:text-purple-blue-300 px-2 py-1 rounded" x-text="`${queue.length} nodos`">0 nodos</span>
             </h3>
-            <div id="queue-visualization" class="bg-purple-blue-50 dark:bg-purple-blue-950/20 p-4 rounded-lg border-2 border-purple-blue-200 dark:border-purple-blue-800 min-h-[100px] overflow-x-auto">
-                <div class="text-slate-400 dark:text-slate-500 text-center text-sm">La cola está vacía</div>
+            <div class="flex flex-wrap items-center gap-2 min-h-[60px]">
+                <div x-show="queue.length === 0" class="text-slate-400 dark:text-slate-500 text-sm">
+                    La cola está vacía
+                </div>
+                <template x-for="(node, index) in queue" :key="node.id">
+                    <div class="relative">
+                        <div class="w-14 h-14 rounded-md flex items-center justify-center transition-all border-2"
+                             :class="index === 0 ? 'bg-purple-blue-500 border-purple-blue-600 dark:bg-purple-blue-600 dark:border-purple-blue-500 shadow-lg scale-110' : 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600'">
+                            <span class="font-mono text-xs font-bold transition-colors"
+                                  :class="index === 0 ? 'text-white' : 'text-slate-700 dark:text-slate-200'"
+                                  x-text="`(${node.position.row + 1},${node.position.col + 1})`"></span>
+                        </div>
+                        <div x-show="index === 0" class="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-purple-blue-600 dark:text-purple-blue-400 whitespace-nowrap">
+                            FRONT
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

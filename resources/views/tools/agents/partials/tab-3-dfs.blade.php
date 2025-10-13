@@ -150,24 +150,23 @@
                 <span class="text-accent-purple-600 dark:text-accent-purple-400">Pila (Stack):</span>
                 <span class="text-sm bg-accent-purple-100 dark:bg-accent-purple-950/30 text-accent-purple-700 dark:text-accent-purple-300 px-2 py-1 rounded" x-text="`${stack.length} nodos`">0 nodos</span>
             </h3>
-            <div class="bg-accent-purple-50 dark:bg-accent-purple-950/20 p-4 rounded-lg border-2 border-accent-purple-200 dark:border-accent-purple-800 min-h-[100px] overflow-x-auto">
-                <div x-show="stack.length === 0" class="text-slate-400 dark:text-slate-500 text-center text-sm">
+            <div class="flex flex-wrap items-center gap-2 min-h-[60px]">
+                <div x-show="stack.length === 0" class="text-slate-400 dark:text-slate-500 text-sm">
                     La pila está vacía
                 </div>
-                <div x-show="stack.length > 0" class="flex flex-col gap-2">
-                    <template x-for="(node, index) in stack.slice().reverse()" :key="node.id">
-                        <div class="flex items-center gap-3 py-2 px-3 bg-white dark:bg-slate-700 rounded-md border-2 transition-colors"
-                             :class="index === 0 ? 'border-accent-purple-500' : 'border-accent-purple-200 dark:border-accent-purple-800'">
-                            <div class="w-12 h-12 rounded-full bg-accent-purple-300 dark:bg-accent-purple-600 border-2 border-accent-purple-500 flex items-center justify-center flex-shrink-0">
-                                <span class="font-mono text-xs font-bold text-slate-900 dark:text-white" x-text="`(${node.position.row + 1},${node.position.col + 1})`"></span>
-                            </div>
-                            <div class="flex-1">
-                                <div class="text-xs text-slate-600 dark:text-slate-400" x-text="`Profundidad: ${node.depth}`"></div>
-                                <div x-show="index === 0" class="text-xs font-semibold text-accent-purple-600 dark:text-accent-purple-400">← Próximo a explorar (TOP)</div>
-                            </div>
+                <template x-for="(node, index) in stack" :key="node.id">
+                    <div class="relative">
+                        <div class="w-14 h-14 rounded-md flex items-center justify-center transition-all border-2"
+                             :class="index === stack.length - 1 ? 'bg-accent-purple-500 border-accent-purple-600 dark:bg-accent-purple-600 dark:border-accent-purple-500 shadow-lg scale-110' : 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600'">
+                            <span class="font-mono text-xs font-bold transition-colors"
+                                  :class="index === stack.length - 1 ? 'text-white' : 'text-slate-700 dark:text-slate-200'"
+                                  x-text="`(${node.position.row + 1},${node.position.col + 1})`"></span>
                         </div>
-                    </template>
-                </div>
+                        <div x-show="index === stack.length - 1" class="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-accent-purple-600 dark:text-accent-purple-400 whitespace-nowrap">
+                            TOP
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

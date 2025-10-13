@@ -370,10 +370,31 @@ export class DFSVisualization {
       .append('svg')
       .attr('width', '100%')
       .attr('height', '100%')
-      .attr('viewBox', `0 0 ${width} ${height}`);
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .style('cursor', 'grab');
 
+    // Crear grupo principal para zoom/pan
     this.g = this.svg.append('g')
       .attr('transform', 'translate(50, 50)');
+
+    // Configurar zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 4]) // Límites de zoom: 10% a 400%
+      .on('zoom', (event) => {
+        this.g?.attr('transform', event.transform);
+      });
+
+    // Aplicar zoom al SVG
+    this.svg.call(zoom as any)
+      .on('dblclick.zoom', null); // Deshabilitar zoom con doble clic
+
+    // Cambiar cursor durante el drag
+    this.svg.on('mousedown.cursor', () => {
+      this.svg?.style('cursor', 'grabbing');
+    });
+    this.svg.on('mouseup.cursor', () => {
+      this.svg?.style('cursor', 'grab');
+    });
 
     // Configurar layout de árbol
     const treeLayout = d3.tree<SearchNode>()
@@ -437,7 +458,16 @@ export class DFSVisualization {
    * Obtiene el color de un nodo según su estado
    */
   private getNodeColor(node: SearchNode): string {
-    // Si es parte de algún camino solución
+    // Si es el nodo actual (comparación por referencia)
+    if (this.state.currentNode && this.state.currentNode === node) {
+      return '#facc15'; // yellow-400
+    }
+
+    // Si está en la pila (comparación por referencia)
+    const inStack = this.state.stack.some(n => n === node);
+    if (inStack) return '#64748b'; // slate-500
+
+    // Si es parte de algún camino solución (por posición, porque las soluciones son Position[])
     if (this.state.solutions.length > 0) {
       const isInSolution = this.state.solutions.some(solution =>
         solution.some(pos => pos.row === node.position.row && pos.col === node.position.col)
@@ -445,28 +475,19 @@ export class DFSVisualization {
       if (isInSolution) return '#a855f7'; // purple-500
     }
 
-    // Si es el nodo actual
-    if (this.state.currentNode && this.state.currentNode.id === node.id) {
-      return '#facc15'; // yellow-400
-    }
-
-    // Si es el nodo inicial
-    if (node.parent === null) {
-      return '#22c55e'; // green-500
-    }
-
-    // Si es un nodo objetivo
+    // Si es un nodo objetivo (por posición)
     const goalPositions = this.grid.getGoalPositions();
     const isGoal = goalPositions.some(
       goal => goal.row === node.position.row && goal.col === node.position.col
     );
     if (isGoal) return '#ef4444'; // red-500
 
-    // Si está en la pila
-    const inStack = this.state.stack.some(n => n.id === node.id);
-    if (inStack) return '#64748b'; // slate-500
+    // Si es el nodo inicial
+    if (node.parent === null) {
+      return '#22c55e'; // green-500
+    }
 
-    // Nodo visitado
+    // Nodo visitado (por defecto)
     return '#60a5fa'; // blue-400
   }
 
@@ -474,6 +495,16 @@ export class DFSVisualization {
    * Obtiene el color del borde de un nodo
    */
   private getNodeStroke(node: SearchNode): string {
+    // Si es el nodo actual (comparación por referencia)
+    if (this.state.currentNode && this.state.currentNode === node) {
+      return '#ca8a04'; // yellow-600
+    }
+
+    // Si está en la pila (comparación por referencia)
+    const inStack = this.state.stack.some(n => n === node);
+    if (inStack) return '#475569'; // slate-600
+
+    // Si es parte de algún camino solución (por posición)
     if (this.state.solutions.length > 0) {
       const isInSolution = this.state.solutions.some(solution =>
         solution.some(pos => pos.row === node.position.row && pos.col === node.position.col)
@@ -481,21 +512,17 @@ export class DFSVisualization {
       if (isInSolution) return '#7c3aed'; // purple-700
     }
 
-    if (this.state.currentNode && this.state.currentNode.id === node.id) {
-      return '#ca8a04'; // yellow-600
-    }
-
-    if (node.parent === null) return '#16a34a'; // green-600
-
+    // Si es un nodo objetivo (por posición)
     const goalPositions = this.grid.getGoalPositions();
     const isGoal = goalPositions.some(
       goal => goal.row === node.position.row && goal.col === node.position.col
     );
     if (isGoal) return '#dc2626'; // red-600
 
-    const inStack = this.state.stack.some(n => n.id === node.id);
-    if (inStack) return '#475569'; // slate-600
+    // Si es el nodo inicial
+    if (node.parent === null) return '#16a34a'; // green-600
 
+    // Nodo visitado (por defecto)
     return '#2563eb'; // blue-600
   }
 
