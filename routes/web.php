@@ -10,6 +10,7 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/fourier-series', [ToolController::class, 'fourierSeries'])->name('fourier-series');
 Route::get('/fourier-transform', [ToolController::class, 'fourierTransform'])->name('fourier-transform');
 Route::get('/convolution', [ToolController::class, 'convolution'])->name('convolution');
+Route::get('/agent-visualizer', [ToolController::class, 'agentVisualizer'])->name('agent-visualizer');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

@@ -10,6 +10,7 @@ export default defineConfig({
                 'resources/js/fs/app.ts',
                 'resources/js/ft/app.ts',
                 'resources/js/convolution/app.ts',
+                'resources/js/agents/app.ts',
             ],
             refresh: true,
         }),

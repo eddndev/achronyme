@@ -8,12 +8,12 @@ $breadcrumbs = [
 
 <x-tool-layout title="Convolución" :breadcrumbs="$breadcrumbs" icon="conv">
     <x-slot:actions>
-        <x-secondary-button>
+        <x-app-ui.secondary-button>
             Volver
-        </x-secondary-button>
-        <x-primary-button class="ml-3">
+        </x-app-ui.secondary-button>
+        <x-app-ui.button class="ml-3">
             Exportar
-        </x-primary-button>
+        </x-app-ui.button>
     </x-slot>
 
     @include('tools.convolution.convolution-content')
