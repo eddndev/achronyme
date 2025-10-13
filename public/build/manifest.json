@@ -27,12 +27,18 @@
     ]
   },
   "resources/css/app.css": {
-    "file": "assets/app-BveARlGN.css",
+    "file": "assets/app-DHS9cIvm.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "names": [
       "app.css"
     ]
+  },
+  "resources/js/agents/app.ts": {
+    "file": "assets/app-SDFoR0P3.js",
+    "name": "app",
+    "src": "resources/js/agents/app.ts",
+    "isEntry": true
   },
   "resources/js/app.js": {
     "file": "assets/app-DKEQY6dl.js",

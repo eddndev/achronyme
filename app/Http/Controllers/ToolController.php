@@ -30,4 +30,12 @@ class ToolController extends Controller
     {
         return view('tools.convolution.index');
     }
+
+    /**
+     * Display the agent visualizer tool page.
+     */
+    public function agentVisualizer(): View
+    {
+        return view('tools.agents.index');
+    }
 }
