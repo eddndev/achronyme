@@ -20,6 +20,7 @@ interface SearchNode {
  */
 interface DFSState {
   stack: SearchNode[];
+  visited: Set<string>;
   currentNode: SearchNode | null;
   tree: SearchNode | null;
   solutions: Position[][];
@@ -40,8 +41,9 @@ export class DFSVisualization {
   private container: HTMLElement;
   private grid: Grid;
   private state: DFSState;
+  private stateHistory: DFSState[] = []; // Historial de estados
   private mode: ExecutionMode = 'idle';
-  private animationSpeed: number = 1000;
+  private animationSpeed: number = 1000; // ms
   private animationInterval: number | null = null;
   private treeContainer: HTMLElement | null = null;
   private stackContainer: HTMLElement | null = null;
@@ -49,14 +51,18 @@ export class DFSVisualization {
   private g: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
 
   constructor(containerId: string, grid: Grid) {
-    const container = document.getElementById(containerId);
-    if (!container) {
-      throw new Error(`Container with id "${containerId}" not found`);
-    }
-    this.container = container;
+    // El containerId ya no es necesario porque los contenedores están en el DOM de Blade
+    // Pero lo mantenemos por compatibilidad
+    this.container = document.body; // Usamos body como fallback
     this.grid = grid;
     this.state = this.createInitialState();
-    this.render();
+
+    // Esperar a que el DOM esté listo antes de inicializar
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => this.render());
+    } else {
+      this.render();
+    }
   }
 
   /**
@@ -65,6 +71,7 @@ export class DFSVisualization {
   private createInitialState(): DFSState {
     return {
       stack: [],
+      visited: new Set(),
       currentNode: null,
       tree: null,
       solutions: [],
@@ -78,139 +85,17 @@ export class DFSVisualization {
    * Renderiza el componente principal
    */
   render(): void {
-    this.container.innerHTML = `
-      <div class="bg-white rounded-lg shadow-lg p-6 space-y-6">
-        <!-- Título -->
-        <div class="border-b pb-4">
-          <h2 class="text-2xl font-bold text-gray-800">Algoritmo DFS - Búsqueda en Profundidad</h2>
-          <p class="text-sm text-gray-600 mt-1">Visualización paso a paso con búsqueda de múltiples soluciones</p>
-        </div>
-
-        <!-- Estado del algoritmo -->
-        <div id="dfs-status" class="bg-gray-100 p-4 rounded-md border-2 border-gray-300">
-          <div class="text-center text-gray-600">
-            Configura el número de soluciones y presiona "Iniciar DFS"
-          </div>
-        </div>
-
-        <!-- Controles -->
-        <div class="space-y-3">
-          <!-- Número de soluciones -->
-          <div class="flex items-center gap-3 bg-purple-50 p-3 rounded-md border border-purple-200">
-            <label class="text-sm font-medium text-gray-700">Soluciones a buscar:</label>
-            <input type="number" id="max-solutions" min="1" max="10" value="1" class="w-20 px-3 py-1 border border-gray-300 rounded-md" />
-            <span class="text-xs text-gray-500">(-1 para buscar todas)</span>
-          </div>
-
-          <div class="flex gap-2 flex-wrap items-center">
-            <button id="start-dfs" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium">
-              ▶️ Iniciar DFS
-            </button>
-            <button id="step-dfs" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium" disabled>
-              ⏯️ Paso a Paso
-            </button>
-            <button id="play-dfs" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium" disabled>
-              ▶️ Auto
-            </button>
-            <button id="pause-dfs" class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors text-sm font-medium hidden">
-              ⏸️ Pausar
-            </button>
-            <button id="reset-dfs" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium">
-              🔄 Reiniciar
-            </button>
-          </div>
-
-          <!-- Control de velocidad -->
-          <div class="flex items-center gap-3 bg-gray-50 p-3 rounded-md">
-            <label class="text-sm font-medium text-gray-700">Velocidad:</label>
-            <input type="range" id="speed-slider-dfs" min="100" max="2000" value="1000" step="100" class="flex-1" />
-            <span id="speed-value-dfs" class="text-sm font-semibold text-gray-700 min-w-[80px]">1000 ms</span>
-          </div>
-        </div>
-
-        <!-- Visualización de la Pila -->
-        <div class="space-y-2">
-          <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
-            <span class="text-orange-600">📚 Pila (Stack):</span>
-            <span id="stack-count" class="text-sm bg-orange-100 px-2 py-1 rounded">0 nodos</span>
-          </h3>
-          <div id="stack-visualization" class="bg-orange-50 p-4 rounded-md border-2 border-orange-200 min-h-[200px] overflow-y-auto">
-            <div class="text-gray-400 text-center text-sm">La pila está vacía</div>
-          </div>
-        </div>
-
-        <!-- Soluciones Encontradas -->
-        <div class="space-y-2">
-          <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
-            <span class="text-green-600">✅ Soluciones Encontradas:</span>
-            <span id="solutions-count" class="text-sm bg-green-100 px-2 py-1 rounded">0</span>
-          </h3>
-          <div id="solutions-list" class="bg-green-50 p-4 rounded-md border-2 border-green-200 max-h-[200px] overflow-y-auto">
-            <div class="text-gray-400 text-center text-sm">No se han encontrado soluciones</div>
-          </div>
-        </div>
-
-        <!-- Estadísticas -->
-        <div class="grid grid-cols-3 gap-4">
-          <div class="bg-blue-50 p-4 rounded-md border border-blue-200">
-            <div class="text-2xl font-bold text-blue-600" id="visited-count-dfs">0</div>
-            <div class="text-xs text-gray-600">Nodos Visitados</div>
-          </div>
-          <div class="bg-purple-50 p-4 rounded-md border border-purple-200">
-            <div class="text-2xl font-bold text-purple-600" id="tree-depth-dfs">0</div>
-            <div class="text-xs text-gray-600">Profundidad Máxima</div>
-          </div>
-          <div class="bg-green-50 p-4 rounded-md border border-green-200">
-            <div class="text-2xl font-bold text-green-600" id="shortest-path-dfs">-</div>
-            <div class="text-xs text-gray-600">Camino Más Corto</div>
-          </div>
-        </div>
-
-        <!-- Árbol de Búsqueda -->
-        <div class="space-y-2">
-          <h3 class="text-lg font-semibold text-gray-700">🌳 Árbol de Búsqueda DFS</h3>
-          <div id="tree-visualization-dfs" class="border-2 border-gray-300 rounded-lg bg-gray-50 overflow-auto" style="height: 600px;">
-            <div class="flex items-center justify-center h-full text-gray-400">
-              Árbol vacío
-            </div>
-          </div>
-        </div>
-
-        <!-- Leyenda -->
-        <div class="bg-gray-50 p-4 rounded-md">
-          <h3 class="text-sm font-semibold text-gray-700 mb-2">Leyenda:</h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-green-500 border-2 border-green-700"></div>
-              <span>Nodo Inicial</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-red-500 border-2 border-red-700"></div>
-              <span>Nodo Objetivo</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-yellow-400 border-2 border-yellow-600"></div>
-              <span>Nodo Actual</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-blue-400 border-2 border-blue-600"></div>
-              <span>Nodo Visitado</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-orange-300 border-2 border-orange-500"></div>
-              <span>Nodo en Pila</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-5 h-5 rounded-full bg-purple-500 border-2 border-purple-700"></div>
-              <span>Camino Solución</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
+    // Los controles y la estructura HTML están ahora en Blade
+    // Solo necesitamos obtener las referencias a los contenedores
     this.treeContainer = document.getElementById('tree-visualization-dfs');
     this.stackContainer = document.getElementById('stack-visualization');
+
+    // Inicializar el objeto global de Alpine.js para la pila
+    if (typeof window !== 'undefined' && !(window as any).dfsStackData) {
+      (window as any).dfsStackData = (window as any).Alpine?.reactive({ stack: [] }) || { stack: [] };
+    }
+
+    console.log('[DFSVisualization] Initialized');
     this.attachEventListeners();
   }
 
@@ -230,9 +115,15 @@ export class DFSVisualization {
       return;
     }
 
-    // Obtener número de soluciones
-    const maxSolutionsInput = document.getElementById('max-solutions') as HTMLInputElement;
-    const maxSolutions = parseInt(maxSolutionsInput.value);
+    // Leer el número máximo de soluciones del input
+    const maxSolutionsInput = document.getElementById('max-solutions-dfs') as HTMLInputElement;
+    let maxSolutions = 1;
+    if (maxSolutionsInput) {
+      const value = parseInt(maxSolutionsInput.value);
+      if (!isNaN(value)) {
+        maxSolutions = value;
+      }
+    }
 
     // Crear nodo raíz
     const rootNode: SearchNode = {
@@ -245,6 +136,7 @@ export class DFSVisualization {
 
     this.state = {
       stack: [rootNode],
+      visited: new Set([rootNode.id]),
       currentNode: null,
       tree: rootNode,
       solutions: [],
@@ -253,9 +145,14 @@ export class DFSVisualization {
       nodesExplored: 0
     };
 
-    this.updateStatus(`DFS iniciado. Buscando ${maxSolutions === -1 ? 'todas las' : maxSolutions} solución(es).`);
-    this.enableButtons();
+    // Limpiar historial y guardar estado inicial
+    this.stateHistory = [];
+    this.saveStateToHistory();
+
+    this.updateStatus(`DFS iniciado. Buscando ${maxSolutions === -1 ? 'todas las soluciones' : `hasta ${maxSolutions} solución(es)`}...`);
+    this.showPostInitButtons();
     this.updateVisualization();
+    this.updateNavigationButtons();
   }
 
   /**
@@ -285,6 +182,9 @@ export class DFSVisualization {
       this.stopAutoMode();
       return false;
     }
+
+    // Guardar estado antes de ejecutar el paso
+    this.saveStateToHistory();
 
     // Pop (LIFO)
     const current = this.state.stack.pop()!;
@@ -316,11 +216,13 @@ export class DFSVisualization {
         );
         this.stopAutoMode();
         this.updateVisualization();
+        this.updateNavigationButtons();
         return false;
       }
 
       // No explorar más desde este nodo objetivo
       this.updateVisualization();
+      this.updateNavigationButtons();
       return true;
     }
 
@@ -342,11 +244,13 @@ export class DFSVisualization {
 
         current.children.push(neighborNode);
         this.state.stack.push(neighborNode);
+        this.state.visited.add(neighborId);
       }
     }
 
     this.updateStatus(`Explorando nodo (${current.position.row + 1}, ${current.position.col + 1})`);
     this.updateVisualization();
+    this.updateNavigationButtons();
     return true;
   }
 
@@ -413,7 +317,6 @@ export class DFSVisualization {
    */
   private updateVisualization(): void {
     this.updateStackVisualization();
-    this.updateSolutionsVisualization();
     this.updateTreeVisualization();
     this.updateStatistics();
   }
@@ -422,64 +325,29 @@ export class DFSVisualization {
    * Actualiza la visualización de la pila
    */
   private updateStackVisualization(): void {
-    if (!this.stackContainer) return;
+    // Preparar datos de la pila para Alpine.js
+    const stackData = this.state.stack.map(node => ({
+      id: node.id,
+      position: node.position,
+      depth: node.depth
+    }));
 
-    const stackCountEl = document.getElementById('stack-count');
-    if (stackCountEl) {
-      stackCountEl.textContent = `${this.state.stack.length} nodos`;
+    // Inicializar el objeto global si no existe
+    if (typeof window !== 'undefined') {
+      if (!(window as any).dfsStackData) {
+        (window as any).dfsStackData = (window as any).Alpine?.reactive({ stack: [] }) || { stack: [] };
+      }
+
+      // Actualizar el array de la pila
+      (window as any).dfsStackData.stack = stackData;
+
+      // Forzar actualización de Alpine.js si está disponible
+      if ((window as any).Alpine?.nextTick) {
+        (window as any).Alpine.nextTick(() => {
+          console.log('[DFSVisualization] Stack updated:', stackData.length, 'nodes');
+        });
+      }
     }
-
-    if (this.state.stack.length === 0) {
-      this.stackContainer.innerHTML = '<div class="text-gray-400 text-center text-sm">La pila está vacía</div>';
-      return;
-    }
-
-    // Mostrar pila de arriba (último) hacia abajo (primero)
-    const stackHTML = [...this.state.stack].reverse().map((node, index) => `
-      <div class="flex items-center gap-3 py-2 px-3 mb-2 bg-white rounded-md border-2 ${
-        index === 0 ? 'border-orange-500' : 'border-orange-200'
-      }">
-        <div class="w-12 h-12 rounded-full bg-orange-300 border-2 border-orange-500 flex items-center justify-center flex-shrink-0">
-          <span class="font-mono text-xs font-bold">(${node.position.row + 1},${node.position.col + 1})</span>
-        </div>
-        <div class="flex-1">
-          <div class="text-xs text-gray-600">Profundidad: ${node.depth}</div>
-          ${index === 0 ? '<div class="text-xs font-semibold text-orange-600">← Próximo a explorar (TOP)</div>' : ''}
-        </div>
-      </div>
-    `).join('');
-
-    this.stackContainer.innerHTML = stackHTML;
-  }
-
-  /**
-   * Actualiza la visualización de soluciones
-   */
-  private updateSolutionsVisualization(): void {
-    const solutionsListEl = document.getElementById('solutions-list');
-    const solutionsCountEl = document.getElementById('solutions-count');
-
-    if (solutionsCountEl) {
-      solutionsCountEl.textContent = this.state.solutions.length.toString();
-    }
-
-    if (!solutionsListEl) return;
-
-    if (this.state.solutions.length === 0) {
-      solutionsListEl.innerHTML = '<div class="text-gray-400 text-center text-sm">No se han encontrado soluciones</div>';
-      return;
-    }
-
-    const solutionsHTML = this.state.solutions.map((path, index) => `
-      <div class="mb-3 p-3 bg-white rounded-md border border-green-300">
-        <div class="font-semibold text-green-700 mb-1">Solución ${index + 1} - Longitud: ${path.length - 1}</div>
-        <div class="text-xs font-mono text-gray-600">
-          ${path.map(pos => `(${pos.row + 1},${pos.col + 1})`).join(' → ')}
-        </div>
-      </div>
-    `).join('');
-
-    solutionsListEl.innerHTML = solutionsHTML;
   }
 
   /**
@@ -569,12 +437,12 @@ export class DFSVisualization {
    * Obtiene el color de un nodo según su estado
    */
   private getNodeColor(node: SearchNode): string {
-    // Si es parte de alguna solución
-    for (const solution of this.state.solutions) {
-      const isInPath = solution.some(
-        pos => pos.row === node.position.row && pos.col === node.position.col
+    // Si es parte de algún camino solución
+    if (this.state.solutions.length > 0) {
+      const isInSolution = this.state.solutions.some(solution =>
+        solution.some(pos => pos.row === node.position.row && pos.col === node.position.col)
       );
-      if (isInPath) return '#a855f7'; // purple-500
+      if (isInSolution) return '#a855f7'; // purple-500
     }
 
     // Si es el nodo actual
@@ -596,7 +464,7 @@ export class DFSVisualization {
 
     // Si está en la pila
     const inStack = this.state.stack.some(n => n.id === node.id);
-    if (inStack) return '#fdba74'; // orange-300
+    if (inStack) return '#64748b'; // slate-500
 
     // Nodo visitado
     return '#60a5fa'; // blue-400
@@ -606,11 +474,11 @@ export class DFSVisualization {
    * Obtiene el color del borde de un nodo
    */
   private getNodeStroke(node: SearchNode): string {
-    for (const solution of this.state.solutions) {
-      const isInPath = solution.some(
-        pos => pos.row === node.position.row && pos.col === node.position.col
+    if (this.state.solutions.length > 0) {
+      const isInSolution = this.state.solutions.some(solution =>
+        solution.some(pos => pos.row === node.position.row && pos.col === node.position.col)
       );
-      if (isInPath) return '#7c3aed'; // purple-700
+      if (isInSolution) return '#7c3aed'; // purple-700
     }
 
     if (this.state.currentNode && this.state.currentNode.id === node.id) {
@@ -626,7 +494,7 @@ export class DFSVisualization {
     if (isGoal) return '#dc2626'; // red-600
 
     const inStack = this.state.stack.some(n => n.id === node.id);
-    if (inStack) return '#f97316'; // orange-500
+    if (inStack) return '#475569'; // slate-600
 
     return '#2563eb'; // blue-600
   }
@@ -645,26 +513,203 @@ export class DFSVisualization {
       treeDepthEl.textContent = this.state.currentNode.depth.toString();
     }
 
-    const shortestPathEl = document.getElementById('shortest-path-dfs');
-    if (shortestPathEl) {
+    const solutionsCountEl = document.getElementById('solutions-count-dfs');
+    if (solutionsCountEl) {
+      solutionsCountEl.textContent = this.state.solutions.length.toString();
+    }
+
+    const pathLengthEl = document.getElementById('path-length-dfs');
+    if (pathLengthEl) {
       if (this.state.solutions.length > 0) {
         const shortest = Math.min(...this.state.solutions.map(s => s.length - 1));
-        shortestPathEl.textContent = shortest.toString();
+        pathLengthEl.textContent = shortest.toString();
       } else {
-        shortestPathEl.textContent = '-';
+        pathLengthEl.textContent = '-';
       }
     }
   }
 
   /**
-   * Habilita los botones de control
+   * Clona un nodo del árbol de búsqueda de forma recursiva
    */
-  private enableButtons(): void {
-    const stepBtn = document.getElementById('step-dfs') as HTMLButtonElement;
-    const playBtn = document.getElementById('play-dfs') as HTMLButtonElement;
+  private cloneSearchNode(node: SearchNode | null): SearchNode | null {
+    if (!node) return null;
 
-    if (stepBtn) stepBtn.disabled = false;
-    if (playBtn) playBtn.disabled = false;
+    const clonedNode: SearchNode = {
+      id: node.id,
+      position: { ...node.position },
+      parent: null, // Se establecerá después
+      depth: node.depth,
+      children: []
+    };
+
+    // Clonar hijos recursivamente
+    for (const child of node.children) {
+      const clonedChild = this.cloneSearchNode(child);
+      if (clonedChild) {
+        clonedChild.parent = clonedNode;
+        clonedNode.children.push(clonedChild);
+      }
+    }
+
+    return clonedNode;
+  }
+
+  /**
+   * Encuentra un nodo en el árbol clonado por su ID
+   */
+  private findNodeInTree(tree: SearchNode | null, nodeId: string): SearchNode | null {
+    if (!tree) return null;
+    if (tree.id === nodeId) return tree;
+
+    for (const child of tree.children) {
+      const found = this.findNodeInTree(child, nodeId);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+  /**
+   * Guarda el estado actual en el historial
+   */
+  private saveStateToHistory(): void {
+    // Clonar el árbol
+    const clonedTree = this.cloneSearchNode(this.state.tree);
+
+    // Clonar la pila
+    const clonedStack: SearchNode[] = [];
+    for (const stackNode of this.state.stack) {
+      // Buscar el nodo correspondiente en el árbol clonado
+      const nodeInClonedTree = this.findNodeInTree(clonedTree, stackNode.id);
+      if (nodeInClonedTree) {
+        clonedStack.push(nodeInClonedTree);
+      }
+    }
+
+    // Clonar el nodo actual
+    let clonedCurrentNode: SearchNode | null = null;
+    if (this.state.currentNode) {
+      clonedCurrentNode = this.findNodeInTree(clonedTree, this.state.currentNode.id);
+    }
+
+    // Clonar las soluciones
+    const clonedSolutions: Position[][] = this.state.solutions.map(solution =>
+      solution.map(pos => ({ ...pos }))
+    );
+
+    // Guardar estado clonado
+    const clonedState: DFSState = {
+      stack: clonedStack,
+      visited: new Set(this.state.visited),
+      currentNode: clonedCurrentNode,
+      tree: clonedTree,
+      solutions: clonedSolutions,
+      finished: this.state.finished,
+      maxSolutions: this.state.maxSolutions,
+      nodesExplored: this.state.nodesExplored
+    };
+
+    this.stateHistory.push(clonedState);
+
+    // Limitar el historial a 100 estados para evitar problemas de memoria
+    if (this.stateHistory.length > 100) {
+      this.stateHistory.shift();
+    }
+  }
+
+  /**
+   * Retrocede al estado anterior
+   */
+  private previousStep(): void {
+    if (this.stateHistory.length <= 1) {
+      console.log('[DFSVisualization] No hay paso anterior disponible');
+      return;
+    }
+
+    // Eliminar el estado actual
+    this.stateHistory.pop();
+
+    // Obtener el estado anterior
+    const previousState = this.stateHistory[this.stateHistory.length - 1];
+
+    // Restaurar el estado
+    this.state = {
+      stack: [...previousState.stack],
+      visited: new Set(previousState.visited),
+      currentNode: previousState.currentNode,
+      tree: previousState.tree,
+      solutions: previousState.solutions.map(solution => [...solution]),
+      finished: previousState.finished,
+      maxSolutions: previousState.maxSolutions,
+      nodesExplored: previousState.nodesExplored
+    };
+
+    // Actualizar mensaje de estado
+    if (this.state.currentNode) {
+      this.updateStatus(`Explorando nodo (${this.state.currentNode.position.row + 1}, ${this.state.currentNode.position.col + 1})`);
+    } else {
+      this.updateStatus('DFS iniciado. Explorando...');
+    }
+
+    // Actualizar visualizaciones
+    this.updateVisualization();
+    this.updateNavigationButtons();
+  }
+
+  /**
+   * Actualiza el estado de los botones de navegación
+   */
+  private updateNavigationButtons(): void {
+    const prevBtn = document.getElementById('prev-step-dfs') as HTMLButtonElement;
+
+    if (prevBtn) {
+      // Deshabilitar si estamos en el estado inicial
+      if (this.stateHistory.length <= 1) {
+        prevBtn.disabled = true;
+        prevBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        prevBtn.disabled = false;
+        prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+  }
+
+  /**
+   * Muestra los botones correspondientes después de inicializar
+   */
+  private showPostInitButtons(): void {
+    // Ocultar botones de iniciar
+    const startStepBtn = document.getElementById('start-dfs-step');
+    const startAutoBtn = document.getElementById('start-dfs-auto');
+    if (startStepBtn) startStepBtn.classList.add('hidden');
+    if (startAutoBtn) startAutoBtn.classList.add('hidden');
+
+    // Obtener el modo actual del radio button
+    const executionModeRadios = document.getElementsByName('execution_mode_dfs') as NodeListOf<HTMLInputElement>;
+    let currentMode: 'step' | 'auto' = 'step';
+
+    for (const radio of executionModeRadios) {
+      if (radio.checked) {
+        currentMode = radio.value as 'step' | 'auto';
+        break;
+      }
+    }
+
+    if (currentMode === 'step') {
+      // Mostrar grupo de botones de control para modo paso a paso
+      const stepControlButtons = document.getElementById('step-control-buttons-dfs');
+      if (stepControlButtons) stepControlButtons.classList.remove('hidden');
+    } else {
+      // Mostrar grupo de botones de control y velocidad para modo automático
+      const autoControlButtons = document.getElementById('auto-control-buttons-dfs');
+      const speedControl = document.getElementById('speed-control-dfs');
+      if (autoControlButtons) autoControlButtons.classList.remove('hidden');
+      if (speedControl) speedControl.classList.remove('hidden');
+
+      // Iniciar modo automático
+      this.startAutoMode();
+    }
   }
 
   /**
@@ -673,11 +718,11 @@ export class DFSVisualization {
   private startAutoMode(): void {
     this.mode = 'auto';
 
-    const playBtn = document.getElementById('play-dfs');
-    const pauseBtn = document.getElementById('pause-dfs');
+    const pauseBtn = document.getElementById('pause-dfs-auto');
+    const resumeBtn = document.getElementById('resume-dfs-auto');
 
-    if (playBtn) playBtn.classList.add('hidden');
     if (pauseBtn) pauseBtn.classList.remove('hidden');
+    if (resumeBtn) resumeBtn.classList.add('hidden');
 
     this.animationInterval = window.setInterval(() => {
       const shouldContinue = this.stepDFS();
@@ -688,21 +733,63 @@ export class DFSVisualization {
   }
 
   /**
-   * Detiene el modo automático
+   * Pausa el modo automático
    */
-  private stopAutoMode(): void {
-    this.mode = 'step';
-
+  private pauseAutoMode(): void {
     if (this.animationInterval !== null) {
       clearInterval(this.animationInterval);
       this.animationInterval = null;
     }
 
-    const playBtn = document.getElementById('play-dfs');
-    const pauseBtn = document.getElementById('pause-dfs');
+    const pauseBtn = document.getElementById('pause-dfs-auto');
+    const resumeBtn = document.getElementById('resume-dfs-auto');
 
-    if (playBtn) playBtn.classList.remove('hidden');
     if (pauseBtn) pauseBtn.classList.add('hidden');
+    if (resumeBtn) resumeBtn.classList.remove('hidden');
+  }
+
+  /**
+   * Reanuda el modo automático
+   */
+  private resumeAutoMode(): void {
+    this.startAutoMode();
+  }
+
+  /**
+   * Detiene el modo automático completamente
+   */
+  private stopAutoMode(): void {
+    if (this.animationInterval !== null) {
+      clearInterval(this.animationInterval);
+      this.animationInterval = null;
+    }
+
+    const pauseBtn = document.getElementById('pause-dfs-auto');
+    const resumeBtn = document.getElementById('resume-dfs-auto');
+
+    if (pauseBtn) pauseBtn.classList.add('hidden');
+    if (resumeBtn) resumeBtn.classList.add('hidden');
+  }
+
+  /**
+   * Maneja el cambio de modo de ejecución
+   */
+  private handleExecutionModeChange(mode: 'step' | 'auto'): void {
+    const stepModeButtons = document.getElementById('step-mode-buttons-dfs');
+    const autoModeButtons = document.getElementById('auto-mode-buttons-dfs');
+
+    if (mode === 'step') {
+      // Mostrar botones de modo paso a paso
+      if (stepModeButtons) stepModeButtons.classList.remove('hidden');
+      if (autoModeButtons) autoModeButtons.classList.add('hidden');
+
+      // Detener modo automático si está corriendo
+      this.stopAutoMode();
+    } else {
+      // Mostrar botones de modo automático
+      if (stepModeButtons) stepModeButtons.classList.add('hidden');
+      if (autoModeButtons) autoModeButtons.classList.remove('hidden');
+    }
   }
 
   /**
@@ -711,41 +798,99 @@ export class DFSVisualization {
   private reset(): void {
     this.stopAutoMode();
     this.state = this.createInitialState();
-    this.render();
+    this.stateHistory = []; // Limpiar historial
+
+    // Restablecer el mensaje de estado
+    this.updateStatus('Presiona "Iniciar DFS" para comenzar la búsqueda');
+
+    // Limpiar la pila usando Alpine.js
+    if (typeof window !== 'undefined' && (window as any).dfsStackData) {
+      (window as any).dfsStackData.stack = [];
+    }
+
+    // Limpiar visualización del árbol
+    if (this.treeContainer) {
+      this.treeContainer.innerHTML = '<div class="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none">Árbol vacío</div>';
+    }
+
+    // Restablecer estadísticas
+    const visitedCountEl = document.getElementById('visited-count-dfs');
+    const treeDepthEl = document.getElementById('tree-depth-dfs');
+    const solutionsCountEl = document.getElementById('solutions-count-dfs');
+    const pathLengthEl = document.getElementById('path-length-dfs');
+    if (visitedCountEl) visitedCountEl.textContent = '0';
+    if (treeDepthEl) treeDepthEl.textContent = '0';
+    if (solutionsCountEl) solutionsCountEl.textContent = '0';
+    if (pathLengthEl) pathLengthEl.textContent = '-';
+
+    // Ocultar todos los grupos de botones post-init y mostrar botones de inicio
+    const startStepBtn = document.getElementById('start-dfs-step');
+    const startAutoBtn = document.getElementById('start-dfs-auto');
+    const stepControlButtons = document.getElementById('step-control-buttons-dfs');
+    const autoControlButtons = document.getElementById('auto-control-buttons-dfs');
+    const speedControl = document.getElementById('speed-control-dfs');
+
+    if (startStepBtn) startStepBtn.classList.remove('hidden');
+    if (startAutoBtn) startAutoBtn.classList.remove('hidden');
+    if (stepControlButtons) stepControlButtons.classList.add('hidden');
+    if (autoControlButtons) autoControlButtons.classList.add('hidden');
+    if (speedControl) speedControl.classList.add('hidden');
   }
 
   /**
    * Adjunta event listeners
    */
   private attachEventListeners(): void {
-    const startBtn = document.getElementById('start-dfs');
-    startBtn?.addEventListener('click', () => this.initializeDFS());
+    // Botones de inicio para cada modo
+    const startStepBtn = document.getElementById('start-dfs-step');
+    const startAutoBtn = document.getElementById('start-dfs-auto');
+    startStepBtn?.addEventListener('click', () => this.initializeDFS());
+    startAutoBtn?.addEventListener('click', () => this.initializeDFS());
 
-    const stepBtn = document.getElementById('step-dfs');
-    stepBtn?.addEventListener('click', () => this.stepDFS());
+    // Botones de navegación (modo paso a paso)
+    const nextStepBtn = document.getElementById('next-step-dfs');
+    const prevStepBtn = document.getElementById('prev-step-dfs');
+    nextStepBtn?.addEventListener('click', () => this.stepDFS());
+    prevStepBtn?.addEventListener('click', () => this.previousStep());
 
-    const playBtn = document.getElementById('play-dfs');
-    playBtn?.addEventListener('click', () => this.startAutoMode());
+    // Botones de control modo automático
+    const pauseAutoBtn = document.getElementById('pause-dfs-auto');
+    const resumeAutoBtn = document.getElementById('resume-dfs-auto');
+    pauseAutoBtn?.addEventListener('click', () => this.pauseAutoMode());
+    resumeAutoBtn?.addEventListener('click', () => this.resumeAutoMode());
 
-    const pauseBtn = document.getElementById('pause-dfs');
-    pauseBtn?.addEventListener('click', () => this.stopAutoMode());
+    // Botones de reinicio para cada modo
+    const resetStepBtn = document.getElementById('reset-dfs-step');
+    const resetAutoBtn = document.getElementById('reset-dfs-auto');
+    resetStepBtn?.addEventListener('click', () => this.reset());
+    resetAutoBtn?.addEventListener('click', () => this.reset());
 
-    const resetBtn = document.getElementById('reset-dfs');
-    resetBtn?.addEventListener('click', () => this.reset());
+    // Event listener para el radio button de modo de ejecución
+    const executionModeRadios = document.getElementsByName('execution_mode_dfs');
+    executionModeRadios.forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.checked) {
+          this.handleExecutionModeChange(target.value as 'step' | 'auto');
+        }
+      });
+    });
 
+    // Control de velocidad
     const speedSlider = document.getElementById('speed-slider-dfs') as HTMLInputElement;
     const speedValue = document.getElementById('speed-value-dfs');
 
     speedSlider?.addEventListener('input', (e) => {
       const value = parseInt((e.target as HTMLInputElement).value);
-      this.animationSpeed = 2100 - value;
+      this.animationSpeed = 2100 - value; // Invertir para que más alto = más rápido
       if (speedValue) {
         speedValue.textContent = `${this.animationSpeed} ms`;
       }
 
-      if (this.mode === 'auto') {
-        this.stopAutoMode();
-        this.startAutoMode();
+      // Si está en modo auto, reiniciar con nueva velocidad
+      if (this.mode === 'auto' && this.animationInterval !== null) {
+        this.pauseAutoMode();
+        this.resumeAutoMode();
       }
     });
   }

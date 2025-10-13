@@ -1,6 +1,6 @@
 <x-three-column-tool>
     <x-slot:leftSidebar>
-        <div class="space-y-6">
+        <div class="space-y-6" x-data="{ isLoading: false }">
             {{-- Información del Algoritmo --}}
             <div>
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Algoritmo BFS</h3>
@@ -116,10 +116,15 @@
 
     {{-- Centro: Visualización BFS --}}
     <div class="space-y-6">
-        {{-- Estado del Algoritmo --}}
-        <div id="bfs-status" class="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg border-2 border-slate-300 dark:border-slate-600">
-            <div class="text-center text-slate-600 dark:text-slate-400">
-                Presiona "Iniciar BFS" para comenzar la búsqueda
+        {{-- Árbol de Búsqueda --}}
+        <div class="space-y-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Árbol de Búsqueda BFS</h3>
+            <div class="relative border-2 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 w-full h-[600px]">
+                <div id="tree-visualization" class="w-full h-full overflow-auto">
+                    <div class="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none">
+                        Árbol vacío
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -131,18 +136,6 @@
             </h3>
             <div id="queue-visualization" class="bg-purple-blue-50 dark:bg-purple-blue-950/20 p-4 rounded-lg border-2 border-purple-blue-200 dark:border-purple-blue-800 min-h-[100px] overflow-x-auto">
                 <div class="text-slate-400 dark:text-slate-500 text-center text-sm">La cola está vacía</div>
-            </div>
-        </div>
-
-        {{-- Árbol de Búsqueda --}}
-        <div class="space-y-2">
-            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Árbol de Búsqueda BFS</h3>
-            <div class="relative border-2 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 w-full h-[600px]">
-                <div id="tree-visualization" class="w-full h-full overflow-auto">
-                    <div class="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none">
-                        Árbol vacío
-                    </div>
-                </div>
             </div>
         </div>
     </div>
