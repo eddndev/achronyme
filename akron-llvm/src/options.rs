@@ -1,3 +1,4 @@
+#[cfg(any(feature = "llvm", feature = "aot", test))]
 use akron::compiled::{
     RuntimeCapabilities, RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_V4_SIZE,
     RUNTIME_ABI_V5_SIZE,
@@ -19,6 +20,7 @@ impl LlvmTierOptions {
         }
     }
 
+    #[cfg(any(feature = "llvm", feature = "aot", test))]
     pub(crate) const fn runtime_requirement(self) -> RuntimeRequirement {
         let mut bits = RuntimeCapabilities::LLVM_TIER1.bits();
         if self.fast_poll {
@@ -58,6 +60,7 @@ impl Default for LlvmTierOptions {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(any(feature = "llvm", feature = "aot", test))]
 pub(crate) struct RuntimeRequirement {
     pub version: u32,
     pub size: u32,
