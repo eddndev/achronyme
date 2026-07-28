@@ -12,6 +12,7 @@ pub(super) enum ValueKind {
     Bool,
     Nil,
     Scalar,
+    Prototype(u32),
 }
 
 pub(super) fn transition(
@@ -20,6 +21,7 @@ pub(super) fn transition(
     instruction: u32,
     opcode: OpCode,
     state: &mut [ValueKind],
+    self_prototype: Option<u32>,
 ) -> Result<(InstructionMode, Vec<usize>), LoweringError> {
     let mut successors = Vec::with_capacity(2);
     let mode = match opcode {
@@ -113,7 +115,8 @@ pub(super) fn transition(
             return Ok((InstructionMode::Direct, successors));
         }
         OpCode::Closure => {
-            state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
+            state[register(state, decode_a(instruction), ip)?] =
+                ValueKind::Prototype(u32::from(decode_bx(instruction)));
             InstructionMode::Runtime
         }
         OpCode::GetGlobal => {
@@ -181,14 +184,19 @@ pub(super) fn transition(
             InstructionMode::Runtime
         }
         OpCode::Call => {
+            let callee = initialized(state, decode_b(instruction), ip)?;
             initialized_range(
                 state,
                 decode_b(instruction) as usize,
                 decode_c(instruction) as usize + 1,
                 ip,
             )?;
+            let expected_prototype = match state[callee] {
+                ValueKind::Prototype(prototype) => Some(prototype),
+                _ => self_prototype,
+            };
             state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
-            InstructionMode::Call
+            InstructionMode::Call(expected_prototype)
         }
         OpCode::Nop => InstructionMode::Direct,
         _ => {

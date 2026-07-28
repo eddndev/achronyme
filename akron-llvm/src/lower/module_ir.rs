@@ -4,7 +4,7 @@ pub(super) fn module_header(output: &mut String) {
     writeln!(output, "; Generated from canonical Akron bytecode.").unwrap();
     writeln!(
         output,
-        "%RuntimeApi = type {{ [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }}"
+        "%RuntimeApi = type {{ [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }}"
     )
     .unwrap();
     writeln!(

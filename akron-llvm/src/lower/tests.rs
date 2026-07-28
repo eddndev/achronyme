@@ -165,6 +165,7 @@ fn whole_program_functions_and_calls_are_lowered() {
     assert_eq!(module.runtime_instruction_count, 1);
     assert_eq!(module.compiled_call_count, 1);
     assert!(module.ir.contains("define i32 @akron_compiled_fn_0"));
+    assert!(module.ir.contains("call i32 %prepare_known_call_fn"));
     assert!(module.ir.contains("call i32 %prepare_call_fn"));
     assert!(module.ir.contains("call i32 @akron_compiled_fn_0"));
 }

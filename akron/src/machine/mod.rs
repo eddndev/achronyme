@@ -7,6 +7,7 @@ mod arithmetic;
 pub mod circom;
 mod closure;
 mod comparison;
+mod compiled_call;
 mod control;
 mod data;
 mod frame;

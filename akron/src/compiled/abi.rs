@@ -3,13 +3,13 @@ use std::fmt;
 use std::mem::size_of;
 use std::ops::{BitOr, BitOrAssign};
 
-use super::calls::{execute_instruction, finish_call, prepare_call};
+use super::calls::{execute_instruction, finish_call, prepare_call, prepare_known_call};
 use super::context::{
     execution_window, interpreter_bailout, load_register, poll, poll_block, poll_fast_block,
     poll_tier1_block, raise_error, refund_block, register_window, store_register,
 };
 
-pub const RUNTIME_ABI_VERSION: u32 = 3;
+pub const RUNTIME_ABI_VERSION: u32 = 4;
 pub type RuntimeStatus = u32;
 pub type CompiledEntry =
     unsafe extern "C" fn(*const RuntimeApi, *mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
@@ -23,6 +23,7 @@ pub const STATUS_NATIVE_CALL_COMPLETE: RuntimeStatus = 5;
 pub const STATUS_INTERPRETER_COMPLETED: RuntimeStatus = 6;
 pub const STATUS_CALL_INTERPRETER_REQUIRED: RuntimeStatus = 7;
 pub const STATUS_SLOW_PATH_REQUIRED: RuntimeStatus = 8;
+pub const STATUS_KNOWN_CALL_MISS: RuntimeStatus = 9;
 
 pub const ERROR_INVALID_OPERAND: u32 = 1;
 pub const ERROR_DIVISION_BY_ZERO: u32 = 2;
@@ -45,6 +46,8 @@ pub type RefundBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> Run
 pub type ExecuteInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
 pub type PrepareCallFn =
     unsafe extern "C" fn(*mut c_void, u32, u32, *mut u32, *mut u32, *mut u32) -> RuntimeStatus;
+pub type PrepareKnownCallFn =
+    unsafe extern "C" fn(*mut c_void, u32, u32, u32, *mut u32, *mut u32) -> RuntimeStatus;
 pub type FinishCallFn = unsafe extern "C" fn(*mut c_void, u32, u64) -> RuntimeStatus;
 pub type ExecutionWindowFn = unsafe extern "C" fn(
     *mut c_void,
@@ -72,6 +75,7 @@ impl RuntimeCapabilities {
     pub const EXECUTION_STATS: Self = Self(1 << 9);
     pub const GLOBAL_WINDOW: Self = Self(1 << 10);
     pub const FAST_POLL: Self = Self(1 << 11);
+    pub const KNOWN_CALLS: Self = Self(1 << 12);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
@@ -84,7 +88,7 @@ impl RuntimeCapabilities {
             | Self::EXECUTION_STATS.0
             | Self::GLOBAL_WINDOW.0,
     );
-    pub const LLVM_TIER2: Self = Self(Self::LLVM_TIER1.0 | Self::FAST_POLL.0);
+    pub const LLVM_TIER2: Self = Self(Self::LLVM_TIER1.0 | Self::FAST_POLL.0 | Self::KNOWN_CALLS.0);
 
     pub const fn empty() -> Self {
         Self(0)
@@ -135,6 +139,7 @@ pub struct RuntimeApi {
     pub poll_tier1_block: PollTier1BlockFn,
     pub execution_window: ExecutionWindowFn,
     pub poll_fast_block: PollFastBlockFn,
+    pub prepare_known_call: PrepareKnownCallFn,
 }
 
 #[repr(C)]
@@ -174,6 +179,30 @@ struct RuntimeApiV2 {
 }
 
 pub const RUNTIME_ABI_V2_SIZE: u32 = size_of::<RuntimeApiV2>() as u32;
+
+#[repr(C)]
+struct RuntimeApiV3 {
+    magic: [u8; 8],
+    abi_version: u32,
+    struct_size: u32,
+    capabilities: RuntimeCapabilities,
+    load_register: LoadRegisterFn,
+    store_register: StoreRegisterFn,
+    poll: PollFn,
+    raise_error: RaiseErrorFn,
+    interpreter_bailout: InterpreterBailoutFn,
+    register_window: RegisterWindowFn,
+    poll_block: PollBlockFn,
+    refund_block: RefundBlockFn,
+    execute_instruction: ExecuteInstructionFn,
+    prepare_call: PrepareCallFn,
+    finish_call: FinishCallFn,
+    poll_tier1_block: PollTier1BlockFn,
+    execution_window: ExecutionWindowFn,
+    poll_fast_block: PollFastBlockFn,
+}
+
+pub const RUNTIME_ABI_V3_SIZE: u32 = size_of::<RuntimeApiV3>() as u32;
 
 impl RuntimeApi {
     pub fn validate(
@@ -226,6 +255,7 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     poll_tier1_block,
     execution_window,
     poll_fast_block,
+    prepare_known_call,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

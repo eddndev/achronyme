@@ -72,9 +72,9 @@ fn emit_function(
                 emitter.runtime_instruction(ip);
                 continue;
             }
-            InstructionMode::Call => {
+            InstructionMode::Call(expected_prototype) => {
                 emitter.begin_instruction(ip, false);
-                emitter.call_instruction(ip);
+                emitter.call_instruction(ip, instruction, expected_prototype);
                 continue;
             }
             InstructionMode::Direct => {}
@@ -208,6 +208,7 @@ impl<'output> Emitter<'output> {
             (15, "poll_tier1_block"),
             (16, "execution_window"),
             (17, "poll_fast_block"),
+            (18, "prepare_known_call"),
         ] {
             self.load_api_function(field, name);
         }

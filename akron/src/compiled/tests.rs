@@ -7,8 +7,8 @@ use crate::{RuntimeError, VM};
 
 use super::{
     runtime_api, RuntimeCapabilities, RuntimeContext, ERROR_DIVISION_BY_ZERO, RUNTIME_ABI_V1_SIZE,
-    RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_VERSION, STATUS_INVALID_ARGUMENT, STATUS_OK,
-    STATUS_RUNTIME_ERROR,
+    RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_VERSION, STATUS_INVALID_ARGUMENT,
+    STATUS_OK, STATUS_RUNTIME_ERROR,
 };
 use crate::opcode::instruction::{encode_abc, encode_abx};
 use crate::{CompiledProgram, OpCode};
@@ -24,7 +24,7 @@ mod runtime_calls;
 fn runtime_api_header_is_self_describing() {
     let api = runtime_api();
     assert_eq!(api.magic, *b"AKRTABI\0");
-    assert_eq!(api.abi_version, 3);
+    assert_eq!(api.abi_version, 4);
     assert_eq!(api.abi_version, RUNTIME_ABI_VERSION);
     assert_eq!(api.struct_size as usize, size_of::<super::RuntimeApi>());
     assert!(api.capabilities.contains(RuntimeCapabilities::CORE));
@@ -65,6 +65,24 @@ fn runtime_api_header_is_self_describing() {
         .validate(2, RUNTIME_ABI_V2_SIZE, RuntimeCapabilities::LLVM_TIER1)
         .is_ok());
     assert!(tier1_only
+        .validate(
+            RUNTIME_ABI_VERSION,
+            size_of::<super::RuntimeApi>() as u32,
+            RuntimeCapabilities::LLVM_TIER2,
+        )
+        .is_err());
+    let mut fast_poll_only = *api;
+    fast_poll_only.abi_version = 3;
+    fast_poll_only.struct_size = RUNTIME_ABI_V3_SIZE;
+    fast_poll_only.capabilities = RuntimeCapabilities::LLVM_TIER1 | RuntimeCapabilities::FAST_POLL;
+    assert!(fast_poll_only
+        .validate(
+            3,
+            RUNTIME_ABI_V3_SIZE,
+            RuntimeCapabilities::LLVM_TIER1 | RuntimeCapabilities::FAST_POLL,
+        )
+        .is_ok());
+    assert!(fast_poll_only
         .validate(
             RUNTIME_ABI_VERSION,
             size_of::<super::RuntimeApi>() as u32,

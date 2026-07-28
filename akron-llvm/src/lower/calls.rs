@@ -1,8 +1,8 @@
 use super::emit::Emitter;
-
 const STATUS_NATIVE_CALL_COMPLETE: u32 = 5;
 const STATUS_INTERPRETER_COMPLETED: u32 = 6;
 const STATUS_CALL_INTERPRETER_REQUIRED: u32 = 7;
+const STATUS_KNOWN_CALL_MISS: u32 = 9;
 
 impl Emitter<'_> {
     pub(super) fn runtime_instruction(&mut self, ip: usize) {
@@ -23,8 +23,39 @@ impl Emitter<'_> {
         self.next(ip);
     }
 
-    pub(super) fn call_instruction(&mut self, ip: usize) {
+    pub(super) fn call_instruction(
+        &mut self,
+        ip: usize,
+        instruction: u32,
+        expected_prototype: Option<u32>,
+    ) {
         self.spill(&format!("call.{ip}"));
+        if let Some(prototype) = expected_prototype {
+            self.line(&format!(
+                "  %call.known.status.{ip} = call i32 %prepare_known_call_fn(ptr %context, i32 %frame_index, i32 {instruction}, i32 {prototype}, ptr %call.frame.out, ptr %call.base.out)",
+            ));
+            self.line(&format!(
+                "  %call.known.prepared.{ip} = icmp eq i32 %call.known.status.{ip}, 0"
+            ));
+            self.line(&format!(
+                "  br i1 %call.known.prepared.{ip}, label %call.known.dispatch.{ip}, label %call.known.not_prepared.{ip}"
+            ));
+            self.line(&format!("call.known.dispatch.{ip}:"));
+            self.line(&format!(
+                "  store i32 {prototype}, ptr %call.prototype.out, align 4"
+            ));
+            self.line(&format!("  br label %call.dispatch.{ip}"));
+            self.line(&format!("call.known.not_prepared.{ip}:"));
+            self.line(&format!(
+                "  %call.known.miss.{ip} = icmp eq i32 %call.known.status.{ip}, {STATUS_KNOWN_CALL_MISS}"
+            ));
+            self.line(&format!(
+                "  br i1 %call.known.miss.{ip}, label %call.prepare.{ip}, label %call.known.error.{ip}"
+            ));
+            self.line(&format!("call.known.error.{ip}:"));
+            self.line(&format!("  ret i32 %call.known.status.{ip}"));
+            self.line(&format!("call.prepare.{ip}:"));
+        }
         self.line(&format!(
             "  %call.prepare.status.{ip} = call i32 %prepare_call_fn(ptr %context, i32 %frame_index, i32 {ip}, ptr %call.frame.out, ptr %call.base.out, ptr %call.prototype.out)"
         ));

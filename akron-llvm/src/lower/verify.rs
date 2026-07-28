@@ -13,7 +13,7 @@ mod instruction;
 pub(super) enum InstructionMode {
     Direct,
     Runtime,
-    Call,
+    Call(Option<u32>),
     Bailout,
 }
 
@@ -68,7 +68,7 @@ impl Verification {
 
     pub(super) fn call_count(&self) -> usize {
         self.all_modes()
-            .filter(|mode| **mode == InstructionMode::Call)
+            .filter(|mode| matches!(mode, InstructionMode::Call(_)))
             .count()
     }
 
@@ -82,11 +82,14 @@ impl Verification {
 }
 
 pub(super) fn verify(program: &CompiledProgram) -> Result<Verification, LoweringError> {
-    let main = verify_function(&program.main, 0)?;
+    let main = verify_function(&program.main, 0, None)?;
     let functions = program
         .functions
         .iter()
-        .map(|function| verify_function(function, function.arity as usize))
+        .enumerate()
+        .map(|(index, function)| {
+            verify_function(function, function.arity as usize, Some(index as u32))
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Verification { main, functions })
 }
@@ -94,6 +97,7 @@ pub(super) fn verify(program: &CompiledProgram) -> Result<Verification, Lowering
 fn verify_function(
     function: &Function,
     parameter_count: usize,
+    self_prototype: Option<u32>,
 ) -> Result<FunctionVerification, LoweringError> {
     let chunk = &function.chunk;
     let mut verification = FunctionVerification {
@@ -119,7 +123,14 @@ fn verify_function(
         let opcode = OpCode::from_u8(decode_opcode(instruction)).ok_or_else(|| {
             LoweringError::unsupported(ip, "unknown opcode after program validation")
         })?;
-        let transition = transition(function, ip, instruction, opcode, &mut state);
+        let transition = transition(
+            function,
+            ip,
+            instruction,
+            opcode,
+            &mut state,
+            self_prototype,
+        );
         let (mode, successors) = match transition {
             Ok(result) => result,
             Err(LoweringError::Unsupported { .. }) => continue,

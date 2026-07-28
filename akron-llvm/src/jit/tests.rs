@@ -282,7 +282,7 @@ fn orc_jit_executes_recursive_compiled_functions() {
     assert_eq!(result.value.as_int(), Some(55));
     assert_eq!(result.outcome, ExecutionOutcome::Native);
     assert!(result.stats.compiled_function_calls > 0);
-    assert_eq!(result.stats.known_call_fast_hits, 0);
+    assert!(result.stats.known_call_fast_hits > 0);
     assert_eq!(result.stats.known_call_fast_misses, 0);
     assert_eq!(result.stats.interpreter_fallbacks, 0);
     assert!(vm.frames.is_empty());

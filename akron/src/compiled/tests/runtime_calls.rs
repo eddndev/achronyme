@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use memory::field::PrimeId;
 use memory::{Function, Value};
 
-use crate::compiled::{runtime_api, RuntimeContext, STATUS_NATIVE_CALL_COMPLETE, STATUS_OK};
+use crate::compiled::{
+    runtime_api, RuntimeContext, STATUS_KNOWN_CALL_MISS, STATUS_NATIVE_CALL_COMPLETE, STATUS_OK,
+    STATUS_RUNTIME_ERROR,
+};
 use crate::opcode::instruction::{encode_abc, encode_abx};
-use crate::{CompiledProgram, OpCode, VM};
+use crate::{CompiledProgram, OpCode, MAX_FRAMES, VM};
 
 fn function_program(main: Function, functions: Vec<Function>) -> CompiledProgram {
     CompiledProgram::new(
@@ -142,6 +145,186 @@ fn call_helpers_materialize_and_finish_a_vm_frame() {
 
     assert_eq!(vm.frames.len(), 1);
     assert_eq!(vm.stack[2].as_int(), Some(42));
+}
+
+#[test]
+fn known_call_helper_is_guarded_and_does_not_mutate_on_a_miss() {
+    let main = Function {
+        constants: vec![Value::int(41)],
+        ..function(
+            "main",
+            0,
+            3,
+            vec![
+                encode_abx(OpCode::Closure.as_u8(), 0, 0),
+                encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+                encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
+                encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+            ],
+        )
+    };
+    let prototype = function(
+        "increment",
+        1,
+        2,
+        vec![encode_abc(OpCode::Return.as_u8(), 0, 1, 0)],
+    );
+    let other_prototype = function(
+        "other",
+        1,
+        1,
+        vec![encode_abc(OpCode::Return.as_u8(), 0, 1, 0)],
+    );
+    let mut vm = VM::new();
+    vm.load_program(function_program(main, vec![prototype, other_prototype]))
+        .unwrap();
+
+    let stats;
+    let mut frame_index = u32::MAX;
+    let mut base = u32::MAX;
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        assert_eq!(
+            unsafe { (runtime_api().execute_instruction)(opaque, 0, 0) },
+            STATUS_OK
+        );
+        assert_eq!(
+            unsafe { (runtime_api().execute_instruction)(opaque, 0, 1) },
+            STATUS_OK
+        );
+
+        assert_eq!(
+            unsafe {
+                (runtime_api().prepare_known_call)(
+                    opaque,
+                    0,
+                    encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
+                    1,
+                    &mut frame_index,
+                    &mut base,
+                )
+            },
+            STATUS_KNOWN_CALL_MISS
+        );
+        assert_eq!((frame_index, base), (u32::MAX, u32::MAX));
+        assert_eq!(
+            unsafe {
+                (runtime_api().prepare_known_call)(
+                    opaque,
+                    0,
+                    encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
+                    0,
+                    &mut frame_index,
+                    &mut base,
+                )
+            },
+            STATUS_OK
+        );
+        stats = context.stats();
+        context.finish(STATUS_OK).unwrap();
+    }
+
+    assert_eq!((frame_index, base), (1, 1));
+    assert_eq!(vm.frames.len(), 2);
+    assert_eq!(stats.known_call_fast_hits, 1);
+    assert_eq!(stats.known_call_fast_misses, 1);
+}
+
+#[test]
+fn known_call_helper_preserves_arity_errors() {
+    let main = function(
+        "main",
+        0,
+        1,
+        vec![encode_abx(OpCode::Closure.as_u8(), 0, 0)],
+    );
+    let prototype = function(
+        "one_argument",
+        1,
+        1,
+        vec![encode_abc(OpCode::Return.as_u8(), 0, 1, 0)],
+    );
+    let mut vm = VM::new();
+    vm.load_program(function_program(main, vec![prototype]))
+        .unwrap();
+
+    let error = {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        assert_eq!(
+            unsafe { (runtime_api().execute_instruction)(opaque, 0, 0) },
+            STATUS_OK
+        );
+        let mut frame_index = u32::MAX;
+        let mut base = u32::MAX;
+        let status = unsafe {
+            (runtime_api().prepare_known_call)(
+                opaque,
+                0,
+                encode_abc(OpCode::Call.as_u8(), 0, 0, 0),
+                0,
+                &mut frame_index,
+                &mut base,
+            )
+        };
+        assert_eq!(status, STATUS_RUNTIME_ERROR);
+        assert_eq!((frame_index, base), (u32::MAX, u32::MAX));
+        context.finish(status).unwrap_err()
+    };
+
+    assert!(error.to_string().contains("Expected 1 args, got 0"));
+    assert_eq!(vm.frames.len(), 1);
+}
+
+#[test]
+fn known_call_helper_preserves_the_vm_frame_limit() {
+    let main = function(
+        "main",
+        0,
+        1,
+        vec![encode_abx(OpCode::Closure.as_u8(), 0, 0)],
+    );
+    let prototype = function(
+        "zero_argument",
+        0,
+        1,
+        vec![encode_abc(OpCode::Return.as_u8(), 0, 0, 0)],
+    );
+    let mut vm = VM::new();
+    vm.load_program(function_program(main, vec![prototype]))
+        .unwrap();
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        assert_eq!(
+            unsafe { (runtime_api().execute_instruction)(context.as_opaque(), 0, 0) },
+            STATUS_OK
+        );
+        context.finish(STATUS_OK).unwrap();
+    }
+    vm.frames.resize(MAX_FRAMES, vm.frames[0].clone());
+
+    let error = {
+        let mut context = RuntimeContext::new(&mut vm);
+        let mut frame_index = u32::MAX;
+        let mut base = u32::MAX;
+        let status = unsafe {
+            (runtime_api().prepare_known_call)(
+                context.as_opaque(),
+                (MAX_FRAMES - 1) as u32,
+                encode_abc(OpCode::Call.as_u8(), 0, 0, 0),
+                0,
+                &mut frame_index,
+                &mut base,
+            )
+        };
+        assert_eq!(status, STATUS_RUNTIME_ERROR);
+        assert_eq!((frame_index, base), (u32::MAX, u32::MAX));
+        context.finish(status).unwrap_err()
+    };
+
+    assert!(matches!(error, crate::RuntimeError::StackOverflow));
+    assert_eq!(vm.frames.len(), MAX_FRAMES);
 }
 
 #[test]

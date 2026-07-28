@@ -24,6 +24,16 @@ pub trait ControlFlowOps {
     ) -> Result<(), RuntimeError>;
 }
 
+pub(crate) struct ClosureFrameSpec {
+    pub closure: u32,
+    pub arity: u8,
+    pub max_slots: u16,
+    pub args_start: usize,
+    pub args_count: usize,
+    pub caller_base: usize,
+    pub result_register: usize,
+}
+
 impl ControlFlowOps for super::vm::VM {
     fn handle_control(
         &mut self,
@@ -52,47 +62,26 @@ impl ControlFlowOps for super::vm::VM {
                         .as_handle()
                         .ok_or_else(|| RuntimeError::type_mismatch("Expected closure handle"))?;
 
-                    let closure = self
-                        .heap
-                        .get_closure(handle)
-                        .ok_or(RuntimeError::FunctionNotFound)?;
-                    let func = self
-                        .heap
-                        .get_function(closure.function)
-                        .ok_or(RuntimeError::FunctionNotFound)?;
-
-                    // 1. Check arity (optional but good)
-                    if func.arity as usize != args_count {
-                        return Err(RuntimeError::arity_mismatch(format!(
-                            "Expected {} args, got {}",
-                            func.arity, args_count
-                        )));
-                    }
-
-                    // 2. Calculate New Base Pointer
-                    // BP = args_start (The arguments become the locals R0..Rn of the new frame)
-                    let new_bp = args_start;
-
-                    // 3. THE GOLDEN CHECK
-                    // Check if stack has space for this function's PEAK requirement
-                    if new_bp + (func.max_slots as usize) >= crate::machine::vm::STACK_MAX {
-                        return Err(RuntimeError::StackOverflow);
-                    }
-
-                    // 4. Push Frame with dest_reg = caller's base + A (where result goes)
-                    let dest_reg = base
-                        .checked_add(a)
-                        .filter(|&d| d < crate::machine::vm::STACK_MAX)
-                        .ok_or(RuntimeError::StackOverflow)?;
-                    if self.frames.len() >= crate::machine::vm::MAX_FRAMES {
-                        return Err(RuntimeError::StackOverflow);
-                    }
-                    self.frames.push(crate::machine::frame::CallFrame {
-                        closure: handle, // Points to Closure
-                        ip: 0,
-                        base: new_bp,
-                        dest_reg,
-                    });
+                    let (arity, max_slots) = {
+                        let closure = self
+                            .heap
+                            .get_closure(handle)
+                            .ok_or(RuntimeError::FunctionNotFound)?;
+                        let func = self
+                            .heap
+                            .get_function(closure.function)
+                            .ok_or(RuntimeError::FunctionNotFound)?;
+                        (func.arity, func.max_slots)
+                    };
+                    self.push_closure_frame(ClosureFrameSpec {
+                        closure: handle,
+                        arity,
+                        max_slots,
+                        args_start,
+                        args_count,
+                        caller_base: base,
+                        result_register: a,
+                    })?;
                 } else {
                     return Err(RuntimeError::type_mismatch(
                         "Call target must be Closure or Native",
@@ -165,6 +154,38 @@ impl ControlFlowOps for super::vm::VM {
         let res = func(self, &args)?;
         self.set_reg(base, result_reg, res)?;
 
+        Ok(())
+    }
+}
+
+impl super::vm::VM {
+    pub(crate) fn push_closure_frame(
+        &mut self,
+        spec: ClosureFrameSpec,
+    ) -> Result<(), RuntimeError> {
+        if spec.arity as usize != spec.args_count {
+            return Err(RuntimeError::arity_mismatch(format!(
+                "Expected {} args, got {}",
+                spec.arity, spec.args_count
+            )));
+        }
+        if spec.args_start + spec.max_slots as usize >= crate::machine::vm::STACK_MAX {
+            return Err(RuntimeError::StackOverflow);
+        }
+        let dest_reg = spec
+            .caller_base
+            .checked_add(spec.result_register)
+            .filter(|&destination| destination < crate::machine::vm::STACK_MAX)
+            .ok_or(RuntimeError::StackOverflow)?;
+        if self.frames.len() >= crate::machine::vm::MAX_FRAMES {
+            return Err(RuntimeError::StackOverflow);
+        }
+        self.frames.push(crate::machine::frame::CallFrame {
+            closure: spec.closure,
+            ip: 0,
+            base: spec.args_start,
+            dest_reg,
+        });
         Ok(())
     }
 }

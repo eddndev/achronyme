@@ -53,6 +53,14 @@ impl ExecutionStats {
         self.fast_poll_hits = self.fast_poll_hits.saturating_add(1);
     }
 
+    pub(super) fn record_known_call_fast_hit(&mut self) {
+        self.known_call_fast_hits = self.known_call_fast_hits.saturating_add(1);
+    }
+
+    pub(super) fn record_known_call_fast_miss(&mut self) {
+        self.known_call_fast_misses = self.known_call_fast_misses.saturating_add(1);
+    }
+
     pub(super) fn record_interpreter_fallback(&mut self, instruction: u32) {
         self.interpreter_fallbacks = self.interpreter_fallbacks.saturating_add(1);
         self.first_fallback_instruction.get_or_insert(instruction);
