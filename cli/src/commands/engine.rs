@@ -70,7 +70,7 @@ impl PreparedEngine {
 
 #[cfg(feature = "llvm")]
 fn prepare_jit(program: &CompiledProgram) -> Result<PreparedEngine> {
-    match akron_llvm::JitEngine::compile(program) {
+    match akron_llvm::JitEngine::compile_cached(program) {
         Ok(engine) => Ok(PreparedEngine::Jit(Box::new(engine))),
         Err(akron_llvm::JitError::Lowering(error)) => {
             Err(anyhow!("LLVM JIT does not support this program: {error}"))

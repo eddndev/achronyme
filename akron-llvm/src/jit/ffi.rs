@@ -1,8 +1,13 @@
+mod object;
+
 use std::env;
 use std::ffi::{c_char, c_void, CStr, OsString};
 use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use libloading::Library;
+
+pub(super) use object::{ObjectCapture, TargetIdentity};
 
 pub(super) type ContextRef = *mut c_void;
 pub(super) type ModuleRef = *mut c_void;
@@ -13,6 +18,7 @@ pub(super) type ThreadSafeModuleRef = *mut c_void;
 pub(super) type LlJitRef = *mut c_void;
 pub(super) type JitDylibRef = *mut c_void;
 pub(super) type PassBuilderOptionsRef = *mut c_void;
+pub(super) type ObjectTransformLayerRef = *mut c_void;
 
 type GetVersionFn = unsafe extern "C" fn(*mut u32, *mut u32, *mut u32);
 type VoidFn = unsafe extern "C" fn();
@@ -32,7 +38,16 @@ type CreateLlJitFn = unsafe extern "C" fn(*mut LlJitRef, *mut c_void) -> ErrorRe
 type DisposeLlJitFn = unsafe extern "C" fn(LlJitRef) -> ErrorRef;
 type GetMainJitDylibFn = unsafe extern "C" fn(LlJitRef) -> JitDylibRef;
 type AddIrModuleFn = unsafe extern "C" fn(LlJitRef, JitDylibRef, ThreadSafeModuleRef) -> ErrorRef;
+type AddObjectFileFn = unsafe extern "C" fn(LlJitRef, JitDylibRef, MemoryBufferRef) -> ErrorRef;
 type LookupFn = unsafe extern "C" fn(LlJitRef, *mut u64, *const c_char) -> ErrorRef;
+type GetJitTripleFn = unsafe extern "C" fn(LlJitRef) -> *const c_char;
+type GetHostStringFn = unsafe extern "C" fn() -> *mut c_char;
+type GetBufferStartFn = unsafe extern "C" fn(MemoryBufferRef) -> *const c_char;
+type GetBufferSizeFn = unsafe extern "C" fn(MemoryBufferRef) -> usize;
+type ObjectTransformFn = unsafe extern "C" fn(*mut c_void, *mut MemoryBufferRef) -> ErrorRef;
+type GetObjectTransformLayerFn = unsafe extern "C" fn(LlJitRef) -> ObjectTransformLayerRef;
+type SetObjectTransformFn =
+    unsafe extern "C" fn(ObjectTransformLayerRef, ObjectTransformFn, *mut c_void);
 type GetErrorMessageFn = unsafe extern "C" fn(ErrorRef) -> *mut c_char;
 type DisposeErrorMessageFn = unsafe extern "C" fn(*mut c_char);
 type VerifyModuleFn = unsafe extern "C" fn(ModuleRef, i32, *mut *mut c_char) -> i32;
@@ -40,6 +55,13 @@ type RunPassesFn =
     unsafe extern "C" fn(ModuleRef, *const c_char, *mut c_void, PassBuilderOptionsRef) -> ErrorRef;
 type CreatePassBuilderOptionsFn = unsafe extern "C" fn() -> PassBuilderOptionsRef;
 type DisposePassBuilderOptionsFn = unsafe extern "C" fn(PassBuilderOptionsRef);
+
+#[cfg(target_os = "linux")]
+#[link(name = "LLVM-21")]
+unsafe extern "C" {
+    #[link_name = "LLVMGetVersion"]
+    fn linked_llvm_get_version(major: *mut u32, minor: *mut u32, patch: *mut u32);
+}
 
 pub(super) struct LlvmApi {
     _library: Arc<Library>,
@@ -58,7 +80,15 @@ pub(super) struct LlvmApi {
     pub dispose_lljit: DisposeLlJitFn,
     pub get_main_jit_dylib: GetMainJitDylibFn,
     pub add_ir_module: AddIrModuleFn,
+    pub add_object_file: AddObjectFileFn,
     pub lookup: LookupFn,
+    get_jit_triple: GetJitTripleFn,
+    get_host_cpu_name: GetHostStringFn,
+    get_host_cpu_features: GetHostStringFn,
+    get_buffer_start: GetBufferStartFn,
+    get_buffer_size: GetBufferSizeFn,
+    get_object_transform_layer: GetObjectTransformLayerFn,
+    set_object_transform: SetObjectTransformFn,
     pub get_error_message: GetErrorMessageFn,
     pub dispose_error_message: DisposeErrorMessageFn,
     pub verify_module: VerifyModuleFn,
@@ -81,12 +111,16 @@ static LLVM_LIBRARY: OnceLock<Result<SharedLibrary, String>> = OnceLock::new();
 static NATIVE_TARGET_INITIALIZED: OnceLock<()> = OnceLock::new();
 
 impl LlvmApi {
-    pub fn load() -> Result<Self, super::JitError> {
+    pub fn load_with_timings() -> Result<(Self, Duration, Duration), super::JitError> {
+        let started = Instant::now();
         let shared = LLVM_LIBRARY
             .get_or_init(load_library)
             .as_ref()
             .map_err(|error| super::JitError::Library(error.clone()))?;
-        unsafe { Self::load_symbols(shared) }.map_err(super::JitError::Library)
+        let library_open = started.elapsed();
+        let started = Instant::now();
+        let api = unsafe { Self::load_symbols(shared) }.map_err(super::JitError::Library)?;
+        Ok((api, library_open, started.elapsed()))
     }
 
     unsafe fn load_symbols(shared: &SharedLibrary) -> Result<Self, String> {
@@ -126,7 +160,19 @@ impl LlvmApi {
             dispose_lljit: unsafe { symbol(library, b"LLVMOrcDisposeLLJIT\0")? },
             get_main_jit_dylib: unsafe { symbol(library, b"LLVMOrcLLJITGetMainJITDylib\0")? },
             add_ir_module: unsafe { symbol(library, b"LLVMOrcLLJITAddLLVMIRModule\0")? },
+            add_object_file: unsafe { symbol(library, b"LLVMOrcLLJITAddObjectFile\0")? },
             lookup: unsafe { symbol(library, b"LLVMOrcLLJITLookup\0")? },
+            get_jit_triple: unsafe { symbol(library, b"LLVMOrcLLJITGetTripleString\0")? },
+            get_host_cpu_name: unsafe { symbol(library, b"LLVMGetHostCPUName\0")? },
+            get_host_cpu_features: unsafe { symbol(library, b"LLVMGetHostCPUFeatures\0")? },
+            get_buffer_start: unsafe { symbol(library, b"LLVMGetBufferStart\0")? },
+            get_buffer_size: unsafe { symbol(library, b"LLVMGetBufferSize\0")? },
+            get_object_transform_layer: unsafe {
+                symbol(library, b"LLVMOrcLLJITGetObjTransformLayer\0")?
+            },
+            set_object_transform: unsafe {
+                symbol(library, b"LLVMOrcObjectTransformLayerSetTransform\0")?
+            },
             get_error_message: unsafe { symbol(library, b"LLVMGetErrorMessage\0")? },
             dispose_error_message: unsafe { symbol(library, b"LLVMDisposeErrorMessage\0")? },
             verify_module: unsafe { symbol(library, b"LLVMVerifyModule\0")? },
@@ -183,6 +229,19 @@ impl LlvmApi {
 }
 
 fn load_library() -> Result<SharedLibrary, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut major = 0;
+        let mut minor = 0;
+        let mut patch = 0;
+        unsafe { linked_llvm_get_version(&mut major, &mut minor, &mut patch) };
+        if major != 21 {
+            return Err(format!(
+                "linked LLVM C API {major}.{minor}.{patch} is unsupported; this backend requires LLVM 21"
+            ));
+        }
+    }
+
     let candidates = library_candidates();
     let mut errors = Vec::new();
     for candidate in candidates {

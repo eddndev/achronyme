@@ -1,21 +1,24 @@
+mod cache;
+mod compile;
 mod ffi;
 mod module;
 
-use std::ffi::CString;
 use std::fmt;
 use std::ptr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use akron::compiled::{
     runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
     RUNTIME_ABI_VERSION,
 };
-use akron::{CompiledProgram, RuntimeError, VM};
+use akron::{RuntimeError, VM};
 use memory::Value;
 
-use crate::{lower_program, LoweringError};
+use crate::LoweringError;
 
 use self::ffi::{LlJitRef, LlvmApi};
+
+pub use cache::JitCacheConfig;
 
 pub(super) const OPTIMIZATION_PIPELINE: &str = "default<O2>";
 
@@ -43,9 +46,16 @@ pub struct JitEngine {
 pub struct JitCompileTimings {
     pub lowering: Duration,
     pub llvm_setup: Duration,
+    pub llvm_library_open: Duration,
+    pub llvm_symbol_bind: Duration,
+    pub llvm_target_init: Duration,
     pub lljit_creation: Duration,
+    pub cache_key: Duration,
+    pub cache_lookup: Duration,
     pub ir_parse: Duration,
     pub llvm_optimization: Duration,
+    pub object_capture: Duration,
+    pub cache_store: Duration,
     pub thread_safe_module: Duration,
     pub module_add: Duration,
     pub lookup_materialization: Duration,
@@ -72,108 +82,6 @@ pub struct ExecutionResult {
 }
 
 impl JitEngine {
-    pub fn compile(program: &CompiledProgram) -> Result<Self, JitError> {
-        let mut compile_timings = JitCompileTimings::default();
-        let started = Instant::now();
-        let lowered = lower_program(program)?;
-        compile_timings.lowering = started.elapsed();
-        let instruction_count = lowered.instruction_count;
-        let native_instruction_count = lowered.native_instruction_count;
-        let direct_instruction_count = lowered.direct_instruction_count;
-        let runtime_instruction_count = lowered.runtime_instruction_count;
-        let compiled_call_count = lowered.compiled_call_count;
-        let started = Instant::now();
-        let llvm = LlvmApi::load()?;
-        llvm.initialize_native_target();
-        compile_timings.llvm_setup = started.elapsed();
-
-        let started = Instant::now();
-        let mut jit = ptr::null_mut();
-        let create_error = unsafe { (llvm.create_lljit)(&mut jit, ptr::null_mut()) };
-        if let Some(message) = unsafe { llvm.error_message(create_error) } {
-            return Err(JitError::Llvm(format!("could not create LLJIT: {message}")));
-        }
-        if jit.is_null() {
-            return Err(JitError::Llvm(
-                "LLVM reported success but returned a null LLJIT".to_string(),
-            ));
-        }
-        compile_timings.lljit_creation = started.elapsed();
-
-        let started = Instant::now();
-        let parsed = match unsafe { module::parse(&llvm, &lowered.ir) } {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                unsafe { llvm.dispose_jit_ignoring_error(jit) };
-                return Err(error);
-            }
-        };
-        compile_timings.ir_parse = started.elapsed();
-
-        let started = Instant::now();
-        if let Err(error) = unsafe { module::optimize(&llvm, &parsed) } {
-            unsafe {
-                parsed.dispose(&llvm);
-                llvm.dispose_jit_ignoring_error(jit);
-            }
-            return Err(error);
-        }
-        compile_timings.llvm_optimization = started.elapsed();
-
-        let started = Instant::now();
-        let module = match unsafe { module::into_thread_safe(&llvm, parsed) } {
-            Ok(module) => module,
-            Err(error) => {
-                unsafe { llvm.dispose_jit_ignoring_error(jit) };
-                return Err(error);
-            }
-        };
-        compile_timings.thread_safe_module = started.elapsed();
-
-        let started = Instant::now();
-        let dylib = unsafe { (llvm.get_main_jit_dylib)(jit) };
-        let add_error = unsafe { (llvm.add_ir_module)(jit, dylib, module) };
-        if let Some(message) = unsafe { llvm.error_message(add_error) } {
-            unsafe { llvm.dispose_jit_ignoring_error(jit) };
-            return Err(JitError::Llvm(format!(
-                "could not add LLVM module to LLJIT: {message}"
-            )));
-        }
-        compile_timings.module_add = started.elapsed();
-
-        let started = Instant::now();
-        let symbol = CString::new(lowered.entry_symbol).expect("entry symbol has no NUL");
-        let mut address = 0u64;
-        let lookup_error = unsafe { (llvm.lookup)(jit, &mut address, symbol.as_ptr()) };
-        if let Some(message) = unsafe { llvm.error_message(lookup_error) } {
-            unsafe { llvm.dispose_jit_ignoring_error(jit) };
-            return Err(JitError::Llvm(format!(
-                "could not resolve JIT entry: {message}"
-            )));
-        }
-        if address == 0 {
-            unsafe { llvm.dispose_jit_ignoring_error(jit) };
-            return Err(JitError::Llvm(
-                "LLVM resolved the JIT entry to a null address".to_string(),
-            ));
-        }
-        compile_timings.lookup_materialization = started.elapsed();
-
-        let entry = unsafe { std::mem::transmute::<usize, CompiledEntry>(address as usize) };
-        Ok(Self {
-            llvm,
-            jit,
-            entry,
-            instruction_count,
-            native_instruction_count,
-            direct_instruction_count,
-            runtime_instruction_count,
-            compiled_call_count,
-            compile_timings,
-            cache_stats: JitCacheStats::default(),
-        })
-    }
-
     pub fn llvm_version(&self) -> LlvmVersion {
         self.llvm.version
     }

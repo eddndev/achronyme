@@ -10,6 +10,8 @@ use std::fmt;
 
 use akron::CompiledProgram;
 
+pub(crate) const ENTRY_SYMBOL: &str = "akron_compiled_main";
+
 pub struct LoweredModule {
     pub ir: String,
     pub entry_symbol: &'static str,
@@ -76,7 +78,7 @@ pub fn lower_program(program: &CompiledProgram) -> Result<LoweredModule, Lowerin
     let ir = emit::emit(program, &verification)?;
     Ok(LoweredModule {
         ir,
-        entry_symbol: "akron_compiled_main",
+        entry_symbol: ENTRY_SYMBOL,
         instruction_count: program.instruction_count(),
         native_instruction_count: verification.native_count(),
         direct_instruction_count: verification.direct_count(),
