@@ -9,11 +9,13 @@ use crate::{RuntimeError, VM};
 
 use super::abi::{
     RuntimeStatus, ERROR_ASSERTION_FAILED, ERROR_DIVISION_BY_ZERO, ERROR_INTEGER_OVERFLOW,
-    ERROR_INVALID_OPERAND, ERROR_STACK_OVERFLOW, STATUS_INTERNAL_ERROR, STATUS_INVALID_ARGUMENT,
-    STATUS_OK, STATUS_RUNTIME_ERROR,
+    ERROR_INVALID_OPERAND, ERROR_STACK_OVERFLOW, STATUS_BAILOUT_REQUIRED, STATUS_INTERNAL_ERROR,
+    STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
 };
 
 const GC_CHECK_INTERVAL: u32 = 1024;
+const _: () = assert!(std::mem::size_of::<Value>() == std::mem::size_of::<u64>());
+const _: () = assert!(std::mem::align_of::<Value>() == std::mem::align_of::<u64>());
 
 struct RuntimeContextState {
     vm: NonNull<VM>,
@@ -85,13 +87,23 @@ fn run_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
 where
     F: FnOnce(&mut RuntimeContextState) -> Result<(), RuntimeError>,
 {
+    run_status_helper(context, |state| {
+        operation(state)?;
+        Ok(STATUS_OK)
+    })
+}
+
+fn run_status_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
+where
+    F: FnOnce(&mut RuntimeContextState) -> Result<RuntimeStatus, RuntimeError>,
+{
     if context.is_null() {
         return STATUS_INVALID_ARGUMENT;
     }
 
     let state = unsafe { &mut *context.cast::<RuntimeContextState>() };
     match catch_unwind(AssertUnwindSafe(|| operation(state))) {
-        Ok(Ok(())) => STATUS_OK,
+        Ok(Ok(status)) => status,
         Ok(Err(error)) => state.fail(error),
         Err(_) => {
             state.pending_error = Some(RuntimeError::resource_limit_exceeded(
@@ -100,6 +112,115 @@ where
             STATUS_INTERNAL_ERROR
         }
     }
+}
+
+pub(super) unsafe extern "C" fn register_window(
+    context: *mut c_void,
+    base: u32,
+    register_count: u32,
+    output: *mut *mut u64,
+) -> RuntimeStatus {
+    if output.is_null() {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    run_helper(context, |state| {
+        let base = base as usize;
+        let end = base
+            .checked_add(register_count as usize)
+            .ok_or_else(|| RuntimeError::out_of_bounds("register window overflow"))?;
+        let stack = &mut unsafe { state.vm_mut() }.stack;
+        if end > stack.len() {
+            return Err(RuntimeError::out_of_bounds(format!(
+                "register window {base}..{end}"
+            )));
+        }
+        let window = unsafe { stack.as_mut_ptr().add(base).cast::<u64>() };
+        unsafe { output.write(window) };
+        Ok(())
+    })
+}
+
+fn advance_gc_countdown(countdown: u32, instruction_count: u32) -> u32 {
+    if instruction_count < countdown {
+        return countdown - instruction_count;
+    }
+
+    let after_first_check = instruction_count - countdown;
+    let remainder = after_first_check % GC_CHECK_INTERVAL;
+    if remainder == 0 {
+        GC_CHECK_INTERVAL
+    } else {
+        GC_CHECK_INTERVAL - remainder
+    }
+}
+
+pub(super) unsafe extern "C" fn poll_block(
+    context: *mut c_void,
+    frame_index: u32,
+    first_instruction: u32,
+    instruction_count: u32,
+) -> RuntimeStatus {
+    if instruction_count == 0 {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let Some(next_instruction) = first_instruction.checked_add(instruction_count) else {
+        return STATUS_INVALID_ARGUMENT;
+    };
+
+    run_status_helper(context, |state| {
+        let (stress_mode, instruction_budget) = {
+            let vm = unsafe { state.vm_mut() };
+            if vm.frames.get(frame_index as usize).is_none() {
+                return Err(RuntimeError::StackUnderflow);
+            }
+            (vm.stress_mode, vm.instruction_budget)
+        };
+        if stress_mode || instruction_budget < u64::from(instruction_count) {
+            return Ok(STATUS_BAILOUT_REQUIRED);
+        }
+
+        let (request_gc, heap_limit_exceeded) = {
+            let vm = unsafe { state.vm_mut() };
+            (vm.heap.request_gc, vm.heap.heap_limit_exceeded)
+        };
+        let countdown = state.gc_countdown;
+        if heap_limit_exceeded {
+            state.gc_countdown = GC_CHECK_INTERVAL;
+            unsafe { state.vm_mut() }.poll_gc()?;
+            state.gc_countdown =
+                advance_gc_countdown(state.gc_countdown, instruction_count.saturating_sub(1));
+        } else {
+            if request_gc && countdown <= instruction_count {
+                unsafe { state.vm_mut() }.poll_gc()?;
+            }
+            state.gc_countdown = advance_gc_countdown(countdown, instruction_count);
+        }
+
+        let vm = unsafe { state.vm_mut() };
+        vm.instruction_budget = vm
+            .instruction_budget
+            .wrapping_sub(u64::from(instruction_count));
+        vm.frames[frame_index as usize].ip = next_instruction as usize;
+        Ok(STATUS_OK)
+    })
+}
+
+pub(super) unsafe extern "C" fn refund_block(
+    context: *mut c_void,
+    frame_index: u32,
+    next_instruction: u32,
+    refund_count: u32,
+) -> RuntimeStatus {
+    run_helper(context, |state| {
+        let vm = unsafe { state.vm_mut() };
+        let frame = vm
+            .frames
+            .get_mut(frame_index as usize)
+            .ok_or(RuntimeError::StackUnderflow)?;
+        frame.ip = next_instruction as usize;
+        vm.instruction_budget = vm.instruction_budget.wrapping_add(u64::from(refund_count));
+        Ok(())
+    })
 }
 
 pub(super) unsafe extern "C" fn load_register(

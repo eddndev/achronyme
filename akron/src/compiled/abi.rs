@@ -3,9 +3,12 @@ use std::fmt;
 use std::mem::size_of;
 use std::ops::{BitOr, BitOrAssign};
 
-use super::context::{interpreter_bailout, load_register, poll, raise_error, store_register};
+use super::context::{
+    interpreter_bailout, load_register, poll, poll_block, raise_error, refund_block,
+    register_window, store_register,
+};
 
-pub const RUNTIME_ABI_VERSION: u32 = 1;
+pub const RUNTIME_ABI_VERSION: u32 = 2;
 pub type RuntimeStatus = u32;
 pub type CompiledEntry =
     unsafe extern "C" fn(*const RuntimeApi, *mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
@@ -14,6 +17,7 @@ pub const STATUS_OK: RuntimeStatus = 0;
 pub const STATUS_RUNTIME_ERROR: RuntimeStatus = 1;
 pub const STATUS_INVALID_ARGUMENT: RuntimeStatus = 2;
 pub const STATUS_INTERNAL_ERROR: RuntimeStatus = 3;
+pub const STATUS_BAILOUT_REQUIRED: RuntimeStatus = 4;
 
 pub const ERROR_INVALID_OPERAND: u32 = 1;
 pub const ERROR_DIVISION_BY_ZERO: u32 = 2;
@@ -27,6 +31,10 @@ pub type PollFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
 pub type RaiseErrorFn = unsafe extern "C" fn(*mut c_void, u32) -> RuntimeStatus;
 pub type InterpreterBailoutFn =
     unsafe extern "C" fn(*mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
+pub type RegisterWindowFn =
+    unsafe extern "C" fn(*mut c_void, u32, u32, *mut *mut u64) -> RuntimeStatus;
+pub type PollBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
+pub type RefundBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -37,8 +45,17 @@ impl RuntimeCapabilities {
     pub const POLL: Self = Self(1 << 1);
     pub const RAISE_ERROR: Self = Self(1 << 2);
     pub const INTERPRETER_BAILOUT: Self = Self(1 << 3);
+    pub const REGISTER_WINDOW: Self = Self(1 << 4);
+    pub const BLOCK_POLL: Self = Self(1 << 5);
+    pub const BLOCK_ACCOUNTING: Self = Self(1 << 6);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
+    pub const LLVM_TIER1: Self = Self(
+        Self::LLVM_BASELINE.0
+            | Self::REGISTER_WINDOW.0
+            | Self::BLOCK_POLL.0
+            | Self::BLOCK_ACCOUNTING.0,
+    );
 
     pub const fn empty() -> Self {
         Self(0)
@@ -80,7 +97,25 @@ pub struct RuntimeApi {
     pub poll: PollFn,
     pub raise_error: RaiseErrorFn,
     pub interpreter_bailout: InterpreterBailoutFn,
+    pub register_window: RegisterWindowFn,
+    pub poll_block: PollBlockFn,
+    pub refund_block: RefundBlockFn,
 }
+
+#[repr(C)]
+struct RuntimeApiV1 {
+    magic: [u8; 8],
+    abi_version: u32,
+    struct_size: u32,
+    capabilities: RuntimeCapabilities,
+    load_register: LoadRegisterFn,
+    store_register: StoreRegisterFn,
+    poll: PollFn,
+    raise_error: RaiseErrorFn,
+    interpreter_bailout: InterpreterBailoutFn,
+}
+
+pub const RUNTIME_ABI_V1_SIZE: u32 = size_of::<RuntimeApiV1>() as u32;
 
 impl RuntimeApi {
     pub fn validate(
@@ -92,7 +127,7 @@ impl RuntimeApi {
         if self.magic != *b"AKRTABI\0" {
             return Err(RuntimeAbiError::InvalidMagic);
         }
-        if self.abi_version != required_version {
+        if required_version == 0 || self.abi_version < required_version {
             return Err(RuntimeAbiError::Version {
                 required: required_version,
                 provided: self.abi_version,
@@ -118,12 +153,15 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     magic: *b"AKRTABI\0",
     abi_version: RUNTIME_ABI_VERSION,
     struct_size: size_of::<RuntimeApi>() as u32,
-    capabilities: RuntimeCapabilities::LLVM_BASELINE,
+    capabilities: RuntimeCapabilities::LLVM_TIER1,
     load_register,
     store_register,
     poll,
     raise_error,
     interpreter_bailout,
+    register_window,
+    poll_block,
+    refund_block,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

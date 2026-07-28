@@ -6,8 +6,9 @@ use memory::Value;
 use crate::{CallFrame, RuntimeError, VM};
 
 use super::{
-    runtime_api, RuntimeCapabilities, RuntimeContext, ERROR_DIVISION_BY_ZERO, RUNTIME_ABI_VERSION,
-    STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
+    runtime_api, RuntimeCapabilities, RuntimeContext, ERROR_DIVISION_BY_ZERO, RUNTIME_ABI_V1_SIZE,
+    RUNTIME_ABI_VERSION, STATUS_BAILOUT_REQUIRED, STATUS_INVALID_ARGUMENT, STATUS_OK,
+    STATUS_RUNTIME_ERROR,
 };
 use crate::opcode::instruction::{encode_abc, encode_abx};
 use crate::{CompiledProgram, OpCode};
@@ -29,6 +30,17 @@ fn runtime_api_header_is_self_describing() {
             RuntimeCapabilities::CORE,
         )
         .is_ok());
+
+    let mut baseline_only = *api;
+    baseline_only.capabilities = RuntimeCapabilities::LLVM_BASELINE;
+    assert!(matches!(
+        baseline_only.validate(
+            RUNTIME_ABI_VERSION,
+            size_of::<super::RuntimeApi>() as u32,
+            RuntimeCapabilities::LLVM_TIER1,
+        ),
+        Err(super::RuntimeAbiError::Capabilities { .. })
+    ));
     assert!(api
         .validate(
             RUNTIME_ABI_VERSION + 1,
@@ -36,6 +48,67 @@ fn runtime_api_header_is_self_describing() {
             RuntimeCapabilities::CORE,
         )
         .is_err());
+    assert!(api
+        .validate(1, RUNTIME_ABI_V1_SIZE, RuntimeCapabilities::LLVM_BASELINE,)
+        .is_ok());
+    assert!(api
+        .validate(
+            RUNTIME_ABI_VERSION,
+            size_of::<super::RuntimeApi>() as u32,
+            RuntimeCapabilities::LLVM_TIER1,
+        )
+        .is_ok());
+}
+
+#[test]
+fn register_window_returns_a_stable_checked_stack_pointer() {
+    let mut vm = VM::new();
+    let expected = unsafe { vm.stack.as_mut_ptr().add(4).cast::<u64>() };
+    let value = Value::int(29);
+
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        let mut first = ptr::null_mut();
+        let mut second = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { (runtime_api().register_window)(opaque, 4, 3, &mut first) },
+            STATUS_OK
+        );
+        assert_eq!(
+            unsafe { (runtime_api().register_window)(opaque, 4, 3, &mut second) },
+            STATUS_OK
+        );
+        assert_eq!(first, expected);
+        assert_eq!(second, first);
+        unsafe { first.add(1).write(value.to_abi_bits()) };
+        context.finish(STATUS_OK).unwrap();
+    }
+
+    assert_eq!(vm.stack[5], value);
+}
+
+#[test]
+fn register_window_rejects_null_and_out_of_bounds_requests() {
+    let mut vm = VM::new();
+    let error = {
+        let mut context = RuntimeContext::new(&mut vm);
+        let mut output = ptr::null_mut();
+        let status = unsafe {
+            (runtime_api().register_window)(context.as_opaque(), u32::MAX, 2, &mut output)
+        };
+        assert_eq!(status, STATUS_RUNTIME_ERROR);
+        context.finish(status).unwrap_err()
+    };
+    assert!(matches!(error, RuntimeError::OutOfBounds(_)));
+
+    let mut vm = VM::new();
+    let mut context = RuntimeContext::new(&mut vm);
+    assert_eq!(
+        unsafe { (runtime_api().register_window)(context.as_opaque(), 0, 1, ptr::null_mut()) },
+        STATUS_INVALID_ARGUMENT
+    );
 }
 
 #[test]
@@ -99,6 +172,104 @@ fn poll_updates_location_and_consumes_one_unit_of_fuel() {
     assert!(matches!(error, RuntimeError::InstructionBudgetExhausted));
     assert_eq!(vm.frames[0].ip, 11);
     assert_eq!(vm.instruction_budget, 0);
+}
+
+#[test]
+fn block_poll_precharges_a_complete_block() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.instruction_budget = 10;
+
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        let status = unsafe { (runtime_api().poll_block)(context.as_opaque(), 0, 7, 4) };
+        assert_eq!(status, STATUS_OK);
+        context.finish(status).unwrap();
+    }
+
+    assert_eq!(vm.frames[0].ip, 11);
+    assert_eq!(vm.instruction_budget, 6);
+}
+
+#[test]
+fn block_poll_requests_exact_slow_path_without_mutating_state() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.frames[0].ip = 7;
+    vm.instruction_budget = 3;
+
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        assert_eq!(
+            unsafe { (runtime_api().poll_block)(context.as_opaque(), 0, 7, 4) },
+            STATUS_BAILOUT_REQUIRED
+        );
+    }
+
+    assert_eq!(vm.frames[0].ip, 7);
+    assert_eq!(vm.instruction_budget, 3);
+
+    vm.stress_mode = true;
+    vm.instruction_budget = 4;
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        assert_eq!(
+            unsafe { (runtime_api().poll_block)(context.as_opaque(), 0, 7, 4) },
+            STATUS_BAILOUT_REQUIRED
+        );
+    }
+    assert_eq!(vm.frames[0].ip, 7);
+    assert_eq!(vm.instruction_budget, 4);
+}
+
+#[test]
+fn block_poll_services_a_pending_gc_request_without_bailing_out() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.heap.request_gc = true;
+    let collections = vm.heap.stats.collections;
+
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        assert_eq!(
+            unsafe { (runtime_api().poll_block)(opaque, 0, 0, 1023) },
+            STATUS_OK
+        );
+        assert_eq!(
+            unsafe { (runtime_api().poll_block)(opaque, 0, 1023, 1) },
+            STATUS_OK
+        );
+        context.finish(STATUS_OK).unwrap();
+    }
+
+    assert!(!vm.heap.request_gc);
+    assert_eq!(vm.heap.stats.collections, collections + 1);
+    assert_eq!(vm.frames[0].ip, 1024);
+}
+
+#[test]
+fn block_refund_restores_fuel_and_commits_the_requested_ip() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.instruction_budget = 10;
+
+    {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        assert_eq!(
+            unsafe { (runtime_api().poll_block)(opaque, 0, 7, 4) },
+            STATUS_OK
+        );
+        assert_eq!(
+            unsafe { (runtime_api().refund_block)(opaque, 0, 9, 2) },
+            STATUS_OK
+        );
+        context.finish(STATUS_OK).unwrap();
+    }
+
+    assert_eq!(vm.frames[0].ip, 9);
+    assert_eq!(vm.instruction_budget, 8);
 }
 
 #[test]
