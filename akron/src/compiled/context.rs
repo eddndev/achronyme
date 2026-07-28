@@ -157,6 +157,39 @@ pub(super) unsafe extern "C" fn register_window(
     })
 }
 
+pub(super) unsafe extern "C" fn execution_window(
+    context: *mut c_void,
+    base: u32,
+    register_count: u32,
+    registers_output: *mut *mut u64,
+    globals_output: *mut *mut c_void,
+    global_count_output: *mut u32,
+) -> RuntimeStatus {
+    if registers_output.is_null() || globals_output.is_null() || global_count_output.is_null() {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    run_helper(context, |state| {
+        let base = base as usize;
+        let end = base
+            .checked_add(register_count as usize)
+            .ok_or_else(|| RuntimeError::out_of_bounds("register window overflow"))?;
+        let vm = unsafe { state.vm_mut() };
+        if end > vm.stack.len() {
+            return Err(RuntimeError::out_of_bounds(format!(
+                "register window {base}..{end}"
+            )));
+        }
+        let global_count = u32::try_from(vm.globals.len())
+            .map_err(|_| RuntimeError::resource_limit_exceeded("global window exceeds u32"))?;
+        unsafe {
+            registers_output.write(vm.stack.as_mut_ptr().add(base).cast::<u64>());
+            globals_output.write(vm.globals.as_mut_ptr().cast());
+            global_count_output.write(global_count);
+        }
+        Ok(())
+    })
+}
+
 pub(super) unsafe extern "C" fn refund_block(
     context: *mut c_void,
     frame_index: u32,

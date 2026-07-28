@@ -1,6 +1,8 @@
 mod blocks;
 mod calls;
 mod emit;
+mod globals;
+mod module_ir;
 mod scalar;
 mod verify;
 

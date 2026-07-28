@@ -42,10 +42,7 @@ impl NativeRegistry for super::vm::VM {
         // 3. Register in Globals (Direct Push)
         // Compiler guarantees 0=print, 1=len, etc.
         let val = Value::native(native_idx);
-        self.globals.push(GlobalEntry {
-            value: val,
-            mutable: false, // Natives are constant
-        });
+        self.globals.push(GlobalEntry::new(val, false));
         Ok(())
     }
 

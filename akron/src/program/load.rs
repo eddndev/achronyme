@@ -1,7 +1,8 @@
 use memory::{Closure, Value};
 
 use crate::loader::LoaderError;
-use crate::{CallFrame, VM};
+use crate::opcode::instruction::{decode_bx, decode_opcode};
+use crate::{CallFrame, GlobalEntry, OpCode, VM};
 
 use super::{required_handle, CompiledProgram};
 
@@ -17,6 +18,10 @@ impl VM {
 
         self.last_result = Value::nil();
         self.last_error_location = None;
+
+        let required_globals = required_global_slots(&program, self.globals.len());
+        self.globals
+            .resize(required_globals, GlobalEntry::undefined());
 
         self.prime_id = program.prime_id;
         self.import_strings(program.strings);
@@ -48,6 +53,21 @@ impl VM {
         });
         Ok(())
     }
+}
+
+fn required_global_slots(program: &CompiledProgram, existing: usize) -> usize {
+    std::iter::once(&program.main)
+        .chain(program.functions.iter())
+        .flat_map(|function| function.chunk.iter().copied())
+        .filter_map(|instruction| {
+            let opcode = OpCode::from_u8(decode_opcode(instruction))?;
+            matches!(
+                opcode,
+                OpCode::DefGlobalVar | OpCode::DefGlobalLet | OpCode::GetGlobal | OpCode::SetGlobal
+            )
+            .then(|| decode_bx(instruction) as usize + 1)
+        })
+        .fold(existing, usize::max)
 }
 
 fn remap_constants(

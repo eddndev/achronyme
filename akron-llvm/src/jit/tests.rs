@@ -7,6 +7,8 @@ use memory::{Function, Value};
 
 use super::{ExecutionOutcome, JitEngine};
 
+mod globals;
+
 fn arithmetic_program(operator: OpCode, left: i64, right: i64) -> CompiledProgram {
     CompiledProgram::new(
         PrimeId::Bn254,

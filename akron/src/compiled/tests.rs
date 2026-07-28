@@ -92,6 +92,36 @@ fn register_window_returns_a_stable_checked_stack_pointer() {
 }
 
 #[test]
+fn execution_window_returns_stable_registers_and_global_entries() {
+    let mut vm = VM::new();
+    let expected_registers = unsafe { vm.stack.as_mut_ptr().add(4).cast::<u64>() };
+    let expected_globals = vm.globals.as_mut_ptr().cast();
+    let expected_global_count = vm.globals.len() as u32;
+
+    let mut context = RuntimeContext::new(&mut vm);
+    let mut registers = ptr::null_mut();
+    let mut globals = ptr::null_mut();
+    let mut global_count = 0;
+    assert_eq!(
+        unsafe {
+            (runtime_api().execution_window)(
+                context.as_opaque(),
+                4,
+                3,
+                &mut registers,
+                &mut globals,
+                &mut global_count,
+            )
+        },
+        STATUS_OK
+    );
+
+    assert_eq!(registers, expected_registers);
+    assert_eq!(globals, expected_globals);
+    assert_eq!(global_count, expected_global_count);
+}
+
+#[test]
 fn register_window_rejects_null_and_out_of_bounds_requests() {
     let mut vm = VM::new();
     let error = {

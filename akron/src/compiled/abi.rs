@@ -5,8 +5,8 @@ use std::ops::{BitOr, BitOrAssign};
 
 use super::calls::{execute_instruction, finish_call, prepare_call};
 use super::context::{
-    interpreter_bailout, load_register, poll, poll_block, poll_tier1_block, raise_error,
-    refund_block, register_window, store_register,
+    execution_window, interpreter_bailout, load_register, poll, poll_block, poll_tier1_block,
+    raise_error, refund_block, register_window, store_register,
 };
 
 pub const RUNTIME_ABI_VERSION: u32 = 2;
@@ -44,6 +44,14 @@ pub type ExecuteInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> R
 pub type PrepareCallFn =
     unsafe extern "C" fn(*mut c_void, u32, u32, *mut u32, *mut u32, *mut u32) -> RuntimeStatus;
 pub type FinishCallFn = unsafe extern "C" fn(*mut c_void, u32, u64) -> RuntimeStatus;
+pub type ExecutionWindowFn = unsafe extern "C" fn(
+    *mut c_void,
+    u32,
+    u32,
+    *mut *mut u64,
+    *mut *mut c_void,
+    *mut u32,
+) -> RuntimeStatus;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -60,6 +68,7 @@ impl RuntimeCapabilities {
     pub const RUNTIME_INSTRUCTION: Self = Self(1 << 7);
     pub const COMPILED_CALLS: Self = Self(1 << 8);
     pub const EXECUTION_STATS: Self = Self(1 << 9);
+    pub const GLOBAL_WINDOW: Self = Self(1 << 10);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
@@ -69,7 +78,8 @@ impl RuntimeCapabilities {
             | Self::BLOCK_ACCOUNTING.0
             | Self::RUNTIME_INSTRUCTION.0
             | Self::COMPILED_CALLS.0
-            | Self::EXECUTION_STATS.0,
+            | Self::EXECUTION_STATS.0
+            | Self::GLOBAL_WINDOW.0,
     );
 
     pub const fn empty() -> Self {
@@ -119,6 +129,7 @@ pub struct RuntimeApi {
     pub prepare_call: PrepareCallFn,
     pub finish_call: FinishCallFn,
     pub poll_tier1_block: PollTier1BlockFn,
+    pub execution_window: ExecutionWindowFn,
 }
 
 #[repr(C)]
@@ -185,6 +196,7 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     prepare_call,
     finish_call,
     poll_tier1_block,
+    execution_window,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

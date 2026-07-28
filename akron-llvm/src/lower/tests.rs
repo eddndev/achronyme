@@ -44,7 +44,10 @@ fn scalar_arithmetic_lowers_to_a_native_entry() {
     let module = lower_program(&program).unwrap();
     assert_eq!(module.entry_symbol, "akron_compiled_main");
     assert!(module.ir.contains("define i32 @akron_compiled_main"));
-    assert_eq!(module.ir.matches("call i32 %register_window_fn").count(), 1);
+    assert_eq!(
+        module.ir.matches("call i32 %execution_window_fn").count(),
+        1
+    );
     assert_eq!(
         module.ir.matches("call i32 %poll_tier1_block_fn").count(),
         1
@@ -70,6 +73,27 @@ fn heap_constant_lowers_to_a_runtime_instruction() {
     assert_eq!(module.native_instruction_count, 2);
     assert_eq!(module.runtime_instruction_count, 1);
     assert!(module.ir.contains("call i32 %execute_instruction_fn"));
+}
+
+#[test]
+fn global_operations_lower_through_the_checked_global_window() {
+    let program = scalar_program(
+        vec![
+            encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+            encode_abx(OpCode::DefGlobalVar.as_u8(), 0, 15),
+            encode_abx(OpCode::GetGlobal.as_u8(), 1, 15),
+            encode_abx(OpCode::SetGlobal.as_u8(), 1, 15),
+            encode_abc(OpCode::Return.as_u8(), 1, 1, 0),
+        ],
+        vec![Value::int(42)],
+    );
+
+    let module = lower_program(&program).unwrap();
+
+    assert_eq!(module.direct_instruction_count, 5);
+    assert_eq!(module.runtime_instruction_count, 0);
+    assert!(module.ir.contains("call i32 %execution_window_fn"));
+    assert!(module.ir.contains("getelementptr i8, ptr %globals"));
 }
 
 #[test]

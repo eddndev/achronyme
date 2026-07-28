@@ -107,11 +107,19 @@ pub(super) fn transition(
             }
             return Ok((InstructionMode::Direct, successors));
         }
-        OpCode::Closure | OpCode::GetGlobal => {
+        OpCode::Closure => {
             state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
             InstructionMode::Runtime
         }
-        OpCode::DefGlobalVar | OpCode::DefGlobalLet | OpCode::SetGlobal | OpCode::Print => {
+        OpCode::GetGlobal => {
+            state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
+            InstructionMode::Direct
+        }
+        OpCode::DefGlobalVar | OpCode::DefGlobalLet | OpCode::SetGlobal => {
+            initialized(state, decode_a(instruction), ip)?;
+            InstructionMode::Direct
+        }
+        OpCode::Print => {
             initialized(state, decode_a(instruction), ip)?;
             InstructionMode::Runtime
         }

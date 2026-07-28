@@ -5,6 +5,7 @@ use akron::OpCode;
 use memory::Function;
 
 use super::blocks::BlockPlan;
+use super::module_ir::module_header;
 use super::verify::{FunctionVerification, InstructionMode, Verification};
 use super::LoweringError;
 
@@ -36,30 +37,6 @@ pub(super) fn emit(
         )?;
     }
     Ok(output)
-}
-
-fn module_header(output: &mut String) {
-    writeln!(output, "; Generated from canonical Akron bytecode.").unwrap();
-    writeln!(
-        output,
-        "%RuntimeApi = type {{ [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }}"
-    )
-    .unwrap();
-    writeln!(
-        output,
-        "declare {{ i64, i1 }} @llvm.sadd.with.overflow.i64(i64, i64)"
-    )
-    .unwrap();
-    writeln!(
-        output,
-        "declare {{ i64, i1 }} @llvm.ssub.with.overflow.i64(i64, i64)"
-    )
-    .unwrap();
-    writeln!(
-        output,
-        "declare {{ i64, i1 }} @llvm.smul.with.overflow.i64(i64, i64)\n"
-    )
-    .unwrap();
 }
 
 fn emit_function(
@@ -130,6 +107,18 @@ fn emit_function(
                 emitter.store(decode_a(instruction), &value);
                 emitter.next(ip);
             }
+            OpCode::DefGlobalVar | OpCode::DefGlobalLet => emitter.define_global(
+                ip,
+                decode_a(instruction),
+                decode_bx(instruction),
+                opcode == OpCode::DefGlobalVar,
+            ),
+            OpCode::GetGlobal => {
+                emitter.get_global(ip, decode_a(instruction), decode_bx(instruction));
+            }
+            OpCode::SetGlobal => {
+                emitter.set_global(ip, decode_a(instruction), decode_bx(instruction));
+            }
             OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div | OpCode::Mod => {
                 emitter.binary_integer(ip, instruction, opcode);
             }
@@ -199,6 +188,8 @@ impl<'output> Emitter<'output> {
         ));
         self.line("entry:");
         self.line("  %window.out = alloca ptr, align 8");
+        self.line("  %globals.out = alloca ptr, align 8");
+        self.line("  %globals.len.out = alloca i32, align 4");
         self.line("  %call.frame.out = alloca i32, align 4");
         self.line("  %call.base.out = alloca i32, align 4");
         self.line("  %call.prototype.out = alloca i32, align 4");
@@ -209,18 +200,18 @@ impl<'output> Emitter<'output> {
         for (field, name) in [
             (7, "raise"),
             (8, "bailout"),
-            (9, "register_window"),
             (10, "poll_block"),
             (11, "refund_block"),
             (12, "execute_instruction"),
             (13, "prepare_call"),
             (14, "finish_call"),
             (15, "poll_tier1_block"),
+            (16, "execution_window"),
         ] {
             self.load_api_function(field, name);
         }
         self.line(&format!(
-            "  %window.status = call i32 %register_window_fn(ptr %context, i32 %base, i32 {}, ptr %window.out)",
+            "  %window.status = call i32 %execution_window_fn(ptr %context, i32 %base, i32 {}, ptr %window.out, ptr %globals.out, ptr %globals.len.out)",
             self.register_count
         ));
         self.line("  %window.ok = icmp eq i32 %window.status, 0");
@@ -229,6 +220,8 @@ impl<'output> Emitter<'output> {
         self.line("  ret i32 %window.status");
         self.line("window.ready:");
         self.line("  %window = load ptr, ptr %window.out, align 8");
+        self.line("  %globals = load ptr, ptr %globals.out, align 8");
+        self.line("  %globals.len = load i32, ptr %globals.len.out, align 4");
         self.reload("initial");
     }
 
