@@ -139,6 +139,9 @@ fn orc_jit_executes_lowered_integer_arithmetic() {
     let engine = JitEngine::compile(&program).unwrap();
     assert_eq!(engine.llvm_version().major, 21);
     assert_eq!(engine.optimization_pipeline(), "default<O2>");
+    assert!(engine.compile_timings().lowering.as_nanos() > 0);
+    assert!(engine.compile_timings().llvm_optimization.as_nanos() > 0);
+    assert!(engine.compile_timings().lookup_materialization.as_nanos() > 0);
 
     let mut vm = VM::new();
     vm.load_program(program).unwrap();

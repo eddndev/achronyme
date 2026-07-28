@@ -1,8 +1,10 @@
 mod ffi;
+mod module;
 
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::CString;
 use std::fmt;
 use std::ptr;
+use std::time::{Duration, Instant};
 
 use akron::compiled::{
     runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
@@ -13,9 +15,9 @@ use memory::Value;
 
 use crate::{lower_program, LoweringError};
 
-use self::ffi::{LlJitRef, LlvmApi, ModuleRef, ThreadSafeModuleRef};
+use self::ffi::{LlJitRef, LlvmApi};
 
-const OPTIMIZATION_PIPELINE: &str = "default<O2>";
+pub(super) const OPTIMIZATION_PIPELINE: &str = "default<O2>";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LlvmVersion {
@@ -33,6 +35,19 @@ pub struct JitEngine {
     direct_instruction_count: usize,
     runtime_instruction_count: usize,
     compiled_call_count: usize,
+    compile_timings: JitCompileTimings,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JitCompileTimings {
+    pub lowering: Duration,
+    pub llvm_setup: Duration,
+    pub lljit_creation: Duration,
+    pub ir_parse: Duration,
+    pub llvm_optimization: Duration,
+    pub thread_safe_module: Duration,
+    pub module_add: Duration,
+    pub lookup_materialization: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,15 +65,21 @@ pub struct ExecutionResult {
 
 impl JitEngine {
     pub fn compile(program: &CompiledProgram) -> Result<Self, JitError> {
+        let mut compile_timings = JitCompileTimings::default();
+        let started = Instant::now();
         let lowered = lower_program(program)?;
+        compile_timings.lowering = started.elapsed();
         let instruction_count = lowered.instruction_count;
         let native_instruction_count = lowered.native_instruction_count;
         let direct_instruction_count = lowered.direct_instruction_count;
         let runtime_instruction_count = lowered.runtime_instruction_count;
         let compiled_call_count = lowered.compiled_call_count;
+        let started = Instant::now();
         let llvm = LlvmApi::load()?;
         llvm.initialize_native_target();
+        compile_timings.llvm_setup = started.elapsed();
 
+        let started = Instant::now();
         let mut jit = ptr::null_mut();
         let create_error = unsafe { (llvm.create_lljit)(&mut jit, ptr::null_mut()) };
         if let Some(message) = unsafe { llvm.error_message(create_error) } {
@@ -69,14 +90,39 @@ impl JitEngine {
                 "LLVM reported success but returned a null LLJIT".to_string(),
             ));
         }
+        compile_timings.lljit_creation = started.elapsed();
 
-        let module = match unsafe { parse_module(&llvm, &lowered.ir) } {
+        let started = Instant::now();
+        let parsed = match unsafe { module::parse(&llvm, &lowered.ir) } {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                unsafe { llvm.dispose_jit_ignoring_error(jit) };
+                return Err(error);
+            }
+        };
+        compile_timings.ir_parse = started.elapsed();
+
+        let started = Instant::now();
+        if let Err(error) = unsafe { module::optimize(&llvm, &parsed) } {
+            unsafe {
+                parsed.dispose(&llvm);
+                llvm.dispose_jit_ignoring_error(jit);
+            }
+            return Err(error);
+        }
+        compile_timings.llvm_optimization = started.elapsed();
+
+        let started = Instant::now();
+        let module = match unsafe { module::into_thread_safe(&llvm, parsed) } {
             Ok(module) => module,
             Err(error) => {
                 unsafe { llvm.dispose_jit_ignoring_error(jit) };
                 return Err(error);
             }
         };
+        compile_timings.thread_safe_module = started.elapsed();
+
+        let started = Instant::now();
         let dylib = unsafe { (llvm.get_main_jit_dylib)(jit) };
         let add_error = unsafe { (llvm.add_ir_module)(jit, dylib, module) };
         if let Some(message) = unsafe { llvm.error_message(add_error) } {
@@ -85,7 +131,9 @@ impl JitEngine {
                 "could not add LLVM module to LLJIT: {message}"
             )));
         }
+        compile_timings.module_add = started.elapsed();
 
+        let started = Instant::now();
         let symbol = CString::new(lowered.entry_symbol).expect("entry symbol has no NUL");
         let mut address = 0u64;
         let lookup_error = unsafe { (llvm.lookup)(jit, &mut address, symbol.as_ptr()) };
@@ -101,6 +149,7 @@ impl JitEngine {
                 "LLVM resolved the JIT entry to a null address".to_string(),
             ));
         }
+        compile_timings.lookup_materialization = started.elapsed();
 
         let entry = unsafe { std::mem::transmute::<usize, CompiledEntry>(address as usize) };
         Ok(Self {
@@ -112,6 +161,7 @@ impl JitEngine {
             direct_instruction_count,
             runtime_instruction_count,
             compiled_call_count,
+            compile_timings,
         })
     }
 
@@ -145,6 +195,10 @@ impl JitEngine {
 
     pub fn compiled_call_count(&self) -> usize {
         self.compiled_call_count
+    }
+
+    pub fn compile_timings(&self) -> JitCompileTimings {
+        self.compile_timings
     }
 
     pub fn execute(&self, vm: &mut VM) -> Result<ExecutionResult, JitError> {
@@ -201,109 +255,6 @@ impl Drop for JitEngine {
         unsafe { self.llvm.dispose_jit_ignoring_error(self.jit) };
         self.jit = ptr::null_mut();
     }
-}
-
-unsafe fn parse_module(llvm: &LlvmApi, ir: &str) -> Result<ThreadSafeModuleRef, JitError> {
-    let context = unsafe { (llvm.context_create)() };
-    if context.is_null() {
-        return Err(JitError::Llvm("could not create LLVM context".to_string()));
-    }
-
-    let name = c"akron-jit";
-    let buffer = unsafe {
-        (llvm.create_memory_buffer)(ir.as_ptr().cast::<c_char>(), ir.len(), name.as_ptr())
-    };
-    let mut module: ModuleRef = ptr::null_mut();
-    let mut message: *mut c_char = ptr::null_mut();
-    let failed = unsafe { (llvm.parse_ir)(context, buffer, &mut module, &mut message) };
-    if failed != 0 {
-        let detail = take_parse_message(llvm, message);
-        unsafe { (llvm.context_dispose)(context) };
-        return Err(JitError::Llvm(format!(
-            "invalid generated LLVM IR: {detail}"
-        )));
-    }
-    if module.is_null() {
-        unsafe { (llvm.context_dispose)(context) };
-        return Err(JitError::Llvm(
-            "LLVM parser returned a null module".to_string(),
-        ));
-    }
-
-    if let Err(error) = unsafe { verify_and_optimize(llvm, module) } {
-        unsafe {
-            (llvm.dispose_module)(module);
-            (llvm.context_dispose)(context);
-        }
-        return Err(error);
-    }
-
-    let thread_context = unsafe { (llvm.create_thread_safe_context)(context) };
-    if thread_context.is_null() {
-        unsafe {
-            (llvm.dispose_module)(module);
-            (llvm.context_dispose)(context);
-        }
-        return Err(JitError::Llvm(
-            "could not create LLVM ThreadSafeContext".to_string(),
-        ));
-    }
-    let thread_module = unsafe { (llvm.create_thread_safe_module)(module, thread_context) };
-    unsafe { (llvm.dispose_thread_safe_context)(thread_context) };
-    if thread_module.is_null() {
-        return Err(JitError::Llvm(
-            "could not create LLVM ThreadSafeModule".to_string(),
-        ));
-    }
-    Ok(thread_module)
-}
-
-unsafe fn verify_and_optimize(llvm: &LlvmApi, module: ModuleRef) -> Result<(), JitError> {
-    unsafe { verify_module(llvm, module, "before optimization")? };
-
-    let options = unsafe { (llvm.create_pass_builder_options)() };
-    if options.is_null() {
-        return Err(JitError::Llvm(
-            "could not create LLVM pass builder options".to_string(),
-        ));
-    }
-    let pipeline = CString::new(OPTIMIZATION_PIPELINE).expect("pipeline has no NUL");
-    let pass_error =
-        unsafe { (llvm.run_passes)(module, pipeline.as_ptr(), ptr::null_mut(), options) };
-    unsafe { (llvm.dispose_pass_builder_options)(options) };
-    if let Some(message) = unsafe { llvm.error_message(pass_error) } {
-        return Err(JitError::Llvm(format!(
-            "LLVM {OPTIMIZATION_PIPELINE} pipeline failed: {message}"
-        )));
-    }
-
-    unsafe { verify_module(llvm, module, "after optimization") }
-}
-
-unsafe fn verify_module(llvm: &LlvmApi, module: ModuleRef, stage: &str) -> Result<(), JitError> {
-    let mut message: *mut c_char = ptr::null_mut();
-    let failed = unsafe { (llvm.verify_module)(module, 2, &mut message) };
-    if failed == 0 {
-        if !message.is_null() {
-            unsafe { (llvm.dispose_message)(message) };
-        }
-        return Ok(());
-    }
-    let detail = take_parse_message(llvm, message);
-    Err(JitError::Llvm(format!(
-        "generated LLVM IR failed verification {stage}: {detail}"
-    )))
-}
-
-fn take_parse_message(llvm: &LlvmApi, message: *mut c_char) -> String {
-    if message.is_null() {
-        return "LLVM parser returned no diagnostics".to_string();
-    }
-    let detail = unsafe { CStr::from_ptr(message) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { (llvm.dispose_message)(message) };
-    detail
 }
 
 #[derive(Debug)]

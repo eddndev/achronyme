@@ -11,4 +11,6 @@ pub use aot::{AotArtifact, AotCompiler, AotError, AotOptions, ClangVersion};
 pub use lower::{lower_program, LoweredModule, LoweringError};
 
 #[cfg(feature = "llvm")]
-pub use jit::{ExecutionOutcome, ExecutionResult, JitEngine, JitError, LlvmVersion};
+pub use jit::{
+    ExecutionOutcome, ExecutionResult, JitCompileTimings, JitEngine, JitError, LlvmVersion,
+};
