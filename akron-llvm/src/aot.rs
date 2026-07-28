@@ -11,6 +11,7 @@ pub struct AotOptions {
     pub clang: PathBuf,
     pub runtime_archive: PathBuf,
     pub optimization: u8,
+    pub linker_gc_sections: bool,
 }
 
 impl AotOptions {
@@ -19,6 +20,7 @@ impl AotOptions {
             clang: clang.into(),
             runtime_archive: runtime_archive.into(),
             optimization: 2,
+            linker_gc_sections: true,
         }
     }
 }
@@ -91,14 +93,7 @@ impl AotCompiler {
             .output()?;
         require_success("compile LLVM IR", compile)?;
 
-        let mut link = Command::new(&self.options.clang);
-        link.arg(&object_path)
-            .arg(&self.options.runtime_archive)
-            .arg("-o")
-            .arg(output);
-        #[cfg(target_os = "linux")]
-        link.args(["-ldl", "-lpthread", "-lm", "-lrt", "-lutil"]);
-        let linked = link.output()?;
+        let linked = link_command(&self.options, &object_path, output).output()?;
         require_success("link native executable", linked)?;
         if !output.is_file() {
             return Err(AotError::Tool(
@@ -113,6 +108,19 @@ impl AotCompiler {
             native_instruction_count: lowered.native_instruction_count,
         })
     }
+}
+
+fn link_command(options: &AotOptions, object: &Path, output: &Path) -> Command {
+    let mut command = Command::new(&options.clang);
+    command.arg(object).arg(&options.runtime_archive);
+    #[cfg(target_os = "linux")]
+    if options.linker_gc_sections {
+        command.arg("-Wl,--gc-sections");
+    }
+    command.arg("-o").arg(output);
+    #[cfg(target_os = "linux")]
+    command.args(["-ldl", "-lpthread", "-lm", "-lrt", "-lutil"]);
+    command
 }
 
 fn executable_ir(program: &CompiledProgram, lowered_ir: &str) -> Result<String, AotError> {
@@ -220,5 +228,35 @@ impl From<LoweringError> for AotError {
 impl From<std::io::Error> for AotError {
     fn from(error: std::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    use super::{link_command, AotOptions};
+
+    fn contains_arg(command: &std::process::Command, expected: &str) -> bool {
+        command
+            .get_args()
+            .any(|argument| argument == OsStr::new(expected))
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linker_gc_sections_are_enabled_by_default_and_can_be_disabled() {
+        let enabled = AotOptions::new("clang-21", "runtime.a");
+        let object = Path::new("program.o");
+        let executable = Path::new("program");
+
+        let enabled_link = link_command(&enabled, object, executable);
+        assert!(contains_arg(&enabled_link, "-Wl,--gc-sections"));
+
+        let mut disabled = enabled;
+        disabled.linker_gc_sections = false;
+        let disabled_link = link_command(&disabled, object, executable);
+        assert!(!contains_arg(&disabled_link, "-Wl,--gc-sections"));
     }
 }

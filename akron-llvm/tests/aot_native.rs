@@ -64,7 +64,12 @@ fn aot_builds_and_executes_native_artifact() {
 
     assert_eq!(artifact.executable, executable);
     #[cfg(target_os = "linux")]
-    assert_eq!(&std::fs::read(&executable).unwrap()[..4], b"\x7fELF");
+    {
+        assert_eq!(&std::fs::read(&executable).unwrap()[..4], b"\x7fELF");
+        let dependencies = Command::new("ldd").arg(&executable).output().unwrap();
+        assert!(dependencies.status.success());
+        assert!(!String::from_utf8_lossy(&dependencies.stdout).contains("libLLVM"));
+    }
     let output = Command::new(&executable).output().unwrap();
     assert!(
         output.status.success(),
