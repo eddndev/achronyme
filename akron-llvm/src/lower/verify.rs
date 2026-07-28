@@ -5,6 +5,7 @@ use akron::{CompiledProgram, OpCode};
 use memory::Function;
 
 use super::LoweringError;
+use crate::LlvmTierOptions;
 use instruction::{transition, ListPushSite, ValueKind};
 
 mod instruction;
@@ -63,9 +64,18 @@ impl Verification {
             .count()
     }
 
-    pub(super) fn runtime_count(&self) -> usize {
+    pub(super) fn runtime_count(&self, options: LlvmTierOptions) -> usize {
         self.all_modes()
-            .filter(|mode| **mode == InstructionMode::Runtime)
+            .filter(|mode| {
+                **mode == InstructionMode::Runtime
+                    || (!options.list_specializations
+                        && matches!(
+                            mode,
+                            InstructionMode::SpecializationPreamble
+                                | InstructionMode::ListPush
+                                | InstructionMode::ListIndex
+                        ))
+            })
             .count()
     }
 

@@ -104,6 +104,10 @@ impl RuntimeCapabilities {
         self.0
     }
 
+    pub const fn from_bits(bits: u64) -> Self {
+        Self(bits)
+    }
+
     pub const fn contains(self, other: Self) -> bool {
         (self.0 & other.0) == other.0
     }
@@ -236,6 +240,7 @@ struct RuntimeApiV4 {
 }
 
 pub const RUNTIME_ABI_V4_SIZE: u32 = size_of::<RuntimeApiV4>() as u32;
+pub const RUNTIME_ABI_V5_SIZE: u32 = size_of::<RuntimeApi>() as u32;
 
 impl RuntimeApi {
     pub fn validate(

@@ -6,7 +6,7 @@ use std::process::Command;
 
 use akron::opcode::instruction::{encode_abc, encode_abx};
 use akron::{CompiledProgram, OpCode, VM};
-use akron_llvm::{JitCacheConfig, JitEngine};
+use akron_llvm::{JitCacheConfig, JitEngine, LlvmTierOptions};
 use memory::field::PrimeId;
 use memory::{Function, Value};
 use tempfile::TempDir;
@@ -47,6 +47,33 @@ fn disabled_cache_restores_uncached_behavior() {
     assert_eq!(engine.cache_stats().lookups, 0);
     assert_eq!(engine.cache_stats().hits, 0);
     assert_eq!(engine.cache_stats().misses, 0);
+}
+
+#[test]
+fn tier_options_partition_cached_objects() {
+    let directory = TempDir::new().unwrap();
+    let config = JitCacheConfig::new(directory.path()).with_max_bytes(8 * 1024 * 1024);
+    let compiled_program = program();
+
+    let tier2 = JitEngine::compile_with_cache(&compiled_program, &config).unwrap();
+    assert_eq!(tier2.cache_stats().misses, 1);
+
+    let tier1 = JitEngine::compile_with_cache_and_options(
+        &compiled_program,
+        &config,
+        LlvmTierOptions::tier1(),
+    )
+    .unwrap();
+    assert_eq!(tier1.cache_stats().hits, 0);
+    assert_eq!(tier1.cache_stats().misses, 1);
+
+    let tier1_hit = JitEngine::compile_with_cache_and_options(
+        &compiled_program,
+        &config,
+        LlvmTierOptions::tier1(),
+    )
+    .unwrap();
+    assert_eq!(tier1_hit.cache_stats().hits, 1);
 }
 
 #[test]

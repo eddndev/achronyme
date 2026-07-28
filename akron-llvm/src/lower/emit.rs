@@ -18,6 +18,7 @@ mod specialize;
 pub(super) fn emit(
     program: &akron::CompiledProgram,
     verification: &Verification,
+    options: crate::LlvmTierOptions,
 ) -> Result<String, LoweringError> {
     let mut output = String::with_capacity(program.instruction_count() * 500 + 4096);
     module_header(&mut output);
@@ -27,6 +28,7 @@ pub(super) fn emit(
         verification.main(),
         "akron_compiled_main",
         program.functions.len(),
+        options,
     )?;
     for (index, function) in program.functions.iter().enumerate() {
         emit_function(
@@ -35,6 +37,7 @@ pub(super) fn emit(
             verification.function(index),
             &format!("akron_compiled_fn_{index}"),
             program.functions.len(),
+            options,
         )?;
     }
     Ok(output)
@@ -46,6 +49,7 @@ fn emit_function(
     verification: &FunctionVerification,
     symbol: &str,
     prototype_count: usize,
+    options: crate::LlvmTierOptions,
 ) -> Result<(), LoweringError> {
     let blocks = BlockPlan::build(function, verification)?;
     let mut emitter = Emitter::new(
@@ -54,6 +58,7 @@ fn emit_function(
         function.max_slots,
         blocks,
         prototype_count,
+        options,
     );
     emitter.header(symbol);
     if function.chunk.is_empty() {
@@ -75,22 +80,38 @@ fn emit_function(
             }
             InstructionMode::Call(expected_prototype) => {
                 emitter.begin_instruction(ip, false);
-                emitter.call_instruction(ip, instruction, expected_prototype);
+                emitter.call_instruction(
+                    ip,
+                    instruction,
+                    options.known_calls.then_some(expected_prototype).flatten(),
+                );
                 continue;
             }
             InstructionMode::SpecializationPreamble => {
                 emitter.begin_instruction(ip, false);
-                emitter.next(ip);
+                if options.list_specializations {
+                    emitter.next(ip);
+                } else {
+                    emitter.runtime_instruction(ip);
+                }
                 continue;
             }
             InstructionMode::ListPush => {
                 emitter.begin_instruction(ip, false);
-                emitter.list_push_instruction(ip, instruction, ip - 1);
+                if options.list_specializations {
+                    emitter.list_push_instruction(ip, instruction, ip - 1);
+                } else {
+                    emitter.runtime_instruction(ip);
+                }
                 continue;
             }
             InstructionMode::ListIndex => {
                 emitter.begin_instruction(ip, false);
-                emitter.list_index_instruction(ip, instruction);
+                if options.list_specializations {
+                    emitter.list_index_instruction(ip, instruction);
+                } else {
+                    emitter.runtime_instruction(ip);
+                }
                 continue;
             }
             InstructionMode::Direct => {}
@@ -175,6 +196,7 @@ pub(super) struct Emitter<'output> {
     register_count: u16,
     pub(super) blocks: BlockPlan,
     pub(super) prototype_count: usize,
+    pub(super) options: crate::LlvmTierOptions,
 }
 
 impl<'output> Emitter<'output> {
@@ -184,6 +206,7 @@ impl<'output> Emitter<'output> {
         register_count: u16,
         blocks: BlockPlan,
         prototype_count: usize,
+        options: crate::LlvmTierOptions,
     ) -> Self {
         Self {
             output,
@@ -191,6 +214,7 @@ impl<'output> Emitter<'output> {
             register_count,
             blocks,
             prototype_count,
+            options,
         }
     }
 
@@ -223,12 +247,18 @@ impl<'output> Emitter<'output> {
             (14, "finish_call"),
             (15, "poll_tier1_block"),
             (16, "execution_window"),
-            (17, "poll_fast_block"),
-            (18, "prepare_known_call"),
-            (19, "list_push"),
-            (20, "list_index"),
         ] {
             self.load_api_function(field, name);
+        }
+        if self.options.fast_poll {
+            self.load_api_function(17, "poll_fast_block");
+        }
+        if self.options.known_calls {
+            self.load_api_function(18, "prepare_known_call");
+        }
+        if self.options.list_specializations {
+            self.load_api_function(19, "list_push");
+            self.load_api_function(20, "list_index");
         }
         self.line(&format!(
             "  %window.status = call i32 %execution_window_fn(ptr %context, i32 %base, i32 {}, ptr %window.out, ptr %globals.out, ptr %globals.len.out)",

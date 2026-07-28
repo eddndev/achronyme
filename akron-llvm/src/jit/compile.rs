@@ -2,31 +2,54 @@ use std::ffi::CString;
 use std::ptr;
 use std::time::Instant;
 
-use akron::compiled::{RuntimeApi, RuntimeCapabilities, RUNTIME_ABI_VERSION};
 use akron::CompiledProgram;
 
-use crate::lower_program;
+use crate::{lower_program_with_options, LlvmTierOptions};
 
 use super::cache::{CacheIdentity, CacheMetadata, CachedObject, JitCacheConfig, ObjectCache};
 use super::ffi::{LlJitRef, LlvmApi, ObjectCapture, TargetIdentity};
 use super::{module, JitCacheStats, JitCompileTimings, JitEngine, JitError};
 
-const LOWERING_REVISION: u32 = 1;
+const LOWERING_REVISION: u32 = 2;
 const CACHE_PIPELINE_ID: &str = "default<O2>;orc-lljit-object-transform-v1";
 
 impl JitEngine {
     pub fn compile(program: &CompiledProgram) -> Result<Self, JitError> {
-        Self::compile_with_cache(program, &JitCacheConfig::disabled())
+        Self::compile_with_cache_and_options(
+            program,
+            &JitCacheConfig::disabled(),
+            LlvmTierOptions::default(),
+        )
+    }
+
+    pub fn compile_with_options(
+        program: &CompiledProgram,
+        options: LlvmTierOptions,
+    ) -> Result<Self, JitError> {
+        Self::compile_with_cache_and_options(program, &JitCacheConfig::disabled(), options)
     }
 
     pub fn compile_cached(program: &CompiledProgram) -> Result<Self, JitError> {
-        Self::compile_with_cache(program, &JitCacheConfig::from_environment())
+        Self::compile_with_cache_and_options(
+            program,
+            &JitCacheConfig::from_environment(),
+            LlvmTierOptions::default(),
+        )
     }
 
     pub fn compile_with_cache(
         program: &CompiledProgram,
         config: &JitCacheConfig,
     ) -> Result<Self, JitError> {
+        Self::compile_with_cache_and_options(program, config, LlvmTierOptions::default())
+    }
+
+    pub fn compile_with_cache_and_options(
+        program: &CompiledProgram,
+        config: &JitCacheConfig,
+        options: LlvmTierOptions,
+    ) -> Result<Self, JitError> {
+        let runtime_requirement = options.runtime_requirement();
         let mut timings = JitCompileTimings::default();
         let (llvm, library_open, symbol_bind) = LlvmApi::load_with_timings()?;
         timings.llvm_library_open = library_open;
@@ -50,7 +73,7 @@ impl JitEngine {
                     return Err(error);
                 }
             };
-            cache_key = cache_identity(program, &llvm, &identity).map(|value| value.key());
+            cache_key = cache_identity(program, &llvm, &identity, options).map(|value| value.key());
             timings.cache_key = started.elapsed();
         }
 
@@ -75,6 +98,7 @@ impl JitEngine {
                         cached.metadata,
                         timings,
                         cache_stats,
+                        runtime_requirement,
                     ));
                 }
                 cache.invalidate(key);
@@ -85,7 +109,7 @@ impl JitEngine {
         }
 
         let started = Instant::now();
-        let lowered = match lower_program(program) {
+        let lowered = match lower_program_with_options(program, options) {
             Ok(lowered) => lowered,
             Err(error) => {
                 unsafe { llvm.dispose_jit_ignoring_error(jit) };
@@ -123,6 +147,7 @@ impl JitEngine {
             metadata,
             timings,
             cache_stats,
+            runtime_requirement,
         ))
     }
 }
@@ -141,14 +166,16 @@ fn cache_identity(
     program: &CompiledProgram,
     llvm: &LlvmApi,
     target: &TargetIdentity,
+    options: LlvmTierOptions,
 ) -> Option<CacheIdentity> {
+    let runtime = options.runtime_requirement();
     let mut canonical = Vec::new();
     program.write_executable(&mut canonical).ok()?;
     Some(CacheIdentity {
         program: canonical,
-        runtime_abi_version: RUNTIME_ABI_VERSION,
-        runtime_abi_size: std::mem::size_of::<RuntimeApi>() as u32,
-        runtime_capabilities: RuntimeCapabilities::LLVM_TIER2.bits(),
+        runtime_abi_version: runtime.version,
+        runtime_abi_size: runtime.size,
+        runtime_capabilities: runtime.capabilities.bits(),
         llvm_version: llvm.version,
         target_triple: target.triple.clone(),
         cpu: target.cpu.clone(),
@@ -279,6 +306,7 @@ fn build_engine(
     metadata: CacheMetadata,
     compile_timings: JitCompileTimings,
     cache_stats: JitCacheStats,
+    runtime_requirement: crate::options::RuntimeRequirement,
 ) -> JitEngine {
     JitEngine {
         llvm,
@@ -291,5 +319,6 @@ fn build_engine(
         compiled_call_count: metadata.compiled_call_count,
         compile_timings,
         cache_stats,
+        runtime_requirement,
     }
 }

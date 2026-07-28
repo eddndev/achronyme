@@ -10,6 +10,8 @@ use std::fmt;
 
 use akron::CompiledProgram;
 
+use crate::LlvmTierOptions;
+
 pub(crate) const ENTRY_SYMBOL: &str = "akron_compiled_main";
 
 pub struct LoweredModule {
@@ -71,18 +73,25 @@ impl fmt::Display for LoweringError {
 impl std::error::Error for LoweringError {}
 
 pub fn lower_program(program: &CompiledProgram) -> Result<LoweredModule, LoweringError> {
+    lower_program_with_options(program, LlvmTierOptions::default())
+}
+
+pub fn lower_program_with_options(
+    program: &CompiledProgram,
+    options: LlvmTierOptions,
+) -> Result<LoweredModule, LoweringError> {
     program
         .validate()
         .map_err(|error| LoweringError::InvalidProgram(error.to_string()))?;
     let verification = verify::verify(program)?;
-    let ir = emit::emit(program, &verification)?;
+    let ir = emit::emit(program, &verification, options)?;
     Ok(LoweredModule {
         ir,
         entry_symbol: ENTRY_SYMBOL,
         instruction_count: program.instruction_count(),
         native_instruction_count: verification.native_count(),
         direct_instruction_count: verification.direct_count(),
-        runtime_instruction_count: verification.runtime_count(),
+        runtime_instruction_count: verification.runtime_count(options),
         compiled_call_count: verification.call_count(),
     })
 }

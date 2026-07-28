@@ -7,13 +7,11 @@ use std::fmt;
 use std::ptr;
 use std::time::Duration;
 
-use akron::compiled::{
-    runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
-    RUNTIME_ABI_VERSION,
-};
+use akron::compiled::{runtime_api, CompiledEntry, ExecutionStats, RuntimeContext};
 use akron::{RuntimeError, VM};
 use memory::Value;
 
+use crate::options::RuntimeRequirement;
 use crate::LoweringError;
 
 use self::ffi::{LlJitRef, LlvmApi};
@@ -40,6 +38,7 @@ pub struct JitEngine {
     compiled_call_count: usize,
     compile_timings: JitCompileTimings,
     cache_stats: JitCacheStats,
+    runtime_requirement: RuntimeRequirement,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -125,9 +124,9 @@ impl JitEngine {
     pub fn execute(&self, vm: &mut VM) -> Result<ExecutionResult, JitError> {
         runtime_api()
             .validate(
-                RUNTIME_ABI_VERSION,
-                std::mem::size_of::<akron::compiled::RuntimeApi>() as u32,
-                RuntimeCapabilities::LLVM_TIER2,
+                self.runtime_requirement.version,
+                self.runtime_requirement.size,
+                self.runtime_requirement.capabilities,
             )
             .map_err(|error| JitError::Abi(error.to_string()))?;
         if vm.frames.len() != 1 {

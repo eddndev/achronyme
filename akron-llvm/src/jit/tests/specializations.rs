@@ -7,7 +7,7 @@ use memory::{Function, Value};
 
 use super::{ExecutionOutcome, JitEngine};
 
-fn list_specialization_program() -> CompiledProgram {
+pub(super) fn list_specialization_program() -> CompiledProgram {
     CompiledProgram::new(
         PrimeId::Bn254,
         vec!["push".to_string()],

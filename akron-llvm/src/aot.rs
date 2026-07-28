@@ -4,7 +4,7 @@ use std::process::{Command, Output};
 
 use akron::CompiledProgram;
 
-use crate::{lower_program, LoweringError};
+use crate::{lower_program_with_options, LlvmTierOptions, LoweringError};
 
 #[derive(Debug, Clone)]
 pub struct AotOptions {
@@ -12,6 +12,7 @@ pub struct AotOptions {
     pub runtime_archive: PathBuf,
     pub optimization: u8,
     pub linker_gc_sections: bool,
+    pub tier2: LlvmTierOptions,
 }
 
 impl AotOptions {
@@ -21,6 +22,7 @@ impl AotOptions {
             runtime_archive: runtime_archive.into(),
             optimization: 2,
             linker_gc_sections: true,
+            tier2: LlvmTierOptions::default(),
         }
     }
 }
@@ -69,8 +71,8 @@ impl AotCompiler {
             )));
         }
 
-        let lowered = lower_program(program)?;
-        let ir = executable_ir(program, &lowered.ir)?;
+        let lowered = lower_program_with_options(program, self.options.tier2)?;
+        let ir = executable_ir(program, &lowered.ir, self.options.tier2)?;
         let parent = output.parent().filter(|path| !path.as_os_str().is_empty());
         if let Some(parent) = parent {
             std::fs::create_dir_all(parent)?;
@@ -123,7 +125,12 @@ fn link_command(options: &AotOptions, object: &Path, output: &Path) -> Command {
     command
 }
 
-fn executable_ir(program: &CompiledProgram, lowered_ir: &str) -> Result<String, AotError> {
+fn executable_ir(
+    program: &CompiledProgram,
+    lowered_ir: &str,
+    options: LlvmTierOptions,
+) -> Result<String, AotError> {
+    let runtime = options.runtime_requirement();
     let mut image = Vec::new();
     program
         .write_executable(&mut image)
@@ -142,12 +149,15 @@ fn executable_ir(program: &CompiledProgram, lowered_ir: &str) -> Result<String, 
         escaped
     )
     .expect("write to String");
-    ir.push_str("declare i32 @akron_aot_runtime_main(ptr, i64, ptr)\n\n");
+    ir.push_str("declare i32 @akron_aot_runtime_main(ptr, i64, ptr, i32, i32, i64)\n\n");
     ir.push_str("define i32 @main() {\nentry:\n");
     writeln!(
         ir,
-        "  %status = call i32 @akron_aot_runtime_main(ptr @akron_program_image, i64 {}, ptr @akron_compiled_main)",
-        image.len()
+        "  %status = call i32 @akron_aot_runtime_main(ptr @akron_program_image, i64 {}, ptr @akron_compiled_main, i32 {}, i32 {}, i64 {})",
+        image.len(),
+        runtime.version,
+        runtime.size,
+        runtime.capabilities.bits(),
     )
     .expect("write to String");
     ir.push_str("  ret i32 %status\n}\n");

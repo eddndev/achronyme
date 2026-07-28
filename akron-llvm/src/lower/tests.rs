@@ -5,7 +5,8 @@ use akron::{CompiledProgram, OpCode};
 use memory::field::PrimeId;
 use memory::{Function, Value};
 
-use super::lower_program;
+use super::{lower_program, lower_program_with_options};
+use crate::LlvmTierOptions;
 
 fn scalar_program(chunk: Vec<u32>, constants: Vec<Value>) -> CompiledProgram {
     CompiledProgram::new(
@@ -27,6 +28,65 @@ fn scalar_program(chunk: Vec<u32>, constants: Vec<Value>) -> CompiledProgram {
         },
         HashMap::new(),
     )
+}
+
+fn compiled_call_program() -> CompiledProgram {
+    let main = Function {
+        name: "main".to_string(),
+        arity: 0,
+        max_slots: 3,
+        chunk: vec![
+            encode_abx(OpCode::Closure.as_u8(), 0, 0),
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
+            encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+        ],
+        constants: vec![Value::int(41)],
+        upvalue_info: Vec::new(),
+        line_info: Vec::new(),
+    };
+    let increment = Function {
+        name: "increment".to_string(),
+        arity: 1,
+        max_slots: 2,
+        chunk: vec![
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::Add.as_u8(), 0, 0, 1),
+            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+        ],
+        constants: vec![Value::int(1)],
+        upvalue_info: Vec::new(),
+        line_info: Vec::new(),
+    };
+    CompiledProgram::new(
+        PrimeId::Bn254,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![increment],
+        main,
+        HashMap::new(),
+    )
+}
+
+fn specialized_list_program() -> CompiledProgram {
+    let mut program = scalar_program(
+        vec![
+            encode_abc(OpCode::BuildList.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::Move.as_u8(), 2, 0, 0),
+            encode_abx(OpCode::LoadConst.as_u8(), 3, 1),
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::MethodCall.as_u8(), 1, 2, 1),
+            encode_abx(OpCode::LoadConst.as_u8(), 3, 2),
+            encode_abc(OpCode::GetIndex.as_u8(), 1, 0, 3),
+            encode_abc(OpCode::Return.as_u8(), 1, 1, 0),
+        ],
+        vec![Value::string(0), Value::int(7), Value::int(0)],
+    );
+    program.strings.push("push".to_string());
+    program
 }
 
 #[test]
@@ -118,44 +178,7 @@ fn global_operations_lower_through_the_checked_global_window() {
 
 #[test]
 fn whole_program_functions_and_calls_are_lowered() {
-    let main = Function {
-        name: "main".to_string(),
-        arity: 0,
-        max_slots: 3,
-        chunk: vec![
-            encode_abx(OpCode::Closure.as_u8(), 0, 0),
-            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
-            encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
-            encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
-        ],
-        constants: vec![Value::int(41)],
-        upvalue_info: Vec::new(),
-        line_info: Vec::new(),
-    };
-    let increment = Function {
-        name: "increment".to_string(),
-        arity: 1,
-        max_slots: 2,
-        chunk: vec![
-            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
-            encode_abc(OpCode::Add.as_u8(), 0, 0, 1),
-            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
-        ],
-        constants: vec![Value::int(1)],
-        upvalue_info: Vec::new(),
-        line_info: Vec::new(),
-    };
-    let program = CompiledProgram::new(
-        PrimeId::Bn254,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        vec![increment],
-        main,
-        HashMap::new(),
-    );
+    let program = compiled_call_program();
 
     let module = lower_program(&program).unwrap();
 
@@ -220,20 +243,7 @@ fn unknown_opcode_is_rejected_before_llvm_emission() {
 
 #[test]
 fn immediate_list_push_and_list_index_lower_to_guarded_specializations() {
-    let mut program = scalar_program(
-        vec![
-            encode_abc(OpCode::BuildList.as_u8(), 0, 0, 0),
-            encode_abc(OpCode::Move.as_u8(), 2, 0, 0),
-            encode_abx(OpCode::LoadConst.as_u8(), 3, 1),
-            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
-            encode_abc(OpCode::MethodCall.as_u8(), 1, 2, 1),
-            encode_abx(OpCode::LoadConst.as_u8(), 3, 2),
-            encode_abc(OpCode::GetIndex.as_u8(), 1, 0, 3),
-            encode_abc(OpCode::Return.as_u8(), 1, 1, 0),
-        ],
-        vec![Value::string(0), Value::int(7), Value::int(0)],
-    );
-    program.strings.push("push".to_string());
+    let program = specialized_list_program();
 
     let module = lower_program(&program).unwrap();
 
@@ -242,4 +252,50 @@ fn immediate_list_push_and_list_index_lower_to_guarded_specializations() {
     assert!(module.ir.contains("call i32 %list_index_fn"));
     assert!(module.ir.contains("specialization.push.miss"));
     assert!(module.ir.contains("specialization.index.miss"));
+}
+
+#[test]
+fn tier2_capabilities_can_be_disabled_independently_in_lowering() {
+    let arithmetic = scalar_program(
+        vec![
+            encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+        ],
+        vec![Value::int(42)],
+    );
+    let no_fast_poll = lower_program_with_options(
+        &arithmetic,
+        LlvmTierOptions {
+            fast_poll: false,
+            ..LlvmTierOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(!no_fast_poll.ir.contains("call i32 %poll_fast_block_fn"));
+    assert!(no_fast_poll.ir.contains("call i32 %poll_tier1_block_fn"));
+
+    let no_known_calls = lower_program_with_options(
+        &compiled_call_program(),
+        LlvmTierOptions {
+            known_calls: false,
+            ..LlvmTierOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(!no_known_calls
+        .ir
+        .contains("call i32 %prepare_known_call_fn"));
+    assert!(no_known_calls.ir.contains("call i32 %prepare_call_fn"));
+
+    let no_lists = lower_program_with_options(
+        &specialized_list_program(),
+        LlvmTierOptions {
+            list_specializations: false,
+            ..LlvmTierOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(!no_lists.ir.contains("call i32 %list_push_fn"));
+    assert!(!no_lists.ir.contains("call i32 %list_index_fn"));
+    assert_eq!(no_lists.runtime_instruction_count, 4);
 }

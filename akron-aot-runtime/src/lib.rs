@@ -4,7 +4,6 @@ use std::time::Instant;
 
 use akron::compiled::{
     runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
-    RUNTIME_ABI_VERSION,
 };
 use akron::{CompiledProgram, ValueOps, VM};
 use memory::Value;
@@ -18,11 +17,15 @@ const MAX_PROGRAM_IMAGE: usize = 512 * 1024 * 1024;
 ///
 /// `program_bytes` must identify `program_len` readable bytes for the duration
 /// of this call. `entry` must be a valid function with the `CompiledEntry` ABI
-/// generated for that exact program image.
+/// generated for that exact program image. The ABI requirement values must be
+/// the ones used to lower `entry`.
 pub unsafe extern "C" fn akron_aot_runtime_main(
     program_bytes: *const u8,
     program_len: usize,
     entry: CompiledEntry,
+    required_abi_version: u32,
+    required_abi_size: u32,
+    required_capabilities: u64,
 ) -> i32 {
     if program_bytes.is_null() || program_len == 0 || program_len > MAX_PROGRAM_IMAGE {
         eprintln!("Error: invalid embedded Akron program image");
@@ -31,7 +34,13 @@ pub unsafe extern "C" fn akron_aot_runtime_main(
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let bytes = unsafe { slice::from_raw_parts(program_bytes, program_len) };
-        run(bytes, entry)
+        run(
+            bytes,
+            entry,
+            required_abi_version,
+            required_abi_size,
+            required_capabilities,
+        )
     }));
     match result {
         Ok(Ok(())) => 0,
@@ -46,15 +55,21 @@ pub unsafe extern "C" fn akron_aot_runtime_main(
     }
 }
 
-fn run(bytes: &[u8], entry: CompiledEntry) -> Result<(), String> {
+fn run(
+    bytes: &[u8],
+    entry: CompiledEntry,
+    required_abi_version: u32,
+    required_abi_size: u32,
+    required_capabilities: u64,
+) -> Result<(), String> {
     let mut reader = bytes;
     let program = CompiledProgram::read_executable(&mut reader)
         .map_err(|error| format!("embedded program loader error: {error}"))?;
     runtime_api()
         .validate(
-            RUNTIME_ABI_VERSION,
-            std::mem::size_of::<akron::compiled::RuntimeApi>() as u32,
-            RuntimeCapabilities::LLVM_TIER2,
+            required_abi_version,
+            required_abi_size,
+            RuntimeCapabilities::from_bits(required_capabilities),
         )
         .map_err(|error| error.to_string())?;
     let repetitions = repetitions()?;

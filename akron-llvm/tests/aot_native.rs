@@ -6,7 +6,7 @@ use std::process::Command;
 
 use akron::opcode::instruction::{encode_abc, encode_abx};
 use akron::{CompiledProgram, OpCode};
-use akron_llvm::{AotCompiler, AotOptions};
+use akron_llvm::{AotCompiler, AotOptions, LlvmTierOptions};
 use memory::field::PrimeId;
 use memory::{Function, Value};
 
@@ -101,4 +101,17 @@ fn aot_builds_and_executes_native_artifact() {
         .unwrap();
     assert!(!invalid_repeat.status.success());
     assert!(String::from_utf8_lossy(&invalid_repeat.stderr).contains("between 1 and 10000"));
+
+    let tier1_executable = directory.path().join("answer-tier1");
+    let mut tier1_options = AotOptions::new("clang", runtime_archive());
+    tier1_options.tier2 = LlvmTierOptions::tier1();
+    AotCompiler::new(tier1_options)
+        .build_executable(&arithmetic_program(), &tier1_executable)
+        .unwrap();
+    let tier1_output = Command::new(&tier1_executable).output().unwrap();
+    assert!(tier1_output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&tier1_output.stdout),
+        "Exit Status: 42\n"
+    );
 }

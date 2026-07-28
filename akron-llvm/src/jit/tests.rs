@@ -8,6 +8,7 @@ use memory::{Function, Value};
 use super::{ExecutionOutcome, JitCacheStats, JitEngine};
 
 mod globals;
+mod rollback;
 mod specializations;
 
 fn arithmetic_program(operator: OpCode, left: i64, right: i64) -> CompiledProgram {
@@ -377,25 +378,4 @@ fn orc_jit_preserves_division_by_zero_error() {
     assert!(error.contains("division by zero"), "{error}");
     assert_eq!(vm.last_error_location, Some(("main".to_string(), 1)));
     assert_eq!(vm.instruction_budget, 1);
-}
-
-#[test]
-fn orc_jit_bails_out_to_interpreter_at_unsupported_opcode() {
-    let program = arithmetic_program(OpCode::Pow, 2, 3);
-    let engine = JitEngine::compile(&program).unwrap();
-    let mut vm = VM::new();
-    vm.load_program(program).unwrap();
-
-    let result = engine.execute(&mut vm).unwrap();
-
-    assert_eq!(
-        result.outcome,
-        ExecutionOutcome::InterpreterBailout { instruction: 2 }
-    );
-    assert_eq!(result.value.as_int(), Some(8));
-    assert_eq!(result.stats.interpreter_fallbacks, 1);
-    assert_eq!(result.stats.first_fallback_instruction, Some(2));
-    assert_eq!(vm.stack[2].as_int(), Some(8));
-    assert!(vm.frames.is_empty());
-    assert_eq!(vm.instruction_budget, u64::MAX.wrapping_sub(4));
 }
