@@ -16,6 +16,7 @@ use memory::field::PrimeId;
 use memory::Function;
 use std::collections::HashMap;
 
+mod panic_boundary;
 mod runtime_calls;
 
 #[test]
