@@ -66,10 +66,15 @@ pub(super) fn transition(
             InstructionMode::Direct
         }
         OpCode::Eq | OpCode::NotEq => {
-            initialized(state, decode_b(instruction), ip)?;
-            initialized(state, decode_c(instruction), ip)?;
+            let left = initialized(state, decode_b(instruction), ip)?;
+            let right = initialized(state, decode_c(instruction), ip)?;
+            let immediate_equality = is_immediate(state[left]) && is_immediate(state[right]);
             state[register(state, decode_a(instruction), ip)?] = ValueKind::Bool;
-            InstructionMode::Direct
+            if immediate_equality {
+                InstructionMode::Direct
+            } else {
+                InstructionMode::Runtime
+            }
         }
         OpCode::Lt | OpCode::Gt | OpCode::Le | OpCode::Ge => {
             require_int(state, decode_b(instruction), ip)?;
@@ -207,6 +212,10 @@ fn scalar_kind(value: Value) -> Option<ValueKind> {
     } else {
         None
     }
+}
+
+fn is_immediate(kind: ValueKind) -> bool {
+    matches!(kind, ValueKind::Int | ValueKind::Bool | ValueKind::Nil)
 }
 
 fn register(state: &[ValueKind], register: u8, ip: usize) -> Result<usize, LoweringError> {

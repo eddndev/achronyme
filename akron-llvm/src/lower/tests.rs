@@ -76,6 +76,25 @@ fn heap_constant_lowers_to_a_runtime_instruction() {
 }
 
 #[test]
+fn heap_equality_lowers_to_a_runtime_instruction() {
+    let mut program = scalar_program(
+        vec![
+            encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 1),
+            encode_abc(OpCode::Eq.as_u8(), 2, 0, 1),
+            encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+        ],
+        vec![Value::string(0), Value::string(1)],
+    );
+    program.strings = vec!["same".to_string(), "same".to_string()];
+
+    let module = lower_program(&program).unwrap();
+
+    assert_eq!(module.direct_instruction_count, 1);
+    assert_eq!(module.runtime_instruction_count, 3);
+}
+
+#[test]
 fn global_operations_lower_through_the_checked_global_window() {
     let program = scalar_program(
         vec![

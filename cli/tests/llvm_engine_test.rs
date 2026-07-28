@@ -38,25 +38,25 @@ fn explicit_jit_executes_supported_source() {
 #[test]
 fn explicit_jit_uses_visible_interpreter_bailout_for_unsupported_opcode() {
     let directory = tempfile::tempdir().unwrap();
-    let source = write_source(&directory, "print.ach", "print(42)\n");
+    let source = write_source(&directory, "power.ach", "print(2 ^ 3)\n");
 
     let output = run(&source, "jit");
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("LLVM JIT bailout:"), "{stderr}");
-    assert!(output.stdout.starts_with(b"42\n"));
+    assert!(output.stdout.starts_with(b"8\n"));
 }
 
 #[test]
 fn auto_engine_reports_fallback_and_runs_interpreter() {
     let directory = tempfile::tempdir().unwrap();
-    let source = write_source(&directory, "print.ach", "print(42)\n");
+    let source = write_source(&directory, "power.ach", "print(2 ^ 3)\n");
 
     let output = run(&source, "auto");
 
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).starts_with("42\n"));
+    assert!(String::from_utf8_lossy(&output.stdout).starts_with("8\n"));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("LLVM JIT bailout:"), "{stderr}");
 }

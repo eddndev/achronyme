@@ -304,6 +304,7 @@ impl super::vm::VM {
             BuildList | BuildMap | GetIndex | SetIndex => {
                 self.handle_data(opcode, instruction, base)
             }
+            Eq | NotEq => self.handle_comparison(opcode, instruction, base),
             MethodCall => self.handle_method_call(instruction, base),
             LoadConst => {
                 let value = constant.ok_or_else(|| {
