@@ -217,3 +217,29 @@ fn unknown_opcode_is_rejected_before_llvm_emission() {
         "{error}"
     );
 }
+
+#[test]
+fn immediate_list_push_and_list_index_lower_to_guarded_specializations() {
+    let mut program = scalar_program(
+        vec![
+            encode_abc(OpCode::BuildList.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::Move.as_u8(), 2, 0, 0),
+            encode_abx(OpCode::LoadConst.as_u8(), 3, 1),
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::MethodCall.as_u8(), 1, 2, 1),
+            encode_abx(OpCode::LoadConst.as_u8(), 3, 2),
+            encode_abc(OpCode::GetIndex.as_u8(), 1, 0, 3),
+            encode_abc(OpCode::Return.as_u8(), 1, 1, 0),
+        ],
+        vec![Value::string(0), Value::int(7), Value::int(0)],
+    );
+    program.strings.push("push".to_string());
+
+    let module = lower_program(&program).unwrap();
+
+    assert_eq!(module.runtime_instruction_count, 1);
+    assert!(module.ir.contains("call i32 %list_push_fn"));
+    assert!(module.ir.contains("call i32 %list_index_fn"));
+    assert!(module.ir.contains("specialization.push.miss"));
+    assert!(module.ir.contains("specialization.index.miss"));
+}

@@ -8,6 +8,7 @@ use memory::{Function, Value};
 use super::{ExecutionOutcome, JitCacheStats, JitEngine};
 
 mod globals;
+mod specializations;
 
 fn arithmetic_program(operator: OpCode, left: i64, right: i64) -> CompiledProgram {
     CompiledProgram::new(

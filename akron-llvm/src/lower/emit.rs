@@ -13,6 +13,7 @@ const NIL_BITS: u64 = 1u64 << 60;
 const FALSE_BITS: u64 = 2u64 << 60;
 const TRUE_BITS: u64 = 3u64 << 60;
 mod poll;
+mod specialize;
 
 pub(super) fn emit(
     program: &akron::CompiledProgram,
@@ -75,6 +76,21 @@ fn emit_function(
             InstructionMode::Call(expected_prototype) => {
                 emitter.begin_instruction(ip, false);
                 emitter.call_instruction(ip, instruction, expected_prototype);
+                continue;
+            }
+            InstructionMode::SpecializationPreamble => {
+                emitter.begin_instruction(ip, false);
+                emitter.next(ip);
+                continue;
+            }
+            InstructionMode::ListPush => {
+                emitter.begin_instruction(ip, false);
+                emitter.list_push_instruction(ip, instruction, ip - 1);
+                continue;
+            }
+            InstructionMode::ListIndex => {
+                emitter.begin_instruction(ip, false);
+                emitter.list_index_instruction(ip, instruction);
                 continue;
             }
             InstructionMode::Direct => {}
@@ -209,6 +225,8 @@ impl<'output> Emitter<'output> {
             (16, "execution_window"),
             (17, "poll_fast_block"),
             (18, "prepare_known_call"),
+            (19, "list_push"),
+            (20, "list_index"),
         ] {
             self.load_api_function(field, name);
         }

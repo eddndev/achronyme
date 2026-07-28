@@ -8,8 +8,9 @@ use super::context::{
     execution_window, interpreter_bailout, load_register, poll, poll_block, poll_fast_block,
     poll_tier1_block, raise_error, refund_block, register_window, store_register,
 };
+use super::specializations::{list_index, list_push};
 
-pub const RUNTIME_ABI_VERSION: u32 = 4;
+pub const RUNTIME_ABI_VERSION: u32 = 5;
 pub type RuntimeStatus = u32;
 pub type CompiledEntry =
     unsafe extern "C" fn(*const RuntimeApi, *mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
@@ -24,6 +25,7 @@ pub const STATUS_INTERPRETER_COMPLETED: RuntimeStatus = 6;
 pub const STATUS_CALL_INTERPRETER_REQUIRED: RuntimeStatus = 7;
 pub const STATUS_SLOW_PATH_REQUIRED: RuntimeStatus = 8;
 pub const STATUS_KNOWN_CALL_MISS: RuntimeStatus = 9;
+pub const STATUS_SPECIALIZATION_MISS: RuntimeStatus = 10;
 
 pub const ERROR_INVALID_OPERAND: u32 = 1;
 pub const ERROR_DIVISION_BY_ZERO: u32 = 2;
@@ -57,6 +59,7 @@ pub type ExecutionWindowFn = unsafe extern "C" fn(
     *mut *mut c_void,
     *mut u32,
 ) -> RuntimeStatus;
+pub type SpecializeInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -76,6 +79,7 @@ impl RuntimeCapabilities {
     pub const GLOBAL_WINDOW: Self = Self(1 << 10);
     pub const FAST_POLL: Self = Self(1 << 11);
     pub const KNOWN_CALLS: Self = Self(1 << 12);
+    pub const LIST_SPECIALIZATION: Self = Self(1 << 13);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
@@ -88,7 +92,9 @@ impl RuntimeCapabilities {
             | Self::EXECUTION_STATS.0
             | Self::GLOBAL_WINDOW.0,
     );
-    pub const LLVM_TIER2: Self = Self(Self::LLVM_TIER1.0 | Self::FAST_POLL.0 | Self::KNOWN_CALLS.0);
+    pub const LLVM_TIER2: Self = Self(
+        Self::LLVM_TIER1.0 | Self::FAST_POLL.0 | Self::KNOWN_CALLS.0 | Self::LIST_SPECIALIZATION.0,
+    );
 
     pub const fn empty() -> Self {
         Self(0)
@@ -140,6 +146,8 @@ pub struct RuntimeApi {
     pub execution_window: ExecutionWindowFn,
     pub poll_fast_block: PollFastBlockFn,
     pub prepare_known_call: PrepareKnownCallFn,
+    pub list_push: SpecializeInstructionFn,
+    pub list_index: SpecializeInstructionFn,
 }
 
 #[repr(C)]
@@ -204,6 +212,31 @@ struct RuntimeApiV3 {
 
 pub const RUNTIME_ABI_V3_SIZE: u32 = size_of::<RuntimeApiV3>() as u32;
 
+#[repr(C)]
+struct RuntimeApiV4 {
+    magic: [u8; 8],
+    abi_version: u32,
+    struct_size: u32,
+    capabilities: RuntimeCapabilities,
+    load_register: LoadRegisterFn,
+    store_register: StoreRegisterFn,
+    poll: PollFn,
+    raise_error: RaiseErrorFn,
+    interpreter_bailout: InterpreterBailoutFn,
+    register_window: RegisterWindowFn,
+    poll_block: PollBlockFn,
+    refund_block: RefundBlockFn,
+    execute_instruction: ExecuteInstructionFn,
+    prepare_call: PrepareCallFn,
+    finish_call: FinishCallFn,
+    poll_tier1_block: PollTier1BlockFn,
+    execution_window: ExecutionWindowFn,
+    poll_fast_block: PollFastBlockFn,
+    prepare_known_call: PrepareKnownCallFn,
+}
+
+pub const RUNTIME_ABI_V4_SIZE: u32 = size_of::<RuntimeApiV4>() as u32;
+
 impl RuntimeApi {
     pub fn validate(
         &self,
@@ -256,6 +289,8 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     execution_window,
     poll_fast_block,
     prepare_known_call,
+    list_push,
+    list_index,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

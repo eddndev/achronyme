@@ -15,6 +15,13 @@ pub(super) enum ValueKind {
     Prototype(u32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ListPushSite {
+    None,
+    Preamble,
+    Method,
+}
+
 pub(super) fn transition(
     function: &Function,
     ip: usize,
@@ -22,6 +29,7 @@ pub(super) fn transition(
     opcode: OpCode,
     state: &mut [ValueKind],
     self_prototype: Option<u32>,
+    list_push_site: ListPushSite,
 ) -> Result<(InstructionMode, Vec<usize>), LoweringError> {
     let mut successors = Vec::with_capacity(2);
     let mode = match opcode {
@@ -31,14 +39,19 @@ pub(super) fn transition(
                 .constants
                 .get(decode_bx(instruction) as usize)
                 .ok_or_else(|| LoweringError::unsupported(ip, "constant is out of range"))?;
-            match scalar_kind(*constant) {
-                Some(kind) => {
-                    state[destination] = kind;
-                    InstructionMode::Direct
-                }
-                None => {
-                    state[destination] = ValueKind::Scalar;
-                    InstructionMode::Runtime
+            if list_push_site == ListPushSite::Preamble {
+                state[destination] = ValueKind::Scalar;
+                InstructionMode::SpecializationPreamble
+            } else {
+                match scalar_kind(*constant) {
+                    Some(kind) => {
+                        state[destination] = kind;
+                        InstructionMode::Direct
+                    }
+                    None => {
+                        state[destination] = ValueKind::Scalar;
+                        InstructionMode::Runtime
+                    }
                 }
             }
         }
@@ -163,7 +176,7 @@ pub(super) fn transition(
             initialized(state, decode_b(instruction), ip)?;
             initialized(state, decode_c(instruction), ip)?;
             state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
-            InstructionMode::Runtime
+            InstructionMode::ListIndex
         }
         OpCode::SetIndex => {
             initialized(state, decode_a(instruction), ip)?;
@@ -181,7 +194,11 @@ pub(super) fn transition(
                 ip,
             )?;
             state[register(state, decode_a(instruction), ip)?] = ValueKind::Scalar;
-            InstructionMode::Runtime
+            if list_push_site == ListPushSite::Method {
+                InstructionMode::ListPush
+            } else {
+                InstructionMode::Runtime
+            }
         }
         OpCode::Call => {
             let callee = initialized(state, decode_b(instruction), ip)?;

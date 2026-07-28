@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 
-use akron::opcode::instruction::decode_opcode;
+use akron::opcode::instruction::{decode_a, decode_b, decode_bx, decode_c, decode_opcode};
 use akron::{CompiledProgram, OpCode};
 use memory::Function;
 
 use super::LoweringError;
-use instruction::{transition, ValueKind};
+use instruction::{transition, ListPushSite, ValueKind};
 
 mod instruction;
 
@@ -14,6 +14,9 @@ pub(super) enum InstructionMode {
     Direct,
     Runtime,
     Call(Option<u32>),
+    SpecializationPreamble,
+    ListPush,
+    ListIndex,
     Bailout,
 }
 
@@ -82,13 +85,18 @@ impl Verification {
 }
 
 pub(super) fn verify(program: &CompiledProgram) -> Result<Verification, LoweringError> {
-    let main = verify_function(&program.main, 0, None)?;
+    let main = verify_function(&program.main, 0, None, &program.strings)?;
     let functions = program
         .functions
         .iter()
         .enumerate()
         .map(|(index, function)| {
-            verify_function(function, function.arity as usize, Some(index as u32))
+            verify_function(
+                function,
+                function.arity as usize,
+                Some(index as u32),
+                &program.strings,
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Verification { main, functions })
@@ -98,8 +106,10 @@ fn verify_function(
     function: &Function,
     parameter_count: usize,
     self_prototype: Option<u32>,
+    strings: &[String],
 ) -> Result<FunctionVerification, LoweringError> {
     let chunk = &function.chunk;
+    let push_fusion = PushFusion::build(function, strings);
     let mut verification = FunctionVerification {
         modes: vec![InstructionMode::Bailout; chunk.len()],
     };
@@ -130,6 +140,7 @@ fn verify_function(
             opcode,
             &mut state,
             self_prototype,
+            push_fusion.site(ip),
         );
         let (mode, successors) = match transition {
             Ok(result) => result,
@@ -151,6 +162,73 @@ fn verify_function(
         }
     }
     Ok(verification)
+}
+
+struct PushFusion {
+    preambles: Vec<bool>,
+    methods: Vec<bool>,
+}
+
+impl PushFusion {
+    fn site(&self, ip: usize) -> ListPushSite {
+        if self.preambles[ip] {
+            ListPushSite::Preamble
+        } else if self.methods[ip] {
+            ListPushSite::Method
+        } else {
+            ListPushSite::None
+        }
+    }
+
+    fn build(function: &Function, strings: &[String]) -> Self {
+        let mut plan = Self {
+            preambles: vec![false; function.chunk.len()],
+            methods: vec![false; function.chunk.len()],
+        };
+        let mut branch_targets = vec![false; function.chunk.len()];
+        for &instruction in &function.chunk {
+            let Some(opcode) = OpCode::from_u8(decode_opcode(instruction)) else {
+                continue;
+            };
+            if matches!(opcode, OpCode::Jump | OpCode::JumpIfFalse) {
+                if let Some(target) = branch_targets.get_mut(decode_bx(instruction) as usize) {
+                    *target = true;
+                }
+            }
+        }
+
+        for (method_ip, targeted) in branch_targets.iter().copied().enumerate().skip(1) {
+            let method = function.chunk[method_ip];
+            if targeted
+                || OpCode::from_u8(decode_opcode(method)) != Some(OpCode::MethodCall)
+                || decode_c(method) != 1
+                || decode_b(method) == 0
+            {
+                continue;
+            }
+            let preamble_ip = method_ip - 1;
+            let preamble = function.chunk[preamble_ip];
+            if OpCode::from_u8(decode_opcode(preamble)) != Some(OpCode::LoadConst)
+                || decode_a(preamble) != decode_b(method) - 1
+            {
+                continue;
+            }
+            let Some(constant) = function.constants.get(decode_bx(preamble) as usize) else {
+                continue;
+            };
+            let Some(string_index) = constant.as_handle() else {
+                continue;
+            };
+            if !constant.is_string()
+                || strings.get(string_index as usize).map(String::as_str) != Some("push")
+            {
+                continue;
+            }
+            plan.preambles[preamble_ip] = true;
+            plan.methods[method_ip] = true;
+        }
+        plan
+    }
 }
 
 fn merge(target: &mut Option<Vec<ValueKind>>, incoming: &[ValueKind]) -> bool {

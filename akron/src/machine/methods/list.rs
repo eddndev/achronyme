@@ -99,7 +99,10 @@ fn method_push(vm: &mut VM, receiver: Value, args: &[Value]) -> Result<Value, Ru
         ));
     }
     let handle = get_list_handle(receiver)?;
-    let item = args[0];
+    push_value(vm, handle, args[0])
+}
+
+pub(crate) fn push_value(vm: &mut VM, handle: u32, item: Value) -> Result<Value, RuntimeError> {
     vm.heap
         .list_push(handle, item)
         .ok_or(RuntimeError::stale_heap("List", "push"))?;

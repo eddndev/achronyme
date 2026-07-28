@@ -61,6 +61,14 @@ impl ExecutionStats {
         self.known_call_fast_misses = self.known_call_fast_misses.saturating_add(1);
     }
 
+    pub(super) fn record_specialization_hits(&mut self, count: u32) {
+        self.specialization_hits = self.specialization_hits.saturating_add(u64::from(count));
+    }
+
+    pub(super) fn record_specialization_miss(&mut self) {
+        self.specialization_misses = self.specialization_misses.saturating_add(1);
+    }
+
     pub(super) fn record_interpreter_fallback(&mut self, instruction: u32) {
         self.interpreter_fallbacks = self.interpreter_fallbacks.saturating_add(1);
         self.first_fallback_instruction.get_or_insert(instruction);

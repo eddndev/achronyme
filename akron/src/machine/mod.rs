@@ -21,6 +21,7 @@ mod native;
 mod promotion;
 pub mod prototype;
 pub mod prove;
+mod specialization;
 mod stack;
 mod upvalue;
 pub mod value_ops;
