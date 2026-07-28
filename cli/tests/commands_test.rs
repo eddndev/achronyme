@@ -33,7 +33,11 @@ fn compile_valid_source_with_output() {
     // Verify .achb was created with the ACH magic header
     let bytes = std::fs::read(&out_path).unwrap();
     assert!(bytes.len() >= 4, "output file too small");
-    assert_eq!(&bytes[..4], b"ACH\x0B", "wrong magic header");
+    assert_eq!(
+        &bytes[..4],
+        &[b'A', b'C', b'H', akron::EXECUTABLE_FORMAT_VERSION],
+        "wrong magic header"
+    );
 }
 
 #[test]
@@ -171,6 +175,39 @@ fn run_compiled_binary() {
         "run compiled binary failed: {:?}",
         result.err()
     );
+}
+
+#[test]
+fn compiled_binary_preserves_runtime_error_location() {
+    let src = write_temp_source("let a = 10\nlet b = 0\nlet c = a / b");
+    let out = tempfile::NamedTempFile::with_suffix(".achb").unwrap();
+    let out_path = out.path().to_str().unwrap().to_string();
+
+    cli::commands::compile::compile_file(
+        src.path().to_str().unwrap(),
+        Some(&out_path),
+        PrimeId::Bn254,
+        EF,
+    )
+    .expect("compile should succeed");
+
+    let result = cli::commands::run::run_file(
+        &out_path,
+        false,
+        None,
+        "r1cs",
+        PrimeId::Bn254,
+        None,
+        false,
+        false,
+        EF,
+        &[],
+    );
+    let error = result
+        .expect_err("compiled program should fail")
+        .to_string();
+    assert!(error.contains("[line 3] in main"), "{error}");
+    assert!(error.contains("division by zero"), "{error}");
 }
 
 // ======================================================================

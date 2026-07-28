@@ -1,0 +1,75 @@
+#![cfg(feature = "aot")]
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use akron::opcode::instruction::{encode_abc, encode_abx};
+use akron::{CompiledProgram, OpCode};
+use akron_llvm::{AotCompiler, AotOptions};
+use memory::field::PrimeId;
+use memory::{Function, Value};
+
+fn arithmetic_program() -> CompiledProgram {
+    CompiledProgram::new(
+        PrimeId::Bn254,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Function {
+            name: "main".to_string(),
+            arity: 0,
+            max_slots: 3,
+            chunk: vec![
+                encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+                encode_abx(OpCode::LoadConst.as_u8(), 1, 1),
+                encode_abc(OpCode::Mul.as_u8(), 2, 0, 1),
+                encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+            ],
+            constants: vec![Value::int(6), Value::int(7)],
+            upvalue_info: Vec::new(),
+            line_info: vec![1, 1, 1, 1],
+        },
+        HashMap::new(),
+    )
+}
+
+fn runtime_archive() -> PathBuf {
+    if let Some(path) = std::env::var_os("AKRON_AOT_RUNTIME_ARCHIVE") {
+        return PathBuf::from(path);
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/debug/libakron_aot_runtime.a")
+}
+
+#[test]
+fn aot_builds_and_executes_native_artifact() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("answer");
+    let runtime = runtime_archive();
+    assert!(
+        runtime.is_file(),
+        "build the AOT runtime first: cargo build -p akron-aot-runtime"
+    );
+    let options = AotOptions::new("clang", runtime);
+
+    let artifact = AotCompiler::new(options)
+        .build_executable(&arithmetic_program(), &executable)
+        .unwrap();
+
+    assert_eq!(artifact.executable, executable);
+    #[cfg(target_os = "linux")]
+    assert_eq!(&std::fs::read(&executable).unwrap()[..4], b"\x7fELF");
+    let output = Command::new(&executable).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "Exit Status: 42\n");
+}

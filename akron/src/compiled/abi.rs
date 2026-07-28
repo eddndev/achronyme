@@ -1,0 +1,161 @@
+use std::ffi::c_void;
+use std::fmt;
+use std::mem::size_of;
+use std::ops::{BitOr, BitOrAssign};
+
+use super::context::{interpreter_bailout, load_register, poll, raise_error, store_register};
+
+pub const RUNTIME_ABI_VERSION: u32 = 1;
+pub type RuntimeStatus = u32;
+pub type CompiledEntry =
+    unsafe extern "C" fn(*const RuntimeApi, *mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
+
+pub const STATUS_OK: RuntimeStatus = 0;
+pub const STATUS_RUNTIME_ERROR: RuntimeStatus = 1;
+pub const STATUS_INVALID_ARGUMENT: RuntimeStatus = 2;
+pub const STATUS_INTERNAL_ERROR: RuntimeStatus = 3;
+
+pub const ERROR_INVALID_OPERAND: u32 = 1;
+pub const ERROR_DIVISION_BY_ZERO: u32 = 2;
+pub const ERROR_INTEGER_OVERFLOW: u32 = 3;
+pub const ERROR_ASSERTION_FAILED: u32 = 4;
+pub const ERROR_STACK_OVERFLOW: u32 = 5;
+
+pub type LoadRegisterFn = unsafe extern "C" fn(*mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
+pub type StoreRegisterFn = unsafe extern "C" fn(*mut c_void, u32, u32, u64) -> RuntimeStatus;
+pub type PollFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
+pub type RaiseErrorFn = unsafe extern "C" fn(*mut c_void, u32) -> RuntimeStatus;
+pub type InterpreterBailoutFn =
+    unsafe extern "C" fn(*mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct RuntimeCapabilities(u64);
+
+impl RuntimeCapabilities {
+    pub const REGISTER_IO: Self = Self(1 << 0);
+    pub const POLL: Self = Self(1 << 1);
+    pub const RAISE_ERROR: Self = Self(1 << 2);
+    pub const INTERPRETER_BAILOUT: Self = Self(1 << 3);
+    pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
+    pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
+
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    pub const fn bits(self) -> u64 {
+        self.0
+    }
+
+    pub const fn contains(self, other: Self) -> bool {
+        (self.0 & other.0) == other.0
+    }
+}
+
+impl BitOr for RuntimeCapabilities {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for RuntimeCapabilities {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+/// Append-only C ABI table passed to compiled code.
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct RuntimeApi {
+    pub magic: [u8; 8],
+    pub abi_version: u32,
+    pub struct_size: u32,
+    pub capabilities: RuntimeCapabilities,
+    pub load_register: LoadRegisterFn,
+    pub store_register: StoreRegisterFn,
+    pub poll: PollFn,
+    pub raise_error: RaiseErrorFn,
+    pub interpreter_bailout: InterpreterBailoutFn,
+}
+
+impl RuntimeApi {
+    pub fn validate(
+        &self,
+        required_version: u32,
+        required_size: u32,
+        required_capabilities: RuntimeCapabilities,
+    ) -> Result<(), RuntimeAbiError> {
+        if self.magic != *b"AKRTABI\0" {
+            return Err(RuntimeAbiError::InvalidMagic);
+        }
+        if self.abi_version != required_version {
+            return Err(RuntimeAbiError::Version {
+                required: required_version,
+                provided: self.abi_version,
+            });
+        }
+        if self.struct_size < required_size {
+            return Err(RuntimeAbiError::TableSize {
+                required: required_size,
+                provided: self.struct_size,
+            });
+        }
+        if !self.capabilities.contains(required_capabilities) {
+            return Err(RuntimeAbiError::Capabilities {
+                required: required_capabilities.bits(),
+                provided: self.capabilities.bits(),
+            });
+        }
+        Ok(())
+    }
+}
+
+static RUNTIME_API: RuntimeApi = RuntimeApi {
+    magic: *b"AKRTABI\0",
+    abi_version: RUNTIME_ABI_VERSION,
+    struct_size: size_of::<RuntimeApi>() as u32,
+    capabilities: RuntimeCapabilities::LLVM_BASELINE,
+    load_register,
+    store_register,
+    poll,
+    raise_error,
+    interpreter_bailout,
+};
+
+pub fn runtime_api() -> &'static RuntimeApi {
+    &RUNTIME_API
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeAbiError {
+    InvalidMagic,
+    Version { required: u32, provided: u32 },
+    TableSize { required: u32, provided: u32 },
+    Capabilities { required: u64, provided: u64 },
+}
+
+impl fmt::Display for RuntimeAbiError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidMagic => write!(formatter, "invalid runtime ABI magic"),
+            Self::Version { required, provided } => write!(
+                formatter,
+                "runtime ABI version mismatch: required {required}, provided {provided}"
+            ),
+            Self::TableSize { required, provided } => write!(
+                formatter,
+                "runtime ABI table is too small: required {required}, provided {provided}"
+            ),
+            Self::Capabilities { required, provided } => write!(
+                formatter,
+                "runtime ABI capabilities 0x{provided:x} do not satisfy 0x{required:x}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RuntimeAbiError {}

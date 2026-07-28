@@ -3,6 +3,8 @@ members = [
     "diagnostics",
     "memory",
     "akron",
+    "akron-llvm",
+    "akron-aot-runtime",
     "akronc",
     "constraints",
     "achronyme-parser",

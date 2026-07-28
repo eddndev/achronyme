@@ -67,6 +67,29 @@ const _: () = assert!(TAG_CIRCOM_HANDLE < 16, "tag must fit in 4 bits");
 pub struct Value(pub(crate) u64);
 
 impl Value {
+    /// Return the canonical bits used by the bytecode and native runtime ABI.
+    #[inline]
+    pub const fn to_abi_bits(self) -> u64 {
+        self.0
+    }
+
+    /// Reconstruct a value from native runtime ABI bits.
+    ///
+    /// Integer payloads may use all 60 bits. Nil and booleans require a zero
+    /// payload, while heap-backed values require a canonical u32 handle.
+    #[inline]
+    pub fn from_abi_bits(bits: u64) -> Option<Self> {
+        let tag = bits >> TAG_SHIFT;
+        let payload = bits & PAYLOAD_MASK;
+        let canonical = match tag {
+            TAG_INT => true,
+            TAG_NIL | TAG_FALSE | TAG_TRUE => payload == 0,
+            TAG_STRING..=TAG_CIRCOM_HANDLE => payload <= u32::MAX as u64,
+            _ => false,
+        };
+        canonical.then_some(Self(bits))
+    }
+
     // --- Constructors ---
 
     #[inline]

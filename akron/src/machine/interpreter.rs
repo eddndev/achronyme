@@ -7,7 +7,6 @@ use super::closure::ClosureOps;
 use super::comparison::ComparisonOps;
 use super::control::ControlFlowOps;
 use super::data::DataOps;
-use super::gc::GarbageCollector;
 use super::globals::GlobalOps;
 use super::iterator::IteratorOps;
 use super::stack::StackOps;
@@ -82,28 +81,14 @@ impl super::vm::VM {
         while self.frames.len() > target_depth {
             // Batched GC check point
             gc_countdown -= 1;
-            if gc_countdown == 0 {
+            if gc_countdown == 0 || self.heap.heap_limit_exceeded {
                 gc_countdown = if self.stress_mode {
                     1
                 } else {
                     GC_CHECK_INTERVAL
                 };
 
-                if self.heap.request_gc || self.stress_mode {
-                    self.collect_garbage();
-                    self.heap.request_gc = false;
-                }
-
-                if self.heap.heap_limit_exceeded {
-                    self.collect_garbage();
-                    self.heap.heap_limit_exceeded = false;
-                    if self.heap.bytes_allocated > self.heap.max_heap_bytes {
-                        return Err(RuntimeError::heap_limit_exceeded(
-                            self.heap.max_heap_bytes,
-                            self.heap.bytes_allocated,
-                        ));
-                    }
-                }
+                self.poll_gc()?;
             }
 
             let frame_idx = self.frames.len() - 1;
@@ -133,7 +118,11 @@ impl super::vm::VM {
             let func = unsafe { self.heap.get_function_unchecked(func_idx) };
 
             if ip >= func.chunk.len() {
-                self.frames.pop();
+                if let Some(frame) = self.frames.pop() {
+                    if self.frames.is_empty() {
+                        self.last_result = self.stack[frame.base];
+                    }
+                }
                 continue;
             }
 

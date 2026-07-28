@@ -1,0 +1,17 @@
+[package]
+name = "akron-aot-runtime"
+description = "Static host runtime linked into Akron LLVM AOT executables."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+akron = { path = "../akron" }
+memory = { path = "../memory" }
+achronyme-std = { path = "../std" }

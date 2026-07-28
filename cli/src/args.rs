@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use cli::commands::engine::ExecutionEngine;
 
 #[derive(Parser)]
 #[command(name = "ach", version)]
@@ -46,12 +47,18 @@ pub enum Commands {
         /// Maximum heap size (e.g., "256M", "1G", "512K", or raw bytes)
         #[arg(long)]
         max_heap: Option<String>,
+        /// Maximum number of bytecode instructions to execute
+        #[arg(long)]
+        max_instructions: Option<u64>,
         /// Print GC statistics to stderr after execution
         #[arg(long)]
         gc_stats: bool,
         /// Print circuit constraint stats for each prove block
         #[arg(long)]
         circuit_stats: bool,
+        /// Execution engine: interpreter, jit, or auto
+        #[arg(long, value_enum, default_value = "interpreter")]
+        engine: ExecutionEngine,
     },
     /// Disassemble a source file or binary
     Disassemble {
@@ -65,6 +72,20 @@ pub enum Commands {
         /// Output binary file (optional)
         #[arg(short, long)]
         output: Option<String>,
+    },
+    /// Compile a source file or current ACHB image to a native executable
+    Aot {
+        /// Input source or ACHB file. If omitted, uses [project].entry
+        path: Option<String>,
+        /// Native executable path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Path to libakron_aot_runtime.a
+        #[arg(long)]
+        runtime: Option<String>,
+        /// Clang 21 executable
+        #[arg(long, default_value = "clang")]
+        clang: String,
     },
     /// Open the interactive circuit inspector in the browser
     Inspect {

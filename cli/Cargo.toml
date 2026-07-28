@@ -14,6 +14,10 @@ categories.workspace = true
 name = "ach"
 path = "src/main.rs"
 
+[features]
+default = []
+llvm = ["dep:akron-llvm", "akron-llvm/llvm", "akron-llvm/aot"]
+
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
 anyhow = "1.0"
@@ -35,6 +39,7 @@ prove-engine = { path = "../prove-engine" }
 
 memory = { path = "../memory" }
 akron = { path = "../akron" }
+akron-llvm = { path = "../akron-llvm", optional = true, default-features = false }
 akronc = { path = "../akronc" }
 artik = { path = "../artik" }
 zkc = { path = "../zkc" }

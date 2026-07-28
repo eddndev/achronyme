@@ -1,8 +1,6 @@
-use akron::specs::{
-    SER_TAG_BIGINT, SER_TAG_BYTES, SER_TAG_FIELD, SER_TAG_INT, SER_TAG_NIL, SER_TAG_STRING,
-};
 use anyhow::{Context, Result};
 use std::fs;
+use std::path::PathBuf;
 
 use super::ErrorFormat;
 
@@ -12,176 +10,37 @@ pub fn compile_file(
     prime_id: memory::field::PrimeId,
     error_format: ErrorFormat,
 ) -> Result<()> {
+    compile_file_with_lib_dirs(path, output, prime_id, error_format, &[])
+}
+
+pub fn compile_file_with_lib_dirs(
+    path: &str,
+    output: Option<&str>,
+    prime_id: memory::field::PrimeId,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[PathBuf],
+) -> Result<()> {
     let content = fs::read_to_string(path).context("Failed to read file")?;
     let mut compiler = super::new_compiler();
-    compiler.prime_id = prime_id;
-    let bytecode = compiler.compile(&content).map_err(|e| {
-        let rendered = super::render_compile_error(&e, &content, error_format);
-        anyhow::anyhow!("{rendered}")
-    })?;
+    let options = akronc::CompileOptions::for_source(path)
+        .with_prime(prime_id)
+        .with_circom_lib_dirs(circom_lib_dirs.to_vec());
+    let program = compiler
+        .compile_program(&content, &options)
+        .map_err(|error| {
+            let rendered = super::render_compile_error(&error, &content, error_format);
+            anyhow::anyhow!("{rendered}")
+        })?;
 
     super::print_warnings(&mut compiler, &content, error_format);
 
-    println!("Compiled {} instructions.", bytecode.len());
+    println!("Compiled {} instructions.", program.main.chunk.len());
 
     if let Some(out_path) = output {
-        use byteorder::{LittleEndian, WriteBytesExt};
-        use std::io::Write;
-
         let mut file = fs::File::create(out_path).context("Failed to create output file")?;
-
-        file.write_all(b"ACH\x0B")?;
-
-        // PrimeId (v0x0B+): identifies which prime field was used
-        file.write_u8(prime_id.to_byte())?;
-
-        // Metadata
-        let main_func = compiler
-            .compilers
-            .last()
-            .ok_or_else(|| anyhow::anyhow!("compiler has no main function"))?;
-        file.write_u16::<LittleEndian>(main_func.max_slots)?;
-
-        // --- String Table ---
-        let strings = &compiler.interner.strings;
-        file.write_u32::<LittleEndian>(strings.len() as u32)?;
-        for s in strings {
-            let bytes = s.as_bytes();
-            file.write_u32::<LittleEndian>(bytes.len() as u32)?;
-            file.write_all(bytes)?;
-        }
-
-        // --- Field Table ---
-        let fields = &compiler.field_interner.fields;
-        file.write_u32::<LittleEndian>(fields.len() as u32)?;
-        for fe in fields {
-            let canonical = fe.to_canonical();
-            for limb in &canonical {
-                file.write_u64::<LittleEndian>(*limb)?;
-            }
-        }
-
-        // --- BigInt Table ---
-        let bigints = &compiler.bigint_interner.bigints;
-        file.write_u32::<LittleEndian>(bigints.len() as u32)?;
-        for bi in bigints {
-            // width tag: 0 = W256, 1 = W512
-            let width_tag: u8 = match bi.width() {
-                memory::BigIntWidth::W256 => 0,
-                memory::BigIntWidth::W512 => 1,
-            };
-            file.write_u8(width_tag)?;
-            for &limb in bi.limbs() {
-                file.write_u64::<LittleEndian>(limb)?;
-            }
-        }
-
-        // --- Bytes Table (binary blobs, e.g. serialized ProveIR) ---
-        let blobs = &compiler.bytes_interner.blobs;
-        file.write_u32::<LittleEndian>(blobs.len() as u32)?;
-        for blob in blobs {
-            file.write_u32::<LittleEndian>(blob.len() as u32)?;
-            file.write_all(blob)?;
-        }
-
-        // --- Constants ---
-        let main_func = compiler
-            .compilers
-            .last()
-            .ok_or_else(|| anyhow::anyhow!("compiler has no main function"))?;
-        file.write_u32::<LittleEndian>(main_func.constants.len() as u32)?;
-        for c in &main_func.constants {
-            if let Some(n) = c.as_int() {
-                file.write_u8(SER_TAG_INT)?;
-                file.write_i64::<LittleEndian>(n)?;
-            } else if c.is_string() {
-                file.write_u8(SER_TAG_STRING)?;
-                let handle = c.as_handle().expect("String value must have handle");
-                file.write_u32::<LittleEndian>(handle)?;
-            } else if c.is_field() {
-                file.write_u8(SER_TAG_FIELD)?;
-                let handle = c.as_handle().expect("Field value must have handle");
-                file.write_u32::<LittleEndian>(handle)?;
-            } else if c.is_bigint() {
-                file.write_u8(SER_TAG_BIGINT)?;
-                let handle = c.as_handle().expect("BigInt value must have handle");
-                file.write_u32::<LittleEndian>(handle)?;
-            } else if c.is_bytes() {
-                file.write_u8(SER_TAG_BYTES)?;
-                let handle = c.as_handle().expect("Bytes value must have handle");
-                file.write_u32::<LittleEndian>(handle)?;
-            } else if c.is_nil() {
-                file.write_u8(SER_TAG_NIL)?;
-            } else {
-                return Err(anyhow::anyhow!(
-                    "Unsupported constant type for serialization: {:?}",
-                    c
-                ));
-            }
-        }
-
-        // --- Prototypes (Function Table) ---
-        file.write_u32::<LittleEndian>(compiler.prototypes.len() as u32)?;
-        for proto in &compiler.prototypes {
-            // Name
-            let name_bytes = proto.name.as_bytes();
-            file.write_u32::<LittleEndian>(name_bytes.len() as u32)?;
-            file.write_all(name_bytes)?;
-
-            // Arity and max_slots
-            file.write_u8(proto.arity)?;
-            file.write_u16::<LittleEndian>(proto.max_slots)?;
-
-            // Proto constants
-            file.write_u32::<LittleEndian>(proto.constants.len() as u32)?;
-            for c in &proto.constants {
-                if let Some(n) = c.as_int() {
-                    file.write_u8(SER_TAG_INT)?;
-                    file.write_i64::<LittleEndian>(n)?;
-                } else if c.is_string() {
-                    file.write_u8(SER_TAG_STRING)?;
-                    let handle = c.as_handle().expect("String value must have handle");
-                    file.write_u32::<LittleEndian>(handle)?;
-                } else if c.is_field() {
-                    file.write_u8(SER_TAG_FIELD)?;
-                    let handle = c.as_handle().expect("Field value must have handle");
-                    file.write_u32::<LittleEndian>(handle)?;
-                } else if c.is_bigint() {
-                    file.write_u8(SER_TAG_BIGINT)?;
-                    let handle = c.as_handle().expect("BigInt value must have handle");
-                    file.write_u32::<LittleEndian>(handle)?;
-                } else if c.is_bytes() {
-                    file.write_u8(SER_TAG_BYTES)?;
-                    let handle = c.as_handle().expect("Bytes value must have handle");
-                    file.write_u32::<LittleEndian>(handle)?;
-                } else {
-                    file.write_u8(SER_TAG_NIL)?;
-                }
-            }
-
-            // Upvalue Info (New in v2)
-            let upvalue_count = (proto.upvalue_info.len() / 2) as u32;
-            file.write_u32::<LittleEndian>(upvalue_count)?;
-            file.write_all(&proto.upvalue_info)?;
-
-            // Proto bytecode
-            file.write_u32::<LittleEndian>(proto.chunk.len() as u32)?;
-            for inst in &proto.chunk {
-                file.write_u32::<LittleEndian>(*inst)?;
-            }
-        }
-
-        // --- Main Bytecode ---
-        file.write_u32::<LittleEndian>(bytecode.len() as u32)?;
-        for inst in &bytecode {
-            file.write_u32::<LittleEndian>(*inst)?;
-        }
-
-        // Append Debug Symbols (Sidecar)
-        let mut debug_buffer = Vec::new();
-        compiler.append_debug_symbols(&mut debug_buffer);
-        file.write_all(&debug_buffer)?;
-
+        program
+            .write_executable(&mut file)
+            .map_err(|error| anyhow::anyhow!("Failed to write executable: {error}"))?;
         println!("Saved binary to {}", out_path);
     }
     Ok(())

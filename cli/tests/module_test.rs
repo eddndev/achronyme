@@ -75,7 +75,7 @@ fn import_internal_helper_function() {
 
 #[test]
 fn import_transitive() {
-    // c.ach → b.ach → a.ach (transitive chain)
+    // c.ach -> b.ach -> a.ach (transitive chain)
     let result = cli::commands::run::run_file(
         &fixture("transitive/c.ach"),
         false,
@@ -151,6 +151,48 @@ fn import_no_exports_module() {
         &[],
     );
     assert!(result.is_ok(), "run_file failed: {:?}", result.err());
+}
+
+#[test]
+fn compile_binary_preserves_relative_module_resolution() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let binary = tmpdir.path().join("main_vm.achb");
+
+    let compile_result = cli::commands::compile::compile_file(
+        &fixture("main_vm.ach"),
+        Some(binary.to_str().unwrap()),
+        PrimeId::Bn254,
+        EF,
+    );
+    assert!(
+        compile_result.is_ok(),
+        "compile_file failed: {:?}",
+        compile_result.err()
+    );
+
+    let run_result = cli::commands::run::run_file(
+        binary.to_str().unwrap(),
+        false,
+        None,
+        "r1cs",
+        PrimeId::Bn254,
+        None,
+        false,
+        false,
+        EF,
+        &[],
+    );
+    assert!(
+        run_result.is_ok(),
+        "run compiled module failed: {:?}",
+        run_result.err()
+    );
+}
+
+#[test]
+fn disassemble_resolves_relative_modules() {
+    let result = cli::commands::disassemble::disassemble_file(&fixture("main_vm.ach"), EF);
+    assert!(result.is_ok(), "disassemble failed: {:?}", result.err());
 }
 
 // ======================================================================
@@ -295,7 +337,7 @@ fn compile_fixture_warning_messages(name: &str) -> Vec<String> {
 
 #[test]
 fn w005_unused_selective_import() {
-    // imports { add, PI } but only uses add → PI should trigger W005
+    // imports { add, PI } but only uses add -> PI should trigger W005
     let ws = compile_fixture_warning_messages("test_w005_unused.ach");
     assert!(
         ws.iter()
@@ -312,7 +354,7 @@ fn w005_unused_selective_import() {
 
 #[test]
 fn w005_all_used_no_warning() {
-    // imports { add, PI } and uses both → no W005
+    // imports { add, PI } and uses both -> no W005
     let ws = compile_fixture_warning_messages("test_w005_all_used.ach");
     let w005s: Vec<_> = ws.iter().filter(|m| m.contains("imported name")).collect();
     assert!(
@@ -324,7 +366,7 @@ fn w005_all_used_no_warning() {
 
 #[test]
 fn w005_underscore_suppresses_warning() {
-    // imports { add, _PI } but only uses add → _PI should NOT trigger W005
+    // imports { add, _PI } but only uses add -> _PI should NOT trigger W005
     let ws = compile_fixture_warning_messages("test_w005_underscore.ach");
     assert!(
         !ws.iter().any(|m| m.contains("_PI")),
@@ -400,7 +442,7 @@ fn circuit_import_not_found() {
 fn circuit_import_self_circular_detected() {
     let tmpdir = tempfile::tempdir().unwrap();
 
-    // a.ach imports itself — triggers circular detection
+    // a.ach imports itself - triggers circular detection
     std::fs::write(
         tmpdir.path().join("a.ach"),
         "import \"./a.ach\" as self_ref\n\

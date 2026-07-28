@@ -78,22 +78,29 @@ fn main() -> Result<()> {
     match &cli.command {
         Commands::Init { .. } => unreachable!(),
 
-        Commands::Run { ptau, .. } => {
+        Commands::Run {
+            ptau,
+            engine,
+            max_instructions,
+            ..
+        } => {
             let path = cfg.entry.as_deref().ok_or_else(|| {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
             validate_prime_backend(prime_id, &cfg.prove_backend)?;
-            cli::commands::run::run_file(
+            cli::commands::run::run_file_with_engine(
                 path,
                 cfg.stress_gc,
                 ptau.as_deref(),
                 &cfg.prove_backend,
                 prime_id,
                 cfg.max_heap.as_deref(),
+                *max_instructions,
                 cfg.gc_stats,
                 cfg.circuit_stats,
                 ef,
                 &cfg.circom_lib_dirs,
+                *engine,
             )
         }
 
@@ -101,7 +108,12 @@ fn main() -> Result<()> {
             let path = cfg.entry.as_deref().ok_or_else(|| {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
-            cli::commands::disassemble::disassemble_file(path, ef)
+            cli::commands::disassemble::disassemble_file_with_options(
+                path,
+                ef,
+                prime_id,
+                &cfg.circom_lib_dirs,
+            )
         }
 
         Commands::Compile { output, .. } => {
@@ -109,7 +121,33 @@ fn main() -> Result<()> {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
             let out = output.as_deref().or(cfg.binary_path.as_deref());
-            cli::commands::compile::compile_file(path, out, prime_id, ef)
+            cli::commands::compile::compile_file_with_lib_dirs(
+                path,
+                out,
+                prime_id,
+                ef,
+                &cfg.circom_lib_dirs,
+            )
+        }
+
+        Commands::Aot {
+            output,
+            runtime,
+            clang,
+            ..
+        } => {
+            let path = cfg.entry.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
+            })?;
+            cli::commands::aot::aot_file(
+                path,
+                output.as_deref(),
+                runtime.as_deref(),
+                clang,
+                prime_id,
+                ef,
+                &cfg.circom_lib_dirs,
+            )
         }
 
         Commands::Inspect {
@@ -213,6 +251,7 @@ fn command_start_dir(cmd: &Commands) -> std::path::PathBuf {
         Commands::Run { path, .. }
         | Commands::Disassemble { path }
         | Commands::Compile { path, .. }
+        | Commands::Aot { path, .. }
         | Commands::Inspect { path, .. }
         | Commands::Circuit { path, .. }
         | Commands::Circom { path, .. } => path.as_deref(),
@@ -276,7 +315,7 @@ fn build_overrides(cli: &Cli) -> CliOverrides {
             circuit_stats: false,
         },
 
-        Commands::Compile { path, .. } => CliOverrides {
+        Commands::Compile { path, .. } | Commands::Aot { path, .. } => CliOverrides {
             path: path.clone(),
             error_format: cli.error_format.clone(),
             prime: cli.prime.clone(),

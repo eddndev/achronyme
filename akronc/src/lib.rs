@@ -7,6 +7,7 @@ pub mod functions;
 pub mod interner;
 pub mod module_loader;
 pub mod optimizer;
+pub mod program;
 pub mod scopes;
 pub mod statements;
 pub mod suggest;
@@ -15,6 +16,7 @@ pub mod types;
 pub use codegen::Compiler;
 pub use error::CompilerError;
 pub use interner::{FieldInterner, StringInterner};
+pub use program::CompileOptions;
 
 /// Disambiguating alias for [`Compiler`]. `BytecodeCompiler` makes
 /// the role explicit when [`Compiler`] would clash with

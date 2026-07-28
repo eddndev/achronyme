@@ -1,9 +1,11 @@
 extern crate self as akron;
 
+pub mod compiled;
 pub mod error;
 pub mod globals;
 pub mod machine;
 pub mod opcode;
+pub mod program;
 
 pub use error::RuntimeError;
 pub use globals::GlobalEntry;
@@ -15,6 +17,9 @@ pub use machine::{
     ProveHandler, ProveResult, VerifyHandler, MAX_FRAMES, VM,
 };
 pub use opcode::OpCode;
+pub use program::{
+    CompiledProgram, ProgramCapabilities, BYTECODE_VERSION, EXECUTABLE_FORMAT_VERSION,
+};
 pub mod module;
 pub mod native;
 pub use module::{NativeDef, NativeModule};

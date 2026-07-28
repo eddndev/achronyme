@@ -56,6 +56,9 @@ pub struct VM {
     /// Set by interpret() before returning Err.
     pub last_error_location: Option<(String, u32)>,
 
+    /// Value returned by the most recently completed top-level frame.
+    pub last_result: Value,
+
     /// GC roots for values held by native functions during reentrant calls.
     ///
     /// Higher-order natives (map, filter, reduce, etc.) re-enter the
@@ -102,6 +105,7 @@ impl VM {
             verify_handler: None,
             circom_handler: None,
             last_error_location: None,
+            last_result: Value::nil(),
             native_roots: Vec::new(),
             prototype_registry: PrototypeRegistry::new(),
             prime_id: PrimeId::Bn254,
@@ -264,6 +268,8 @@ impl VM {
         // 2. Clear Runtime State
         self.frames.clear();
         self.open_upvalues = None;
+        self.last_result = Value::nil();
+        self.last_error_location = None;
 
         // 3. Zero stack in debug builds to prevent stale values leaking
         #[cfg(debug_assertions)]
@@ -271,7 +277,7 @@ impl VM {
     }
 
     /// Capture the current execution location for error reporting.
-    fn capture_error_location(&mut self) {
+    pub(crate) fn capture_error_location(&mut self) {
         if let Some(frame) = self.frames.last() {
             let ip = if frame.ip > 0 { frame.ip - 1 } else { 0 };
             if let Some(closure) = self.heap.get_closure(frame.closure) {

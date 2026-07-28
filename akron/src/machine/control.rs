@@ -123,6 +123,8 @@ impl ControlFlowOps for super::vm::VM {
                     // Only if there's still a caller (not the top-level script)
                     if !self.frames.is_empty() {
                         self.set_reg(0, frame.dest_reg, ret_val)?;
+                    } else {
+                        self.last_result = ret_val;
                     }
                 }
             }

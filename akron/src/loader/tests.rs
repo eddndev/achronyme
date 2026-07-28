@@ -1,4 +1,8 @@
 use super::*;
+use byteorder::{LittleEndian, WriteBytesExt};
+
+use crate::opcode::instruction::encode_abc;
+use crate::opcode::OpCode;
 
 #[test]
 fn validate_field_limbs_bn254_zero_ok() {
@@ -47,6 +51,28 @@ fn validate_field_limbs_goldilocks_modulus_rejected() {
 
 #[test]
 fn validate_field_limbs_goldilocks_nonzero_upper_rejected() {
-    // l1 != 0 but l0 < p — still exceeds modulus because total > p
+    // l1 != 0 but l0 < p still exceeds the modulus because total > p.
     assert!(!validate_field_limbs([0, 1, 0, 0], PrimeId::Goldilocks));
+}
+
+#[test]
+fn legacy_v11_executable_remains_loadable() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"ACH\x0B");
+    bytes.write_u8(PrimeId::Bn254.to_byte()).unwrap();
+    bytes.write_u16::<LittleEndian>(1).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(1).unwrap();
+    bytes
+        .write_u32::<LittleEndian>(encode_abc(OpCode::Return.as_u8(), 0, 0, 0))
+        .unwrap();
+
+    let mut vm = VM::new();
+    vm.load_executable(&mut bytes.as_slice()).unwrap();
+    vm.interpret().unwrap();
 }
