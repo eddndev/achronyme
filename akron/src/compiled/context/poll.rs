@@ -75,6 +75,7 @@ fn poll_block_entry(
     run_status_helper(context, |state| {
         if record_stats {
             state.stats.record_block_poll();
+            state.stats.record_slow_poll_entry();
         }
         let (stress_mode, instruction_budget) = {
             let vm = unsafe { state.vm_mut() };

@@ -161,8 +161,12 @@ fn print_trace(bailout_ip: Option<u32>, stats: ExecutionStats) {
         }
         None => eprintln!("LLVM AOT native: program completed without interpreter bailout"),
     }
-    eprintln!(
-        "LLVM AOT stats: direct={} runtime_calls={} compiled_calls={} native_calls={} block_polls={} slow_paths={} fallbacks={} first_fallback={}",
+    eprintln!("{}", format_stats(stats));
+}
+
+fn format_stats(stats: ExecutionStats) -> String {
+    format!(
+        "LLVM AOT stats: direct={} runtime_calls={} compiled_calls={} native_calls={} block_polls={} slow_paths={} fallbacks={} fast_poll_hits={} slow_poll_entries={} known_call_fast_hits={} known_call_fast_misses={} specialization_hits={} specialization_misses={} first_fallback={}",
         stats.direct_instructions,
         stats.runtime_calls,
         stats.compiled_function_calls,
@@ -170,10 +174,16 @@ fn print_trace(bailout_ip: Option<u32>, stats: ExecutionStats) {
         stats.block_polls,
         stats.slow_paths,
         stats.interpreter_fallbacks,
+        stats.fast_poll_hits,
+        stats.slow_poll_entries,
+        stats.known_call_fast_hits,
+        stats.known_call_fast_misses,
+        stats.specialization_hits,
+        stats.specialization_misses,
         stats
             .first_fallback_instruction
             .map_or_else(|| "none".to_string(), |instruction| instruction.to_string()),
-    );
+    )
 }
 
 fn apply_environment(vm: &mut VM) -> Result<(), String> {
@@ -208,5 +218,35 @@ fn format_runtime_error(vm: &VM, error: &akron::RuntimeError) -> String {
     match &vm.last_error_location {
         Some((function, line)) => format!("[line {line}] in {function}: {error}"),
         None => format!("Runtime error: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use akron::compiled::ExecutionStats;
+
+    use super::format_stats;
+
+    #[test]
+    fn trace_format_preserves_tier1_and_exposes_tier2_counters() {
+        let stats = ExecutionStats {
+            direct_instructions: 1,
+            fast_poll_hits: 2,
+            slow_poll_entries: 3,
+            known_call_fast_hits: 4,
+            known_call_fast_misses: 5,
+            specialization_hits: 6,
+            specialization_misses: 7,
+            ..ExecutionStats::default()
+        };
+
+        let trace = format_stats(stats);
+        assert!(trace.contains("direct=1"));
+        assert!(trace.contains("fast_poll_hits=2"));
+        assert!(trace.contains("slow_poll_entries=3"));
+        assert!(trace.contains("known_call_fast_hits=4"));
+        assert!(trace.contains("known_call_fast_misses=5"));
+        assert!(trace.contains("specialization_hits=6"));
+        assert!(trace.contains("specialization_misses=7"));
     }
 }

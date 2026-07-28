@@ -12,5 +12,6 @@ pub use lower::{lower_program, LoweredModule, LoweringError};
 
 #[cfg(feature = "llvm")]
 pub use jit::{
-    ExecutionOutcome, ExecutionResult, JitCompileTimings, JitEngine, JitError, LlvmVersion,
+    ExecutionOutcome, ExecutionResult, JitCacheStats, JitCompileTimings, JitEngine, JitError,
+    LlvmVersion,
 };

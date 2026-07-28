@@ -36,6 +36,7 @@ pub struct JitEngine {
     runtime_instruction_count: usize,
     compiled_call_count: usize,
     compile_timings: JitCompileTimings,
+    cache_stats: JitCacheStats,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -48,6 +49,13 @@ pub struct JitCompileTimings {
     pub thread_safe_module: Duration,
     pub module_add: Duration,
     pub lookup_materialization: Duration,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JitCacheStats {
+    pub lookups: u64,
+    pub hits: u64,
+    pub misses: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +170,7 @@ impl JitEngine {
             runtime_instruction_count,
             compiled_call_count,
             compile_timings,
+            cache_stats: JitCacheStats::default(),
         })
     }
 
@@ -199,6 +208,10 @@ impl JitEngine {
 
     pub fn compile_timings(&self) -> JitCompileTimings {
         self.compile_timings
+    }
+
+    pub fn cache_stats(&self) -> JitCacheStats {
+        self.cache_stats
     }
 
     pub fn execute(&self, vm: &mut VM) -> Result<ExecutionResult, JitError> {

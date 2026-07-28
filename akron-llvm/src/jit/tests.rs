@@ -5,7 +5,7 @@ use akron::{CompiledProgram, OpCode, VM};
 use memory::field::PrimeId;
 use memory::{Function, Value};
 
-use super::{ExecutionOutcome, JitEngine};
+use super::{ExecutionOutcome, JitCacheStats, JitEngine};
 
 mod globals;
 
@@ -169,6 +169,7 @@ fn orc_jit_executes_lowered_integer_arithmetic() {
     assert!(engine.compile_timings().lowering.as_nanos() > 0);
     assert!(engine.compile_timings().llvm_optimization.as_nanos() > 0);
     assert!(engine.compile_timings().lookup_materialization.as_nanos() > 0);
+    assert_eq!(engine.cache_stats(), JitCacheStats::default());
 
     let mut vm = VM::new();
     vm.load_program(program).unwrap();
@@ -179,6 +180,12 @@ fn orc_jit_executes_lowered_integer_arithmetic() {
     assert_eq!(result.stats.runtime_calls, 0);
     assert_eq!(result.stats.interpreter_fallbacks, 0);
     assert!(result.stats.block_polls > 0);
+    assert_eq!(result.stats.fast_poll_hits, 0);
+    assert_eq!(result.stats.slow_poll_entries, result.stats.block_polls);
+    assert_eq!(result.stats.known_call_fast_hits, 0);
+    assert_eq!(result.stats.known_call_fast_misses, 0);
+    assert_eq!(result.stats.specialization_hits, 0);
+    assert_eq!(result.stats.specialization_misses, 0);
     assert!(vm.frames.is_empty());
     assert_eq!(vm.instruction_budget, u64::MAX.wrapping_sub(4));
 }
@@ -273,6 +280,8 @@ fn orc_jit_executes_recursive_compiled_functions() {
     assert_eq!(result.value.as_int(), Some(55));
     assert_eq!(result.outcome, ExecutionOutcome::Native);
     assert!(result.stats.compiled_function_calls > 0);
+    assert_eq!(result.stats.known_call_fast_hits, 0);
+    assert_eq!(result.stats.known_call_fast_misses, 0);
     assert_eq!(result.stats.interpreter_fallbacks, 0);
     assert!(vm.frames.is_empty());
 }

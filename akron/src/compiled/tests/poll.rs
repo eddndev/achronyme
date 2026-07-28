@@ -145,8 +145,14 @@ fn tier1_block_poll_records_direct_work_and_exact_refunds() {
     };
 
     assert_eq!(stats.block_polls, 1);
+    assert_eq!(stats.fast_poll_hits, 0);
+    assert_eq!(stats.slow_poll_entries, 1);
     assert_eq!(stats.direct_instructions, 2);
     assert_eq!(stats.slow_paths, 0);
+    assert_eq!(stats.known_call_fast_hits, 0);
+    assert_eq!(stats.known_call_fast_misses, 0);
+    assert_eq!(stats.specialization_hits, 0);
+    assert_eq!(stats.specialization_misses, 0);
 }
 
 #[test]
@@ -163,6 +169,8 @@ fn tier1_block_poll_counts_exact_slow_paths_without_direct_work() {
     let stats = context.stats();
 
     assert_eq!(stats.block_polls, 1);
+    assert_eq!(stats.fast_poll_hits, 0);
+    assert_eq!(stats.slow_poll_entries, 1);
     assert_eq!(stats.direct_instructions, 0);
     assert_eq!(stats.slow_paths, 1);
 }

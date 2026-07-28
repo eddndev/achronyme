@@ -7,6 +7,12 @@ pub struct ExecutionStats {
     pub interpreter_fallbacks: u64,
     pub block_polls: u64,
     pub slow_paths: u64,
+    pub fast_poll_hits: u64,
+    pub slow_poll_entries: u64,
+    pub known_call_fast_hits: u64,
+    pub known_call_fast_misses: u64,
+    pub specialization_hits: u64,
+    pub specialization_misses: u64,
     pub first_fallback_instruction: Option<u32>,
 }
 
@@ -37,6 +43,10 @@ impl ExecutionStats {
 
     pub(super) fn record_slow_path(&mut self) {
         self.slow_paths = self.slow_paths.saturating_add(1);
+    }
+
+    pub(super) fn record_slow_poll_entry(&mut self) {
+        self.slow_poll_entries = self.slow_poll_entries.saturating_add(1);
     }
 
     pub(super) fn record_interpreter_fallback(&mut self, instruction: u32) {
