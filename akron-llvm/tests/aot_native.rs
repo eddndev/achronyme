@@ -72,4 +72,28 @@ fn aot_builds_and_executes_native_artifact() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "Exit Status: 42\n");
+
+    let repeated = Command::new(&executable)
+        .env("AKRON_AOT_REPEAT", "3")
+        .env("AKRON_ENGINE_TRACE", "1")
+        .output()
+        .unwrap();
+    assert!(repeated.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&repeated.stderr)
+            .matches("LLVM AOT sample:")
+            .count(),
+        3
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&repeated.stdout),
+        "Exit Status: 42\n"
+    );
+
+    let invalid_repeat = Command::new(&executable)
+        .env("AKRON_AOT_REPEAT", "0")
+        .output()
+        .unwrap();
+    assert!(!invalid_repeat.status.success());
+    assert!(String::from_utf8_lossy(&invalid_repeat.stderr).contains("between 1 and 10000"));
 }
