@@ -10,11 +10,13 @@ const NIL_BITS: u64 = 1u64 << 60;
 const FALSE_BITS: u64 = 2u64 << 60;
 const TRUE_BITS: u64 = 3u64 << 60;
 
-impl Emitter {
+impl Emitter<'_> {
     pub(super) fn binary_integer(&mut self, ip: usize, instruction: u32, opcode: OpCode) {
         let left_raw = self.load(decode_b(instruction));
+        self.require_integer(ip, "left", &left_raw);
         let left = self.decode_integer(ip, "left", &left_raw);
         let right_raw = self.load(decode_c(instruction));
+        self.require_integer(ip, "right", &right_raw);
         let right = self.decode_integer(ip, "right", &right_raw);
         let destination = decode_a(instruction);
 
@@ -63,6 +65,7 @@ impl Emitter {
 
     pub(super) fn negate_integer(&mut self, ip: usize, instruction: u32) {
         let raw = self.load(decode_b(instruction));
+        self.require_integer(ip, "neg", &raw);
         let integer = self.decode_integer(ip, "neg", &raw);
         self.line(&format!("  %result.{ip} = sub i64 0, {integer}"));
         self.check_range_and_store(ip, decode_a(instruction), &format!("%result.{ip}"), "false");
@@ -83,6 +86,8 @@ impl Emitter {
         let (left, right) = if matches!(opcode, OpCode::Eq | OpCode::NotEq) {
             (left_raw, right_raw)
         } else {
+            self.require_integer(ip, "compare_left", &left_raw);
+            self.require_integer(ip, "compare_right", &right_raw);
             (
                 self.decode_integer(ip, "compare_left", &left_raw),
                 self.decode_integer(ip, "compare_right", &right_raw),
@@ -138,6 +143,18 @@ impl Emitter {
         self.line(&format!("  {shifted} = shl i64 {value}, 4"));
         self.line(&format!("  {integer} = ashr i64 {shifted}, 4"));
         integer
+    }
+
+    fn require_integer(&mut self, ip: usize, name: &str, value: &str) {
+        self.line(&format!("  %{name}.tag.{ip} = lshr i64 {value}, 60"));
+        self.line(&format!(
+            "  %{name}.is_int.{ip} = icmp eq i64 %{name}.tag.{ip}, 0"
+        ));
+        self.line(&format!(
+            "  br i1 %{name}.is_int.{ip}, label %{name}.int.ok.{ip}, label %{name}.deopt.{ip}"
+        ));
+        self.deoptimize(&format!("{name}.deopt.{ip}"), ip);
+        self.line(&format!("{name}.int.ok.{ip}:"));
     }
 
     fn check_range_and_store(&mut self, ip: usize, destination: u8, result: &str, overflow: &str) {

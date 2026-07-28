@@ -16,6 +16,8 @@ use memory::field::PrimeId;
 use memory::Function;
 use std::collections::HashMap;
 
+mod runtime_calls;
+
 #[test]
 fn runtime_api_header_is_self_describing() {
     let api = runtime_api();
@@ -320,7 +322,7 @@ fn interpreter_bailout_resumes_at_exact_instruction_without_double_fuel() {
         let mut context = RuntimeContext::new(&mut vm);
         let status =
             unsafe { (runtime_api().interpreter_bailout)(context.as_opaque(), 0, 1, &mut output) };
-        assert_eq!(status, STATUS_OK);
+        assert_eq!(status, super::STATUS_INTERPRETER_COMPLETED);
         bailout_ip = context.bailout_ip();
         context.finish(status).unwrap();
     }

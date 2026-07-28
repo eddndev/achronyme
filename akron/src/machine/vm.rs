@@ -119,6 +119,33 @@ impl VM {
         vm
     }
 
+    pub(crate) fn finish_compiled_call(
+        &mut self,
+        frame_index: usize,
+        result: Value,
+    ) -> Result<(), RuntimeError> {
+        if frame_index + 1 != self.frames.len() {
+            return Err(RuntimeError::StackUnderflow);
+        }
+        let frame = self
+            .frames
+            .get(frame_index)
+            .cloned()
+            .ok_or(RuntimeError::StackUnderflow)?;
+        self.close_upvalues(frame.base)?;
+        self.frames.pop();
+        if self.frames.is_empty() {
+            self.last_result = result;
+        } else {
+            let destination = self
+                .stack
+                .get_mut(frame.dest_reg)
+                .ok_or(RuntimeError::StackOverflow)?;
+            *destination = result;
+        }
+        Ok(())
+    }
+
     /// Register an external `NativeModule` after bootstrap.
     ///
     /// Used by the CLI to add stdlib modules (`achronyme-std`) whose

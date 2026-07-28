@@ -1,4 +1,5 @@
 mod blocks;
+mod calls;
 mod emit;
 mod scalar;
 mod verify;
@@ -12,6 +13,9 @@ pub struct LoweredModule {
     pub entry_symbol: &'static str,
     pub instruction_count: usize,
     pub native_instruction_count: usize,
+    pub direct_instruction_count: usize,
+    pub runtime_instruction_count: usize,
+    pub compiled_call_count: usize,
 }
 
 impl fmt::Debug for LoweredModule {
@@ -21,6 +25,9 @@ impl fmt::Debug for LoweredModule {
             .field("entry_symbol", &self.entry_symbol)
             .field("instruction_count", &self.instruction_count)
             .field("native_instruction_count", &self.native_instruction_count)
+            .field("direct_instruction_count", &self.direct_instruction_count)
+            .field("runtime_instruction_count", &self.runtime_instruction_count)
+            .field("compiled_call_count", &self.compiled_call_count)
             .finish_non_exhaustive()
     }
 }
@@ -68,8 +75,11 @@ pub fn lower_program(program: &CompiledProgram) -> Result<LoweredModule, Lowerin
     Ok(LoweredModule {
         ir,
         entry_symbol: "akron_compiled_main",
-        instruction_count: program.main.chunk.len(),
+        instruction_count: program.instruction_count(),
         native_instruction_count: verification.native_count(),
+        direct_instruction_count: verification.direct_count(),
+        runtime_instruction_count: verification.runtime_count(),
+        compiled_call_count: verification.call_count(),
     })
 }
 

@@ -14,6 +14,7 @@ mod gc;
 mod globals;
 mod interpreter;
 mod iterator;
+mod method_call;
 pub mod methods;
 mod native;
 mod promotion;
@@ -29,3 +30,16 @@ pub use circom::{CircomCallError, CircomCallResult, CircomOutputValue, CircomWit
 pub use frame::CallFrame;
 pub use prove::{ProveError, ProveHandler, ProveResult, VerifyHandler};
 pub use vm::{MAX_FRAMES, VM};
+
+pub(crate) enum CompiledCallTarget {
+    NativeComplete,
+    Prototype {
+        frame_index: u32,
+        base: u32,
+        prototype_index: u32,
+    },
+    InterpreterRequired {
+        frame_index: u32,
+        base: u32,
+    },
+}

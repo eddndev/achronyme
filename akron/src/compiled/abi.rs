@@ -3,6 +3,7 @@ use std::fmt;
 use std::mem::size_of;
 use std::ops::{BitOr, BitOrAssign};
 
+use super::calls::{execute_instruction, finish_call, prepare_call};
 use super::context::{
     interpreter_bailout, load_register, poll, poll_block, raise_error, refund_block,
     register_window, store_register,
@@ -18,6 +19,9 @@ pub const STATUS_RUNTIME_ERROR: RuntimeStatus = 1;
 pub const STATUS_INVALID_ARGUMENT: RuntimeStatus = 2;
 pub const STATUS_INTERNAL_ERROR: RuntimeStatus = 3;
 pub const STATUS_BAILOUT_REQUIRED: RuntimeStatus = 4;
+pub const STATUS_NATIVE_CALL_COMPLETE: RuntimeStatus = 5;
+pub const STATUS_INTERPRETER_COMPLETED: RuntimeStatus = 6;
+pub const STATUS_CALL_INTERPRETER_REQUIRED: RuntimeStatus = 7;
 
 pub const ERROR_INVALID_OPERAND: u32 = 1;
 pub const ERROR_DIVISION_BY_ZERO: u32 = 2;
@@ -35,6 +39,10 @@ pub type RegisterWindowFn =
     unsafe extern "C" fn(*mut c_void, u32, u32, *mut *mut u64) -> RuntimeStatus;
 pub type PollBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
 pub type RefundBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
+pub type ExecuteInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
+pub type PrepareCallFn =
+    unsafe extern "C" fn(*mut c_void, u32, u32, *mut u32, *mut u32, *mut u32) -> RuntimeStatus;
+pub type FinishCallFn = unsafe extern "C" fn(*mut c_void, u32, u64) -> RuntimeStatus;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -48,13 +56,17 @@ impl RuntimeCapabilities {
     pub const REGISTER_WINDOW: Self = Self(1 << 4);
     pub const BLOCK_POLL: Self = Self(1 << 5);
     pub const BLOCK_ACCOUNTING: Self = Self(1 << 6);
+    pub const RUNTIME_INSTRUCTION: Self = Self(1 << 7);
+    pub const COMPILED_CALLS: Self = Self(1 << 8);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
         Self::LLVM_BASELINE.0
             | Self::REGISTER_WINDOW.0
             | Self::BLOCK_POLL.0
-            | Self::BLOCK_ACCOUNTING.0,
+            | Self::BLOCK_ACCOUNTING.0
+            | Self::RUNTIME_INSTRUCTION.0
+            | Self::COMPILED_CALLS.0,
     );
 
     pub const fn empty() -> Self {
@@ -100,6 +112,9 @@ pub struct RuntimeApi {
     pub register_window: RegisterWindowFn,
     pub poll_block: PollBlockFn,
     pub refund_block: RefundBlockFn,
+    pub execute_instruction: ExecuteInstructionFn,
+    pub prepare_call: PrepareCallFn,
+    pub finish_call: FinishCallFn,
 }
 
 #[repr(C)]
@@ -162,6 +177,9 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     register_window,
     poll_block,
     refund_block,
+    execute_instruction,
+    prepare_call,
+    finish_call,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

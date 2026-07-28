@@ -53,7 +53,7 @@ fn scalar_arithmetic_lowers_to_a_native_entry() {
 }
 
 #[test]
-fn heap_constant_lowers_to_interpreter_bailout() {
+fn heap_constant_lowers_to_a_runtime_instruction() {
     let mut program = scalar_program(
         vec![
             encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
@@ -64,8 +64,62 @@ fn heap_constant_lowers_to_interpreter_bailout() {
     program.strings.push("not scalar".to_string());
 
     let module = lower_program(&program).unwrap();
-    assert_eq!(module.native_instruction_count, 0);
-    assert!(module.ir.contains("call i32 %bailout_fn"));
+    assert_eq!(module.native_instruction_count, 2);
+    assert_eq!(module.runtime_instruction_count, 1);
+    assert!(module.ir.contains("call i32 %execute_instruction_fn"));
+}
+
+#[test]
+fn whole_program_functions_and_calls_are_lowered() {
+    let main = Function {
+        name: "main".to_string(),
+        arity: 0,
+        max_slots: 3,
+        chunk: vec![
+            encode_abx(OpCode::Closure.as_u8(), 0, 0),
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::Call.as_u8(), 2, 0, 1),
+            encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+        ],
+        constants: vec![Value::int(41)],
+        upvalue_info: Vec::new(),
+        line_info: Vec::new(),
+    };
+    let increment = Function {
+        name: "increment".to_string(),
+        arity: 1,
+        max_slots: 2,
+        chunk: vec![
+            encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
+            encode_abc(OpCode::Add.as_u8(), 0, 0, 1),
+            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+        ],
+        constants: vec![Value::int(1)],
+        upvalue_info: Vec::new(),
+        line_info: Vec::new(),
+    };
+    let program = CompiledProgram::new(
+        PrimeId::Bn254,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![increment],
+        main,
+        HashMap::new(),
+    );
+
+    let module = lower_program(&program).unwrap();
+
+    assert_eq!(module.instruction_count, 7);
+    assert_eq!(module.native_instruction_count, 7);
+    assert_eq!(module.direct_instruction_count, 5);
+    assert_eq!(module.runtime_instruction_count, 1);
+    assert_eq!(module.compiled_call_count, 1);
+    assert!(module.ir.contains("define i32 @akron_compiled_fn_0"));
+    assert!(module.ir.contains("call i32 %prepare_call_fn"));
+    assert!(module.ir.contains("call i32 @akron_compiled_fn_0"));
 }
 
 #[test]

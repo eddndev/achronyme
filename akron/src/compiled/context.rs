@@ -10,14 +10,14 @@ use crate::{RuntimeError, VM};
 use super::abi::{
     RuntimeStatus, ERROR_ASSERTION_FAILED, ERROR_DIVISION_BY_ZERO, ERROR_INTEGER_OVERFLOW,
     ERROR_INVALID_OPERAND, ERROR_STACK_OVERFLOW, STATUS_BAILOUT_REQUIRED, STATUS_INTERNAL_ERROR,
-    STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
+    STATUS_INTERPRETER_COMPLETED, STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
 };
 
 const GC_CHECK_INTERVAL: u32 = 1024;
 const _: () = assert!(std::mem::size_of::<Value>() == std::mem::size_of::<u64>());
 const _: () = assert!(std::mem::align_of::<Value>() == std::mem::align_of::<u64>());
 
-struct RuntimeContextState {
+pub(super) struct RuntimeContextState {
     vm: NonNull<VM>,
     pending_error: Option<RuntimeError>,
     gc_countdown: u32,
@@ -25,7 +25,7 @@ struct RuntimeContextState {
 }
 
 impl RuntimeContextState {
-    unsafe fn vm_mut(&mut self) -> &mut VM {
+    pub(super) unsafe fn vm_mut(&mut self) -> &mut VM {
         unsafe { self.vm.as_mut() }
     }
 
@@ -64,7 +64,9 @@ impl<'vm> RuntimeContext<'vm> {
     }
 
     pub fn finish(mut self, status: RuntimeStatus) -> Result<(), RuntimeError> {
-        if status == STATUS_OK && self.state.pending_error.is_none() {
+        if matches!(status, STATUS_OK | STATUS_INTERPRETER_COMPLETED)
+            && self.state.pending_error.is_none()
+        {
             return Ok(());
         }
 
@@ -83,7 +85,7 @@ impl<'vm> RuntimeContext<'vm> {
     }
 }
 
-fn run_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
+pub(super) fn run_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
 where
     F: FnOnce(&mut RuntimeContextState) -> Result<(), RuntimeError>,
 {
@@ -93,7 +95,7 @@ where
     })
 }
 
-fn run_status_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
+pub(super) fn run_status_helper<F>(context: *mut c_void, operation: F) -> RuntimeStatus
 where
     F: FnOnce(&mut RuntimeContextState) -> Result<RuntimeStatus, RuntimeError>,
 {
@@ -324,7 +326,7 @@ pub(super) unsafe extern "C" fn interpreter_bailout(
     if output.is_null() {
         return STATUS_INVALID_ARGUMENT;
     }
-    run_helper(context, |state| {
+    run_status_helper(context, |state| {
         state.bailout_ip = Some(instruction_index);
         let vm = unsafe { state.vm_mut() };
         let frame = vm
@@ -334,6 +336,6 @@ pub(super) unsafe extern "C" fn interpreter_bailout(
         frame.ip = instruction_index as usize;
         vm.interpret()?;
         unsafe { output.write(vm.last_result.to_abi_bits()) };
-        Ok(())
+        Ok(STATUS_INTERPRETER_COMPLETED)
     })
 }

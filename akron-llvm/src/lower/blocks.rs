@@ -1,7 +1,8 @@
 use akron::opcode::instruction::{decode_bx, decode_opcode};
-use akron::{CompiledProgram, OpCode};
+use akron::OpCode;
+use memory::Function;
 
-use super::verify::Verification;
+use super::verify::FunctionVerification;
 use super::LoweringError;
 
 pub(super) struct BlockPlan {
@@ -11,10 +12,10 @@ pub(super) struct BlockPlan {
 
 impl BlockPlan {
     pub(super) fn build(
-        program: &CompiledProgram,
-        verification: &Verification,
+        function: &Function,
+        verification: &FunctionVerification,
     ) -> Result<Self, LoweringError> {
-        let chunk = &program.main.chunk;
+        let chunk = &function.chunk;
         let mut starts = vec![false; chunk.len()];
         if chunk.is_empty() {
             return Ok(Self {
@@ -25,7 +26,7 @@ impl BlockPlan {
         starts[0] = true;
 
         for (ip, &instruction) in chunk.iter().enumerate() {
-            if !verification.is_native(ip) {
+            if !verification.is_direct(ip) {
                 starts[ip] = true;
                 mark_fallthrough(&mut starts, ip);
                 continue;
