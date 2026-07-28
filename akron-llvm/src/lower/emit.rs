@@ -1,23 +1,23 @@
 use std::fmt::Write;
 
-use akron::opcode::instruction::{decode_a, decode_b, decode_bx, decode_c, decode_opcode};
+use akron::opcode::instruction::{decode_a, decode_b, decode_bx, decode_opcode};
 use akron::{CompiledProgram, OpCode};
 
+use super::blocks::BlockPlan;
 use super::verify::Verification;
 use super::LoweringError;
 
-const I60_MIN: i64 = -(1i64 << 59);
-const I60_MAX: i64 = (1i64 << 59) - 1;
-const PAYLOAD_MASK: u64 = (1u64 << 60) - 1;
 const NIL_BITS: u64 = 1u64 << 60;
 const FALSE_BITS: u64 = 2u64 << 60;
 const TRUE_BITS: u64 = 3u64 << 60;
+const STATUS_BAILOUT_REQUIRED: u32 = 4;
 
 pub(super) fn emit(
     program: &CompiledProgram,
     verification: &Verification,
 ) -> Result<String, LoweringError> {
-    let mut emitter = Emitter::new(program.main.chunk.len());
+    let blocks = BlockPlan::build(program, verification)?;
+    let mut emitter = Emitter::new(program.main.chunk.len(), program.main.max_slots, blocks);
     emitter.header();
     if program.main.chunk.is_empty() {
         emitter.line("  br label %finish");
@@ -33,33 +33,28 @@ pub(super) fn emit(
         let opcode = OpCode::from_u8(decode_opcode(instruction)).ok_or_else(|| {
             LoweringError::Internal(format!("unknown opcode reached emitter at {ip}"))
         })?;
-        emitter.poll(ip);
+        emitter.begin_instruction(ip);
         match opcode {
             OpCode::LoadConst => {
                 let value = program.main.constants[decode_bx(instruction) as usize];
-                emitter.store(
-                    ip,
-                    "constant",
-                    decode_a(instruction),
-                    &value.to_abi_bits().to_string(),
-                );
+                emitter.store(decode_a(instruction), &value.to_abi_bits().to_string());
                 emitter.next(ip);
             }
             OpCode::LoadTrue => {
-                emitter.store(ip, "true", decode_a(instruction), &TRUE_BITS.to_string());
+                emitter.store(decode_a(instruction), &TRUE_BITS.to_string());
                 emitter.next(ip);
             }
             OpCode::LoadFalse => {
-                emitter.store(ip, "false", decode_a(instruction), &FALSE_BITS.to_string());
+                emitter.store(decode_a(instruction), &FALSE_BITS.to_string());
                 emitter.next(ip);
             }
             OpCode::LoadNil => {
-                emitter.store(ip, "nil", decode_a(instruction), &NIL_BITS.to_string());
+                emitter.store(decode_a(instruction), &NIL_BITS.to_string());
                 emitter.next(ip);
             }
             OpCode::Move => {
-                let value = emitter.load(ip, "move", decode_b(instruction), 0);
-                emitter.store(ip, "move", decode_a(instruction), &value);
+                let value = emitter.load(decode_b(instruction));
+                emitter.store(decode_a(instruction), &value);
                 emitter.next(ip);
             }
             OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div | OpCode::Mod => {
@@ -96,302 +91,203 @@ pub(super) fn emit(
     Ok(emitter.output)
 }
 
-struct Emitter {
+pub(super) struct Emitter {
     output: String,
     instruction_count: usize,
+    register_count: u16,
+    blocks: BlockPlan,
 }
 
 impl Emitter {
-    fn new(instruction_count: usize) -> Self {
+    fn new(instruction_count: usize, register_count: u16, blocks: BlockPlan) -> Self {
         Self {
-            output: String::with_capacity(instruction_count * 900 + 1024),
+            output: String::with_capacity(instruction_count * 500 + 2048),
             instruction_count,
+            register_count,
+            blocks,
         }
     }
 
-    fn line(&mut self, line: &str) {
+    pub(super) fn line(&mut self, line: &str) {
         writeln!(self.output, "{line}").expect("write to String");
     }
 
     fn header(&mut self) {
         self.line("; Generated from canonical Akron bytecode.");
-        self.line("%RuntimeApi = type { [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr }");
+        self.line("%RuntimeApi = type { [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }");
         self.line("declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64)");
         self.line("declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64)");
         self.line("declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64)");
         self.line("");
         self.line("define i32 @akron_compiled_main(ptr %api, ptr %context, i32 %frame_index, i32 %base, ptr %result_out) {");
         self.line("entry:");
-        self.line("  %scratch0 = alloca i64, align 8");
-        self.line("  %scratch1 = alloca i64, align 8");
-        self.line("  %load_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 4");
-        self.line("  %load_fn = load ptr, ptr %load_slot, align 8");
-        self.line("  %store_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 5");
-        self.line("  %store_fn = load ptr, ptr %store_slot, align 8");
-        self.line("  %poll_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 6");
-        self.line("  %poll_fn = load ptr, ptr %poll_slot, align 8");
-        self.line("  %raise_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 7");
-        self.line("  %raise_fn = load ptr, ptr %raise_slot, align 8");
-        self.line("  %bailout_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 8");
-        self.line("  %bailout_fn = load ptr, ptr %bailout_slot, align 8");
+        self.line("  %window.out = alloca ptr, align 8");
+        for register in 0..self.register_count {
+            self.line(&format!("  %reg.{register} = alloca i64, align 8"));
+        }
+        self.load_api_function(7, "raise");
+        self.load_api_function(8, "bailout");
+        self.load_api_function(9, "register_window");
+        self.load_api_function(10, "poll_block");
+        self.load_api_function(11, "refund_block");
+        self.line(&format!(
+            "  %window.status = call i32 %register_window_fn(ptr %context, i32 %base, i32 {}, ptr %window.out)",
+            self.register_count
+        ));
+        self.line("  %window.ok = icmp eq i32 %window.status, 0");
+        self.line("  br i1 %window.ok, label %window.ready, label %window.error");
+        self.line("window.error:");
+        self.line("  ret i32 %window.status");
+        self.line("window.ready:");
+        self.line("  %window = load ptr, ptr %window.out, align 8");
+        for register in 0..self.register_count {
+            self.line(&format!(
+                "  %window.initial.slot.{register} = getelementptr i64, ptr %window, i32 {register}"
+            ));
+            self.line(&format!(
+                "  %window.initial.value.{register} = load i64, ptr %window.initial.slot.{register}, align 8"
+            ));
+            self.line(&format!(
+                "  store i64 %window.initial.value.{register}, ptr %reg.{register}, align 8"
+            ));
+        }
+    }
+
+    fn load_api_function(&mut self, field: u8, name: &str) {
+        self.line(&format!(
+            "  %{name}_slot = getelementptr %RuntimeApi, ptr %api, i32 0, i32 {field}"
+        ));
+        self.line(&format!(
+            "  %{name}_fn = load ptr, ptr %{name}_slot, align 8"
+        ));
+    }
+
+    fn begin_instruction(&mut self, ip: usize) {
+        if self.blocks.is_start(ip) {
+            let instruction_count = self.blocks.end(ip) - ip;
+            self.line(&format!("ip{ip}:"));
+            self.line(&format!(
+                "  %poll.status.{ip} = call i32 %poll_block_fn(ptr %context, i32 %frame_index, i32 {ip}, i32 {instruction_count})"
+            ));
+            self.line(&format!(
+                "  %poll.ok.{ip} = icmp eq i32 %poll.status.{ip}, 0"
+            ));
+            self.line(&format!(
+                "  br i1 %poll.ok.{ip}, label %op{ip}, label %poll.not_ok.{ip}"
+            ));
+            self.line(&format!("poll.not_ok.{ip}:"));
+            self.line(&format!(
+                "  %poll.slow.required.{ip} = icmp eq i32 %poll.status.{ip}, {STATUS_BAILOUT_REQUIRED}"
+            ));
+            self.line(&format!(
+                "  br i1 %poll.slow.required.{ip}, label %poll.slow.{ip}, label %poll.error.{ip}"
+            ));
+            self.line(&format!("poll.error.{ip}:"));
+            self.line(&format!("  ret i32 %poll.status.{ip}"));
+            self.line(&format!("poll.slow.{ip}:"));
+            self.spill(&format!("poll.slow.{ip}"));
+            self.line(&format!(
+                "  %poll.bailout.status.{ip} = call i32 %bailout_fn(ptr %context, i32 %frame_index, i32 {ip}, ptr %result_out)"
+            ));
+            self.line(&format!("  ret i32 %poll.bailout.status.{ip}"));
+            self.line(&format!("op{ip}:"));
+        } else {
+            self.line(&format!("op{ip}:"));
+        }
     }
 
     fn bailout(&mut self, ip: usize) {
         self.line(&format!("ip{ip}:"));
+        self.spill(&format!("bailout.{ip}"));
         self.line(&format!(
             "  %bailout.status.{ip} = call i32 %bailout_fn(ptr %context, i32 %frame_index, i32 {ip}, ptr %result_out)"
         ));
         self.line(&format!("  ret i32 %bailout.status.{ip}"));
     }
 
-    fn finish_with_register_zero(&mut self) {
-        self.line("  %finish.load.status = call i32 %load_fn(ptr %context, i32 %base, i32 0, ptr %scratch0)");
-        self.line("  %finish.load.ok = icmp eq i32 %finish.load.status, 0");
-        self.line("  br i1 %finish.load.ok, label %finish.loaded, label %finish.load.error");
-        self.line("finish.load.error:");
-        self.line("  ret i32 %finish.load.status");
-        self.line("finish.loaded:");
-        self.line("  %finish.value = load i64, ptr %scratch0, align 8");
-        self.line("  store i64 %finish.value, ptr %result_out, align 8");
-        self.line("  ret i32 0");
-    }
-
-    fn poll(&mut self, ip: usize) {
-        self.line(&format!("ip{ip}:"));
+    pub(super) fn load(&mut self, register: u8) -> String {
+        let value = format!("%value.{}", self.output.len());
         self.line(&format!(
-            "  %poll.status.{ip} = call i32 %poll_fn(ptr %context, i32 %frame_index, i32 {ip})"
-        ));
-        self.line(&format!(
-            "  %poll.ok.{ip} = icmp eq i32 %poll.status.{ip}, 0"
-        ));
-        self.line(&format!(
-            "  br i1 %poll.ok.{ip}, label %op{ip}, label %poll.error.{ip}"
-        ));
-        self.line(&format!("poll.error.{ip}:"));
-        self.line(&format!("  ret i32 %poll.status.{ip}"));
-        self.line(&format!("op{ip}:"));
-    }
-
-    fn load(&mut self, ip: usize, name: &str, register: u8, scratch: u8) -> String {
-        let prefix = format!("{ip}.{name}.{scratch}");
-        self.line(&format!(
-            "  %load.status.{prefix} = call i32 %load_fn(ptr %context, i32 %base, i32 {register}, ptr %scratch{scratch})"
-        ));
-        self.line(&format!(
-            "  %load.ok.{prefix} = icmp eq i32 %load.status.{prefix}, 0"
-        ));
-        self.line(&format!(
-            "  br i1 %load.ok.{prefix}, label %load.done.{prefix}, label %load.error.{prefix}"
-        ));
-        self.line(&format!("load.error.{prefix}:"));
-        self.line(&format!("  ret i32 %load.status.{prefix}"));
-        self.line(&format!("load.done.{prefix}:"));
-        let value = format!("%value.{prefix}");
-        self.line(&format!(
-            "  {value} = load i64, ptr %scratch{scratch}, align 8"
+            "  {value} = load i64, ptr %reg.{register}, align 8"
         ));
         value
     }
 
-    fn store(&mut self, ip: usize, name: &str, register: u8, value: &str) {
-        let prefix = format!("{ip}.{name}");
+    pub(super) fn store(&mut self, register: u8, value: &str) {
         self.line(&format!(
-            "  %store.status.{prefix} = call i32 %store_fn(ptr %context, i32 %base, i32 {register}, i64 {value})"
+            "  store i64 {value}, ptr %reg.{register}, align 8"
         ));
-        self.line(&format!(
-            "  %store.ok.{prefix} = icmp eq i32 %store.status.{prefix}, 0"
-        ));
-        self.line(&format!(
-            "  br i1 %store.ok.{prefix}, label %store.done.{prefix}, label %store.error.{prefix}"
-        ));
-        self.line(&format!("store.error.{prefix}:"));
-        self.line(&format!("  ret i32 %store.status.{prefix}"));
-        self.line(&format!("store.done.{prefix}:"));
     }
 
-    fn next(&mut self, ip: usize) {
-        if ip + 1 < self.instruction_count {
-            self.line(&format!("  br label %ip{}", ip + 1));
+    pub(super) fn next(&mut self, ip: usize) {
+        let label = self.next_label(ip);
+        self.line(&format!("  br label %{label}"));
+    }
+
+    pub(super) fn next_label(&self, ip: usize) -> String {
+        let next = ip + 1;
+        if next >= self.instruction_count {
+            "finish".to_string()
+        } else if self.blocks.is_start(next) {
+            format!("ip{next}")
         } else {
-            self.line("  br label %finish");
+            format!("op{next}")
         }
     }
 
-    fn decode_integer(&mut self, ip: usize, name: &str, value: &str) -> String {
-        let shifted = format!("%{name}.shifted.{ip}");
-        let integer = format!("%{name}.int.{ip}");
-        self.line(&format!("  {shifted} = shl i64 {value}, 4"));
-        self.line(&format!("  {integer} = ashr i64 {shifted}, 4"));
-        integer
-    }
-
-    fn check_range_and_store(&mut self, ip: usize, destination: u8, result: &str, overflow: &str) {
-        self.line(&format!("  %below.{ip} = icmp slt i64 {result}, {I60_MIN}"));
-        self.line(&format!("  %above.{ip} = icmp sgt i64 {result}, {I60_MAX}"));
-        self.line(&format!(
-            "  %range.bad.{ip} = or i1 %below.{ip}, %above.{ip}"
-        ));
-        self.line(&format!(
-            "  %arith.bad.{ip} = or i1 {overflow}, %range.bad.{ip}"
-        ));
-        self.line(&format!(
-            "  br i1 %arith.bad.{ip}, label %overflow.{ip}, label %arith.ok.{ip}"
-        ));
-        self.raise_block(&format!("overflow.{ip}"), 3);
-        self.line(&format!("arith.ok.{ip}:"));
-        self.line(&format!(
-            "  %encoded.{ip} = and i64 {result}, {PAYLOAD_MASK}"
-        ));
-        self.store(ip, "arith", destination, &format!("%encoded.{ip}"));
-        self.next(ip);
-    }
-
-    fn raise_block(&mut self, label: &str, code: u32) {
+    pub(super) fn raise_block(&mut self, label: &str, ip: usize, code: u32) {
         let clean = label.replace('.', "_");
+        let refund = self.blocks.end(ip).saturating_sub(ip + 1);
         self.line(&format!("{label}:"));
+        self.spill(&format!("error.{clean}"));
+        self.line(&format!(
+            "  %refund.status.{clean} = call i32 %refund_block_fn(ptr %context, i32 %frame_index, i32 {}, i32 {refund})",
+            ip + 1
+        ));
+        self.line(&format!(
+            "  %refund.ok.{clean} = icmp eq i32 %refund.status.{clean}, 0"
+        ));
+        self.line(&format!(
+            "  br i1 %refund.ok.{clean}, label %raise.{clean}, label %refund.error.{clean}"
+        ));
+        self.line(&format!("refund.error.{clean}:"));
+        self.line(&format!("  ret i32 %refund.status.{clean}"));
+        self.line(&format!("raise.{clean}:"));
         self.line(&format!(
             "  %raise.status.{clean} = call i32 %raise_fn(ptr %context, i32 {code})"
         ));
         self.line(&format!("  ret i32 %raise.status.{clean}"));
     }
 
-    fn binary_integer(&mut self, ip: usize, instruction: u32, opcode: OpCode) {
-        let left_raw = self.load(ip, "left", decode_b(instruction), 0);
-        let left = self.decode_integer(ip, "left", &left_raw);
-        let right_raw = self.load(ip, "right", decode_c(instruction), 1);
-        let right = self.decode_integer(ip, "right", &right_raw);
-        let destination = decode_a(instruction);
-
-        match opcode {
-            OpCode::Add | OpCode::Sub | OpCode::Mul => {
-                let intrinsic = match opcode {
-                    OpCode::Add => "sadd",
-                    OpCode::Sub => "ssub",
-                    OpCode::Mul => "smul",
-                    _ => unreachable!(),
-                };
-                self.line(&format!(
-                    "  %pair.{ip} = call {{ i64, i1 }} @llvm.{intrinsic}.with.overflow.i64(i64 {left}, i64 {right})"
-                ));
-                self.line(&format!(
-                    "  %result.{ip} = extractvalue {{ i64, i1 }} %pair.{ip}, 0"
-                ));
-                self.line(&format!(
-                    "  %overflow.flag.{ip} = extractvalue {{ i64, i1 }} %pair.{ip}, 1"
-                ));
-                self.check_range_and_store(
-                    ip,
-                    destination,
-                    &format!("%result.{ip}"),
-                    &format!("%overflow.flag.{ip}"),
-                );
-            }
-            OpCode::Div | OpCode::Mod => {
-                self.line(&format!("  %zero.{ip} = icmp eq i64 {right}, 0"));
-                self.line(&format!(
-                    "  br i1 %zero.{ip}, label %division.zero.{ip}, label %division.ok.{ip}"
-                ));
-                self.raise_block(&format!("division.zero.{ip}"), 2);
-                self.line(&format!("division.ok.{ip}:"));
-                let operation = if opcode == OpCode::Div {
-                    "sdiv"
-                } else {
-                    "srem"
-                };
-                self.line(&format!("  %result.{ip} = {operation} i64 {left}, {right}"));
-                self.check_range_and_store(ip, destination, &format!("%result.{ip}"), "false");
-            }
-            _ => unreachable!(),
+    fn spill(&mut self, site: &str) {
+        for register in 0..self.register_count {
+            self.line(&format!(
+                "  %spill.value.{site}.{register} = load i64, ptr %reg.{register}, align 8"
+            ));
+            self.line(&format!(
+                "  %spill.slot.{site}.{register} = getelementptr i64, ptr %window, i32 {register}"
+            ));
+            self.line(&format!(
+                "  store i64 %spill.value.{site}.{register}, ptr %spill.slot.{site}.{register}, align 8"
+            ));
         }
-    }
-
-    fn negate_integer(&mut self, ip: usize, instruction: u32) {
-        let raw = self.load(ip, "neg", decode_b(instruction), 0);
-        let integer = self.decode_integer(ip, "neg", &raw);
-        self.line(&format!("  %result.{ip} = sub i64 0, {integer}"));
-        self.check_range_and_store(ip, decode_a(instruction), &format!("%result.{ip}"), "false");
-    }
-
-    fn comparison(&mut self, ip: usize, instruction: u32, opcode: OpCode) {
-        let left_raw = self.load(ip, "compare_left", decode_b(instruction), 0);
-        let right_raw = self.load(ip, "compare_right", decode_c(instruction), 1);
-        let predicate = match opcode {
-            OpCode::Eq => "eq",
-            OpCode::NotEq => "ne",
-            OpCode::Lt => "slt",
-            OpCode::Gt => "sgt",
-            OpCode::Le => "sle",
-            OpCode::Ge => "sge",
-            _ => unreachable!(),
-        };
-        let (left, right) = if matches!(opcode, OpCode::Eq | OpCode::NotEq) {
-            (left_raw, right_raw)
-        } else {
-            (
-                self.decode_integer(ip, "compare_left", &left_raw),
-                self.decode_integer(ip, "compare_right", &right_raw),
-            )
-        };
-        self.line(&format!(
-            "  %comparison.{ip} = icmp {predicate} i64 {left}, {right}"
-        ));
-        self.line(&format!(
-            "  %bool.{ip} = select i1 %comparison.{ip}, i64 {TRUE_BITS}, i64 {FALSE_BITS}"
-        ));
-        self.store(
-            ip,
-            "comparison",
-            decode_a(instruction),
-            &format!("%bool.{ip}"),
-        );
-        self.next(ip);
-    }
-
-    fn logical_not(&mut self, ip: usize, instruction: u32) {
-        let raw = self.load(ip, "not", decode_b(instruction), 0);
-        self.line(&format!("  %is.nil.{ip} = icmp eq i64 {raw}, {NIL_BITS}"));
-        self.line(&format!(
-            "  %is.false.{ip} = icmp eq i64 {raw}, {FALSE_BITS}"
-        ));
-        self.line(&format!(
-            "  %falsey.{ip} = or i1 %is.nil.{ip}, %is.false.{ip}"
-        ));
-        self.line(&format!(
-            "  %bool.{ip} = select i1 %falsey.{ip}, i64 {TRUE_BITS}, i64 {FALSE_BITS}"
-        ));
-        self.store(ip, "not", decode_a(instruction), &format!("%bool.{ip}"));
-        self.next(ip);
-    }
-
-    fn jump_if_false(&mut self, ip: usize, instruction: u32) {
-        let raw = self.load(ip, "condition", decode_a(instruction), 0);
-        self.line(&format!(
-            "  %condition.nil.{ip} = icmp eq i64 {raw}, {NIL_BITS}"
-        ));
-        self.line(&format!(
-            "  %condition.false.{ip} = icmp eq i64 {raw}, {FALSE_BITS}"
-        ));
-        self.line(&format!(
-            "  %condition.falsey.{ip} = or i1 %condition.nil.{ip}, %condition.false.{ip}"
-        ));
-        let fallthrough = if ip + 1 < self.instruction_count {
-            format!("ip{}", ip + 1)
-        } else {
-            "finish".to_string()
-        };
-        self.line(&format!(
-            "  br i1 %condition.falsey.{ip}, label %ip{}, label %{fallthrough}",
-            decode_bx(instruction)
-        ));
     }
 
     fn return_value(&mut self, ip: usize, instruction: u32) {
-        if decode_b(instruction) == 1 {
-            let value = self.load(ip, "return", decode_a(instruction), 0);
-            self.line(&format!("  store i64 {value}, ptr %result_out, align 8"));
+        let value = if decode_b(instruction) == 1 {
+            self.load(decode_a(instruction))
         } else {
-            self.line(&format!("  store i64 {NIL_BITS}, ptr %result_out, align 8"));
-        }
+            NIL_BITS.to_string()
+        };
+        self.spill(&format!("return.{ip}"));
+        self.line(&format!("  store i64 {value}, ptr %result_out, align 8"));
+        self.line("  ret i32 0");
+    }
+
+    fn finish_with_register_zero(&mut self) {
+        let value = self.load(0);
+        self.spill("finish");
+        self.line(&format!("  store i64 {value}, ptr %result_out, align 8"));
         self.line("  ret i32 0");
     }
 }

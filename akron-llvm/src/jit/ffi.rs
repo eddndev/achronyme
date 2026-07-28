@@ -12,6 +12,7 @@ pub(super) type ThreadSafeContextRef = *mut c_void;
 pub(super) type ThreadSafeModuleRef = *mut c_void;
 pub(super) type LlJitRef = *mut c_void;
 pub(super) type JitDylibRef = *mut c_void;
+pub(super) type PassBuilderOptionsRef = *mut c_void;
 
 type GetVersionFn = unsafe extern "C" fn(*mut u32, *mut u32, *mut u32);
 type VoidFn = unsafe extern "C" fn();
@@ -34,6 +35,11 @@ type AddIrModuleFn = unsafe extern "C" fn(LlJitRef, JitDylibRef, ThreadSafeModul
 type LookupFn = unsafe extern "C" fn(LlJitRef, *mut u64, *const c_char) -> ErrorRef;
 type GetErrorMessageFn = unsafe extern "C" fn(ErrorRef) -> *mut c_char;
 type DisposeErrorMessageFn = unsafe extern "C" fn(*mut c_char);
+type VerifyModuleFn = unsafe extern "C" fn(ModuleRef, i32, *mut *mut c_char) -> i32;
+type RunPassesFn =
+    unsafe extern "C" fn(ModuleRef, *const c_char, *mut c_void, PassBuilderOptionsRef) -> ErrorRef;
+type CreatePassBuilderOptionsFn = unsafe extern "C" fn() -> PassBuilderOptionsRef;
+type DisposePassBuilderOptionsFn = unsafe extern "C" fn(PassBuilderOptionsRef);
 
 pub(super) struct LlvmApi {
     _library: Arc<Library>,
@@ -55,6 +61,10 @@ pub(super) struct LlvmApi {
     pub lookup: LookupFn,
     pub get_error_message: GetErrorMessageFn,
     pub dispose_error_message: DisposeErrorMessageFn,
+    pub verify_module: VerifyModuleFn,
+    pub run_passes: RunPassesFn,
+    pub create_pass_builder_options: CreatePassBuilderOptionsFn,
+    pub dispose_pass_builder_options: DisposePassBuilderOptionsFn,
     initialize_target_info: VoidFn,
     initialize_target: VoidFn,
     initialize_target_mc: VoidFn,
@@ -119,6 +129,14 @@ impl LlvmApi {
             lookup: unsafe { symbol(library, b"LLVMOrcLLJITLookup\0")? },
             get_error_message: unsafe { symbol(library, b"LLVMGetErrorMessage\0")? },
             dispose_error_message: unsafe { symbol(library, b"LLVMDisposeErrorMessage\0")? },
+            verify_module: unsafe { symbol(library, b"LLVMVerifyModule\0")? },
+            run_passes: unsafe { symbol(library, b"LLVMRunPasses\0")? },
+            create_pass_builder_options: unsafe {
+                symbol(library, b"LLVMCreatePassBuilderOptions\0")?
+            },
+            dispose_pass_builder_options: unsafe {
+                symbol(library, b"LLVMDisposePassBuilderOptions\0")?
+            },
             initialize_target_info: unsafe {
                 symbol(library, target_symbol("TargetInfo").as_bytes())?
             },

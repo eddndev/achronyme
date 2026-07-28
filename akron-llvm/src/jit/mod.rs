@@ -14,6 +14,8 @@ use crate::{lower_program, LoweringError};
 
 use self::ffi::{LlJitRef, LlvmApi, ModuleRef, ThreadSafeModuleRef};
 
+const OPTIMIZATION_PIPELINE: &str = "default<O2>";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LlvmVersion {
     pub major: u32,
@@ -110,6 +112,10 @@ impl JitEngine {
         &self.llvm.path
     }
 
+    pub fn optimization_pipeline(&self) -> &'static str {
+        OPTIMIZATION_PIPELINE
+    }
+
     pub fn instruction_count(&self) -> usize {
         self.instruction_count
     }
@@ -123,7 +129,7 @@ impl JitEngine {
             .validate(
                 RUNTIME_ABI_VERSION,
                 std::mem::size_of::<akron::compiled::RuntimeApi>() as u32,
-                RuntimeCapabilities::LLVM_BASELINE,
+                RuntimeCapabilities::LLVM_TIER1,
             )
             .map_err(|error| JitError::Abi(error.to_string()))?;
         if vm.frames.len() != 1 {
@@ -196,6 +202,14 @@ unsafe fn parse_module(llvm: &LlvmApi, ir: &str) -> Result<ThreadSafeModuleRef, 
         ));
     }
 
+    if let Err(error) = unsafe { verify_and_optimize(llvm, module) } {
+        unsafe {
+            (llvm.dispose_module)(module);
+            (llvm.context_dispose)(context);
+        }
+        return Err(error);
+    }
+
     let thread_context = unsafe { (llvm.create_thread_safe_context)(context) };
     if thread_context.is_null() {
         unsafe {
@@ -214,6 +228,43 @@ unsafe fn parse_module(llvm: &LlvmApi, ir: &str) -> Result<ThreadSafeModuleRef, 
         ));
     }
     Ok(thread_module)
+}
+
+unsafe fn verify_and_optimize(llvm: &LlvmApi, module: ModuleRef) -> Result<(), JitError> {
+    unsafe { verify_module(llvm, module, "before optimization")? };
+
+    let options = unsafe { (llvm.create_pass_builder_options)() };
+    if options.is_null() {
+        return Err(JitError::Llvm(
+            "could not create LLVM pass builder options".to_string(),
+        ));
+    }
+    let pipeline = CString::new(OPTIMIZATION_PIPELINE).expect("pipeline has no NUL");
+    let pass_error =
+        unsafe { (llvm.run_passes)(module, pipeline.as_ptr(), ptr::null_mut(), options) };
+    unsafe { (llvm.dispose_pass_builder_options)(options) };
+    if let Some(message) = unsafe { llvm.error_message(pass_error) } {
+        return Err(JitError::Llvm(format!(
+            "LLVM {OPTIMIZATION_PIPELINE} pipeline failed: {message}"
+        )));
+    }
+
+    unsafe { verify_module(llvm, module, "after optimization") }
+}
+
+unsafe fn verify_module(llvm: &LlvmApi, module: ModuleRef, stage: &str) -> Result<(), JitError> {
+    let mut message: *mut c_char = ptr::null_mut();
+    let failed = unsafe { (llvm.verify_module)(module, 2, &mut message) };
+    if failed == 0 {
+        if !message.is_null() {
+            unsafe { (llvm.dispose_message)(message) };
+        }
+        return Ok(());
+    }
+    let detail = take_parse_message(llvm, message);
+    Err(JitError::Llvm(format!(
+        "generated LLVM IR failed verification {stage}: {detail}"
+    )))
 }
 
 fn take_parse_message(llvm: &LlvmApi, message: *mut c_char) -> String {

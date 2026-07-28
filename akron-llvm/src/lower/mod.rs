@@ -1,4 +1,6 @@
+mod blocks;
 mod emit;
+mod scalar;
 mod verify;
 
 use std::fmt;

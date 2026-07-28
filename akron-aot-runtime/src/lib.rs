@@ -61,7 +61,7 @@ fn run(bytes: &[u8], entry: CompiledEntry) -> Result<(), String> {
         .validate(
             RUNTIME_ABI_VERSION,
             std::mem::size_of::<akron::compiled::RuntimeApi>() as u32,
-            RuntimeCapabilities::LLVM_BASELINE,
+            RuntimeCapabilities::LLVM_TIER1,
         )
         .map_err(|error| error.to_string())?;
     if vm.frames.len() != 1 {

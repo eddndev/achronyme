@@ -44,7 +44,11 @@ fn scalar_arithmetic_lowers_to_a_native_entry() {
     let module = lower_program(&program).unwrap();
     assert_eq!(module.entry_symbol, "akron_compiled_main");
     assert!(module.ir.contains("define i32 @akron_compiled_main"));
-    assert_eq!(module.ir.matches("call i32 %poll_fn").count(), 4);
+    assert_eq!(module.ir.matches("call i32 %register_window_fn").count(), 1);
+    assert_eq!(module.ir.matches("call i32 %poll_block_fn").count(), 1);
+    assert!(!module.ir.contains("call i32 %load_fn"));
+    assert!(!module.ir.contains("call i32 %store_fn"));
+    assert!(module.ir.contains("%reg.0 = alloca i64, align 8"));
     assert!(module.ir.contains("llvm.sadd.with.overflow.i64"));
 }
 
