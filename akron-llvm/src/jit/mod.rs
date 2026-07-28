@@ -5,7 +5,8 @@ use std::fmt;
 use std::ptr;
 
 use akron::compiled::{
-    runtime_api, CompiledEntry, RuntimeCapabilities, RuntimeContext, RUNTIME_ABI_VERSION,
+    runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
+    RUNTIME_ABI_VERSION,
 };
 use akron::{CompiledProgram, RuntimeError, VM};
 use memory::Value;
@@ -29,6 +30,9 @@ pub struct JitEngine {
     entry: CompiledEntry,
     instruction_count: usize,
     native_instruction_count: usize,
+    direct_instruction_count: usize,
+    runtime_instruction_count: usize,
+    compiled_call_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +45,7 @@ pub enum ExecutionOutcome {
 pub struct ExecutionResult {
     pub value: Value,
     pub outcome: ExecutionOutcome,
+    pub stats: ExecutionStats,
 }
 
 impl JitEngine {
@@ -48,6 +53,9 @@ impl JitEngine {
         let lowered = lower_program(program)?;
         let instruction_count = lowered.instruction_count;
         let native_instruction_count = lowered.native_instruction_count;
+        let direct_instruction_count = lowered.direct_instruction_count;
+        let runtime_instruction_count = lowered.runtime_instruction_count;
+        let compiled_call_count = lowered.compiled_call_count;
         let llvm = LlvmApi::load()?;
         llvm.initialize_native_target();
 
@@ -101,6 +109,9 @@ impl JitEngine {
             entry,
             instruction_count,
             native_instruction_count,
+            direct_instruction_count,
+            runtime_instruction_count,
+            compiled_call_count,
         })
     }
 
@@ -122,6 +133,18 @@ impl JitEngine {
 
     pub fn native_instruction_count(&self) -> usize {
         self.native_instruction_count
+    }
+
+    pub fn direct_instruction_count(&self) -> usize {
+        self.direct_instruction_count
+    }
+
+    pub fn runtime_instruction_count(&self) -> usize {
+        self.runtime_instruction_count
+    }
+
+    pub fn compiled_call_count(&self) -> usize {
+        self.compiled_call_count
     }
 
     pub fn execute(&self, vm: &mut VM) -> Result<ExecutionResult, JitError> {
@@ -152,6 +175,7 @@ impl JitEngine {
             )
         };
         let bailout_ip = context.bailout_ip();
+        let stats = context.stats();
         context.finish(status).map_err(JitError::Runtime)?;
 
         let value = Value::from_abi_bits(result_bits)
@@ -164,7 +188,11 @@ impl JitEngine {
             Some(instruction) => ExecutionOutcome::InterpreterBailout { instruction },
             None => ExecutionOutcome::Native,
         };
-        Ok(ExecutionResult { value, outcome })
+        Ok(ExecutionResult {
+            value,
+            outcome,
+            stats,
+        })
     }
 }
 

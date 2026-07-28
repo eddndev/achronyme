@@ -42,7 +42,7 @@ fn module_header(output: &mut String) {
     writeln!(output, "; Generated from canonical Akron bytecode.").unwrap();
     writeln!(
         output,
-        "%RuntimeApi = type {{ [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }}"
+        "%RuntimeApi = type {{ [8 x i8], i32, i32, i64, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }}"
     )
     .unwrap();
     writeln!(
@@ -91,12 +91,12 @@ fn emit_function(
                 continue;
             }
             InstructionMode::Runtime => {
-                emitter.begin_instruction(ip);
+                emitter.begin_instruction(ip, false);
                 emitter.runtime_instruction(ip);
                 continue;
             }
             InstructionMode::Call => {
-                emitter.begin_instruction(ip);
+                emitter.begin_instruction(ip, false);
                 emitter.call_instruction(ip);
                 continue;
             }
@@ -106,7 +106,7 @@ fn emit_function(
         let opcode = OpCode::from_u8(decode_opcode(instruction)).ok_or_else(|| {
             LoweringError::Internal(format!("unknown opcode reached emitter at {ip}"))
         })?;
-        emitter.begin_instruction(ip);
+        emitter.begin_instruction(ip, true);
         match opcode {
             OpCode::LoadConst => {
                 let value = function.constants[decode_bx(instruction) as usize];
@@ -215,6 +215,7 @@ impl<'output> Emitter<'output> {
             (12, "execute_instruction"),
             (13, "prepare_call"),
             (14, "finish_call"),
+            (15, "poll_tier1_block"),
         ] {
             self.load_api_function(field, name);
         }
@@ -240,12 +241,13 @@ impl<'output> Emitter<'output> {
         ));
     }
 
-    pub(super) fn begin_instruction(&mut self, ip: usize) {
+    pub(super) fn begin_instruction(&mut self, ip: usize, direct: bool) {
         if self.blocks.is_start(ip) {
             let instruction_count = self.blocks.end(ip) - ip;
+            let direct_instruction_count = if direct { instruction_count } else { 0 };
             self.line(&format!("ip{ip}:"));
             self.line(&format!(
-                "  %poll.status.{ip} = call i32 %poll_block_fn(ptr %context, i32 %frame_index, i32 {ip}, i32 {instruction_count})"
+                "  %poll.status.{ip} = call i32 %poll_tier1_block_fn(ptr %context, i32 %frame_index, i32 {ip}, i32 {instruction_count}, i32 {direct_instruction_count})"
             ));
             self.line(&format!(
                 "  %poll.ok.{ip} = icmp eq i32 %poll.status.{ip}, 0"

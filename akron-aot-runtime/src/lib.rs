@@ -85,6 +85,7 @@ fn run(bytes: &[u8], entry: CompiledEntry) -> Result<(), String> {
         )
     };
     let bailout_ip = context.bailout_ip();
+    let stats = context.stats();
     if let Err(error) = context.finish(status) {
         return Err(format_runtime_error(&vm, &error));
     }
@@ -104,6 +105,19 @@ fn run(bytes: &[u8], entry: CompiledEntry) -> Result<(), String> {
             ),
             None => eprintln!("LLVM AOT native: program completed without interpreter bailout"),
         }
+        eprintln!(
+            "LLVM AOT stats: direct={} runtime_calls={} compiled_calls={} native_calls={} block_polls={} slow_paths={} fallbacks={} first_fallback={}",
+            stats.direct_instructions,
+            stats.runtime_calls,
+            stats.compiled_function_calls,
+            stats.native_function_calls,
+            stats.block_polls,
+            stats.slow_paths,
+            stats.interpreter_fallbacks,
+            stats
+                .first_fallback_instruction
+                .map_or_else(|| "none".to_string(), |instruction| instruction.to_string()),
+        );
     }
     println!("Exit Status: {}", vm.val_to_string(&vm.last_result));
     Ok(())

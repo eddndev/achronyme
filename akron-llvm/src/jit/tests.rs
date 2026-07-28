@@ -143,6 +143,10 @@ fn orc_jit_executes_lowered_integer_arithmetic() {
     let result = engine.execute(&mut vm).unwrap();
     assert_eq!(result.value.as_int(), Some(42));
     assert_eq!(result.outcome, ExecutionOutcome::Native);
+    assert_eq!(result.stats.direct_instructions, 4);
+    assert_eq!(result.stats.runtime_calls, 0);
+    assert_eq!(result.stats.interpreter_fallbacks, 0);
+    assert!(result.stats.block_polls > 0);
     assert!(vm.frames.is_empty());
     assert_eq!(vm.instruction_budget, u64::MAX.wrapping_sub(4));
 }
@@ -221,6 +225,8 @@ fn orc_jit_executes_recursive_compiled_functions() {
 
     assert_eq!(result.value.as_int(), Some(55));
     assert_eq!(result.outcome, ExecutionOutcome::Native);
+    assert!(result.stats.compiled_function_calls > 0);
+    assert_eq!(result.stats.interpreter_fallbacks, 0);
     assert!(vm.frames.is_empty());
 }
 
@@ -328,6 +334,8 @@ fn orc_jit_bails_out_to_interpreter_at_unsupported_opcode() {
         ExecutionOutcome::InterpreterBailout { instruction: 2 }
     );
     assert_eq!(result.value.as_int(), Some(8));
+    assert_eq!(result.stats.interpreter_fallbacks, 1);
+    assert_eq!(result.stats.first_fallback_instruction, Some(2));
     assert_eq!(vm.stack[2].as_int(), Some(8));
     assert!(vm.frames.is_empty());
     assert_eq!(vm.instruction_budget, u64::MAX.wrapping_sub(4));

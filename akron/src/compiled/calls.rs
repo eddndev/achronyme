@@ -16,6 +16,7 @@ pub(super) unsafe extern "C" fn execute_instruction(
     instruction_index: u32,
 ) -> RuntimeStatus {
     run_helper(context, |state| {
+        state.stats_mut().record_runtime_call();
         unsafe { state.vm_mut() }
             .execute_compiled_runtime_instruction(frame_index as usize, instruction_index as usize)
     })
@@ -37,12 +38,16 @@ pub(super) unsafe extern "C" fn prepare_call(
         let target = unsafe { state.vm_mut() }
             .prepare_compiled_call(frame_index as usize, instruction_index as usize)?;
         match target {
-            CompiledCallTarget::NativeComplete => Ok(STATUS_NATIVE_CALL_COMPLETE),
+            CompiledCallTarget::NativeComplete => {
+                state.stats_mut().record_native_function_call();
+                Ok(STATUS_NATIVE_CALL_COMPLETE)
+            }
             CompiledCallTarget::Prototype {
                 frame_index,
                 base,
                 prototype_index,
             } => {
+                state.stats_mut().record_compiled_function_call();
                 unsafe {
                     callee_frame_output.write(frame_index);
                     callee_base_output.write(base);

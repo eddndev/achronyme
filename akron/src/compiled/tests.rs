@@ -275,6 +275,51 @@ fn block_refund_restores_fuel_and_commits_the_requested_ip() {
 }
 
 #[test]
+fn tier1_block_poll_records_direct_work_and_exact_refunds() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.instruction_budget = 10;
+
+    let stats = {
+        let mut context = RuntimeContext::new(&mut vm);
+        let opaque = context.as_opaque();
+        assert_eq!(
+            unsafe { (runtime_api().poll_tier1_block)(opaque, 0, 7, 4, 4) },
+            STATUS_OK
+        );
+        assert_eq!(
+            unsafe { (runtime_api().refund_block)(opaque, 0, 9, 2) },
+            STATUS_OK
+        );
+        let stats = context.stats();
+        context.finish(STATUS_OK).unwrap();
+        stats
+    };
+
+    assert_eq!(stats.block_polls, 1);
+    assert_eq!(stats.direct_instructions, 2);
+    assert_eq!(stats.slow_paths, 0);
+}
+
+#[test]
+fn tier1_block_poll_counts_exact_slow_paths_without_direct_work() {
+    let mut vm = VM::new();
+    vm.frames.push(CallFrame::new(0, 0, 0));
+    vm.instruction_budget = 3;
+
+    let mut context = RuntimeContext::new(&mut vm);
+    assert_eq!(
+        unsafe { (runtime_api().poll_tier1_block)(context.as_opaque(), 0, 7, 4, 4) },
+        STATUS_BAILOUT_REQUIRED
+    );
+    let stats = context.stats();
+
+    assert_eq!(stats.block_polls, 1);
+    assert_eq!(stats.direct_instructions, 0);
+    assert_eq!(stats.slow_paths, 1);
+}
+
+#[test]
 fn raise_error_preserves_runtime_error_kind() {
     let mut vm = VM::new();
     let error = {

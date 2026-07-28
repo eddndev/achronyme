@@ -5,8 +5,8 @@ use std::ops::{BitOr, BitOrAssign};
 
 use super::calls::{execute_instruction, finish_call, prepare_call};
 use super::context::{
-    interpreter_bailout, load_register, poll, poll_block, raise_error, refund_block,
-    register_window, store_register,
+    interpreter_bailout, load_register, poll, poll_block, poll_tier1_block, raise_error,
+    refund_block, register_window, store_register,
 };
 
 pub const RUNTIME_ABI_VERSION: u32 = 2;
@@ -38,6 +38,7 @@ pub type InterpreterBailoutFn =
 pub type RegisterWindowFn =
     unsafe extern "C" fn(*mut c_void, u32, u32, *mut *mut u64) -> RuntimeStatus;
 pub type PollBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
+pub type PollTier1BlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32, u32) -> RuntimeStatus;
 pub type RefundBlockFn = unsafe extern "C" fn(*mut c_void, u32, u32, u32) -> RuntimeStatus;
 pub type ExecuteInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
 pub type PrepareCallFn =
@@ -58,6 +59,7 @@ impl RuntimeCapabilities {
     pub const BLOCK_ACCOUNTING: Self = Self(1 << 6);
     pub const RUNTIME_INSTRUCTION: Self = Self(1 << 7);
     pub const COMPILED_CALLS: Self = Self(1 << 8);
+    pub const EXECUTION_STATS: Self = Self(1 << 9);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
@@ -66,7 +68,8 @@ impl RuntimeCapabilities {
             | Self::BLOCK_POLL.0
             | Self::BLOCK_ACCOUNTING.0
             | Self::RUNTIME_INSTRUCTION.0
-            | Self::COMPILED_CALLS.0,
+            | Self::COMPILED_CALLS.0
+            | Self::EXECUTION_STATS.0,
     );
 
     pub const fn empty() -> Self {
@@ -115,6 +118,7 @@ pub struct RuntimeApi {
     pub execute_instruction: ExecuteInstructionFn,
     pub prepare_call: PrepareCallFn,
     pub finish_call: FinishCallFn,
+    pub poll_tier1_block: PollTier1BlockFn,
 }
 
 #[repr(C)]
@@ -180,6 +184,7 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     execute_instruction,
     prepare_call,
     finish_call,
+    poll_tier1_block,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {
