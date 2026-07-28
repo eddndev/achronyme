@@ -12,7 +12,7 @@ use super::LoweringError;
 const NIL_BITS: u64 = 1u64 << 60;
 const FALSE_BITS: u64 = 2u64 << 60;
 const TRUE_BITS: u64 = 3u64 << 60;
-const STATUS_BAILOUT_REQUIRED: u32 = 4;
+mod poll;
 
 pub(super) fn emit(
     program: &akron::CompiledProgram,
@@ -207,6 +207,7 @@ impl<'output> Emitter<'output> {
             (14, "finish_call"),
             (15, "poll_tier1_block"),
             (16, "execution_window"),
+            (17, "poll_fast_block"),
         ] {
             self.load_api_function(field, name);
         }
@@ -232,42 +233,6 @@ impl<'output> Emitter<'output> {
         self.line(&format!(
             "  %{name}_fn = load ptr, ptr %{name}_slot, align 8"
         ));
-    }
-
-    pub(super) fn begin_instruction(&mut self, ip: usize, direct: bool) {
-        if self.blocks.is_start(ip) {
-            let instruction_count = self.blocks.end(ip) - ip;
-            let direct_instruction_count = if direct { instruction_count } else { 0 };
-            self.line(&format!("ip{ip}:"));
-            self.line(&format!(
-                "  %poll.status.{ip} = call i32 %poll_tier1_block_fn(ptr %context, i32 %frame_index, i32 {ip}, i32 {instruction_count}, i32 {direct_instruction_count})"
-            ));
-            self.line(&format!(
-                "  %poll.ok.{ip} = icmp eq i32 %poll.status.{ip}, 0"
-            ));
-            self.line(&format!(
-                "  br i1 %poll.ok.{ip}, label %op{ip}, label %poll.not_ok.{ip}"
-            ));
-            self.line(&format!("poll.not_ok.{ip}:"));
-            self.line(&format!(
-                "  %poll.slow.required.{ip} = icmp eq i32 %poll.status.{ip}, {STATUS_BAILOUT_REQUIRED}"
-            ));
-            self.line(&format!(
-                "  br i1 %poll.slow.required.{ip}, label %poll.slow.{ip}, label %poll.error.{ip}"
-            ));
-            self.line(&format!("poll.error.{ip}:"));
-            self.line(&format!("  ret i32 %poll.status.{ip}"));
-            self.line(&format!("poll.slow.{ip}:"));
-            self.spill(&format!("poll.slow.{ip}"));
-            self.line(&format!(
-                "  %poll.bailout.status.{ip} = call i32 %bailout_fn(ptr %context, i32 %frame_index, i32 {ip}, ptr %result_out)"
-            ));
-            self.line(&format!("  ret i32 %poll.bailout.status.{ip}"));
-        } else {
-            self.line(&format!("op{ip}:"));
-            return;
-        }
-        self.line(&format!("op{ip}:"));
     }
 
     fn bailout(&mut self, ip: usize) {

@@ -180,8 +180,8 @@ fn orc_jit_executes_lowered_integer_arithmetic() {
     assert_eq!(result.stats.runtime_calls, 0);
     assert_eq!(result.stats.interpreter_fallbacks, 0);
     assert!(result.stats.block_polls > 0);
-    assert_eq!(result.stats.fast_poll_hits, 0);
-    assert_eq!(result.stats.slow_poll_entries, result.stats.block_polls);
+    assert_eq!(result.stats.fast_poll_hits, result.stats.block_polls);
+    assert_eq!(result.stats.slow_poll_entries, 0);
     assert_eq!(result.stats.known_call_fast_hits, 0);
     assert_eq!(result.stats.known_call_fast_misses, 0);
     assert_eq!(result.stats.specialization_hits, 0);
@@ -259,6 +259,8 @@ fn stress_gc_uses_the_exact_interpreter_slow_path() {
         result.outcome,
         ExecutionOutcome::InterpreterBailout { instruction: 0 }
     );
+    assert_eq!(result.stats.fast_poll_hits, 0);
+    assert_eq!(result.stats.slow_poll_entries, 1);
     assert_eq!(vm.instruction_budget, 0);
 }
 

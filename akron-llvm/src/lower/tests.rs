@@ -48,6 +48,7 @@ fn scalar_arithmetic_lowers_to_a_native_entry() {
         module.ir.matches("call i32 %execution_window_fn").count(),
         1
     );
+    assert_eq!(module.ir.matches("call i32 %poll_fast_block_fn").count(), 1);
     assert_eq!(
         module.ir.matches("call i32 %poll_tier1_block_fn").count(),
         1

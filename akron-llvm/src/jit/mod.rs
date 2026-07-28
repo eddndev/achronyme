@@ -219,7 +219,7 @@ impl JitEngine {
             .validate(
                 RUNTIME_ABI_VERSION,
                 std::mem::size_of::<akron::compiled::RuntimeApi>() as u32,
-                RuntimeCapabilities::LLVM_TIER1,
+                RuntimeCapabilities::LLVM_TIER2,
             )
             .map_err(|error| JitError::Abi(error.to_string()))?;
         if vm.frames.len() != 1 {

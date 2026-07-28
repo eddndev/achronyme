@@ -16,7 +16,7 @@ use super::stats::ExecutionStats;
 
 mod poll;
 
-pub(super) use poll::{poll_block, poll_tier1_block};
+pub(super) use poll::{poll_block, poll_fast_block, poll_tier1_block};
 
 const GC_CHECK_INTERVAL: u32 = 1024;
 const _: () = assert!(std::mem::size_of::<Value>() == std::mem::size_of::<u64>());
