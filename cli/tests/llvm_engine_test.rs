@@ -21,6 +21,55 @@ fn run(path: &Path, engine: &str) -> Output {
         .expect("run ach")
 }
 
+fn run_default(path: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_ach"))
+        .env("AKRON_ENGINE_TRACE", "1")
+        .arg("--no-config")
+        .arg("run")
+        .arg(path)
+        .output()
+        .expect("run ach")
+}
+
+#[test]
+fn default_engine_executes_supported_source_natively() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = write_source(&directory, "scalar.ach", "return 40 + 2\n");
+
+    let output = run_default(&source);
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("LLVM JIT native:"), "{stderr}");
+}
+
+#[test]
+fn default_engine_falls_back_when_llvm_is_unavailable() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = write_source(&directory, "scalar.ach", "return 40 + 2\n");
+    let missing = directory.path().join("missing-libLLVM.so");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_ach"))
+        .env("AKRON_LLVM_DYLIB", &missing)
+        .arg("--no-config")
+        .arg("run")
+        .arg(&source)
+        .output()
+        .expect("run ach");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("LLVM JIT fallback:"), "{stderr}");
+}
+
 #[test]
 fn explicit_jit_executes_supported_source() {
     let directory = tempfile::tempdir().unwrap();

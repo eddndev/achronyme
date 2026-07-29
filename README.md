@@ -72,7 +72,7 @@ print(proof_json(p))  // Groth16 proof, verifiable on-chain
 
 Achronyme has two execution modes from the same source:
 
-**VM mode** (`ach run`) — Full language: closures, recursion, GC, arrays, maps, strings, I/O. Code runs like any scripting language.
+**VM mode** (`ach run`) - Full language: closures, recursion, GC, arrays, maps, strings, I/O. The normal CLI attempts the LLVM JIT and falls back to the interpreter when LLVM 21 is unavailable. Use `--engine interpreter` to select the interpreter explicitly.
 
 **Circuit mode** (`ach circuit`) — Compiles to arithmetic constraints over a configurable prime field (BN254, BLS12-381, or Goldilocks). No loops at runtime, no I/O — everything is unrolled and flattened into a constraint system for zero-knowledge proofs. Select the field with `--prime bn254|bls12-381|goldilocks`.
 

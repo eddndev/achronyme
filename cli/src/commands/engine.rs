@@ -1,13 +1,27 @@
+use std::fmt;
+
 use akron::{CompiledProgram, RuntimeError, VM};
 use anyhow::{anyhow, Result};
 use clap::ValueEnum;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum ExecutionEngine {
-    #[default]
+    #[cfg_attr(not(feature = "llvm"), default)]
     Interpreter,
     Jit,
+    #[cfg_attr(feature = "llvm", default)]
     Auto,
+}
+
+impl fmt::Display for ExecutionEngine {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Interpreter => "interpreter",
+            Self::Jit => "jit",
+            Self::Auto => "auto",
+        };
+        formatter.write_str(name)
+    }
 }
 
 pub(crate) enum PreparedEngine {
@@ -82,6 +96,23 @@ fn prepare_jit(program: &CompiledProgram) -> Result<PreparedEngine> {
 #[cfg(not(feature = "llvm"))]
 fn prepare_jit(_program: &CompiledProgram) -> Result<PreparedEngine> {
     Err(anyhow!(
-        "this ach build does not include LLVM; rebuild with `--features llvm`"
+        "this interpreter-only ach build excludes LLVM; rebuild without `--no-default-features`"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ExecutionEngine;
+
+    #[test]
+    #[cfg(feature = "llvm")]
+    fn default_selection_is_auto() {
+        assert_eq!(ExecutionEngine::default(), ExecutionEngine::Auto);
+    }
+
+    #[test]
+    #[cfg(not(feature = "llvm"))]
+    fn interpreter_only_build_defaults_to_interpreter() {
+        assert_eq!(ExecutionEngine::default(), ExecutionEngine::Interpreter);
+    }
 }

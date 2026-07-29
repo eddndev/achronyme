@@ -40,7 +40,7 @@ pub fn aot_file(
             circom_lib_dirs,
         );
         Err(anyhow::anyhow!(
-            "this ach build does not include LLVM AOT; rebuild with `--features llvm`"
+            "this interpreter-only ach build excludes LLVM AOT; rebuild without `--no-default-features`"
         ))
     }
 }

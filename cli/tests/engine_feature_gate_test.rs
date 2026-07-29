@@ -3,7 +3,7 @@
 use std::process::Command;
 
 #[test]
-fn explicit_jit_explains_how_to_enable_llvm() {
+fn explicit_jit_explains_interpreter_only_build() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("scalar.ach");
     std::fs::write(&source, "return 40 + 2\n").unwrap();
@@ -19,12 +19,15 @@ fn explicit_jit_explains_how_to_enable_llvm() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("does not include LLVM"), "{stderr}");
-    assert!(stderr.contains("--features llvm"), "{stderr}");
+    assert!(stderr.contains("interpreter-only"), "{stderr}");
+    assert!(
+        stderr.contains("without `--no-default-features`"),
+        "{stderr}"
+    );
 }
 
 #[test]
-fn aot_explains_how_to_enable_llvm() {
+fn aot_explains_interpreter_only_build() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("scalar.ach");
     std::fs::write(&source, "return 40 + 2\n").unwrap();
@@ -38,6 +41,9 @@ fn aot_explains_how_to_enable_llvm() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("does not include LLVM AOT"), "{stderr}");
-    assert!(stderr.contains("--features llvm"), "{stderr}");
+    assert!(stderr.contains("interpreter-only"), "{stderr}");
+    assert!(
+        stderr.contains("without `--no-default-features`"),
+        "{stderr}"
+    );
 }

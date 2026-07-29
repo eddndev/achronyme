@@ -57,7 +57,7 @@ pub enum Commands {
         #[arg(long)]
         circuit_stats: bool,
         /// Execution engine: interpreter, jit, or auto
-        #[arg(long, value_enum, default_value = "interpreter")]
+        #[arg(long, value_enum, default_value_t = ExecutionEngine::default())]
         engine: ExecutionEngine,
     },
     /// Disassemble a source file or binary

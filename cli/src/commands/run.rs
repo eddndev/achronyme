@@ -34,7 +34,7 @@ pub fn run_file(
         circuit_stats,
         error_format,
         circom_lib_dirs,
-        ExecutionEngine::Interpreter,
+        ExecutionEngine::default(),
     )
 }
 

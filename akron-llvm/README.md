@@ -1,26 +1,22 @@
 # Akron LLVM backend
 
-`akron-llvm` is optional. The interpreter remains the default execution engine.
-Enable `aot` to emit a standalone executable with Clang 21, or `llvm` to use
-LLVM ORC JIT. The CLI feature named `llvm` enables both paths.
+The normal Achronyme CLI includes this backend and selects `auto`: it attempts
+LLVM ORC JIT and falls back to the interpreter when LLVM is unavailable. Use
+`--engine interpreter` for an explicit runtime rollback, or build the CLI with
+`--no-default-features` to exclude the backend. The low-level `akron-llvm`
+crate keeps separate `llvm` and `aot` features.
 
 ## Linux LLVM contract
 
-Building a binary with the `llvm` feature requires the linker to find the LLVM
-21 C API through `-lLLVM-21`. The resulting ELF binary records a dynamic
-dependency on LLVM 21, and the operating-system loader must resolve it before
-the process starts.
+The JIT loads LLVM lazily and resolves every required symbol from one shared
+library handle. The CLI records no ELF dependency on LLVM, so it can start and
+use the interpreter on systems without LLVM. Without `AKRON_LLVM_DYLIB`, the
+loader tries the documented LLVM 21 system names. When the variable is set, its
+value is the only candidate and must expose the LLVM 21 C API.
 
-After startup, the JIT opens a shared library and resolves all LLVM symbols from
-that handle. Without `AKRON_LLVM_DYLIB`, it tries the documented LLVM 21 system
-names. When `AKRON_LLVM_DYLIB` is set, its value is the only runtime library
-candidate and must expose LLVM 21. It selects the symbol source; it does not
-replace the link-time dependency and cannot make a binary start on a system
-where its recorded LLVM dependency is missing.
-
-The default CLI does not link LLVM. An executable emitted by the AOT backend
-also does not link LLVM; compilation requires Clang 21 and the Akron AOT runtime
-archive, but the generated executable contains the native program and runtime.
+An executable emitted by the AOT backend also does not link LLVM. Compilation
+requires Clang 21 and the Akron AOT runtime archive, but the generated
+executable contains the native program and runtime.
 
 ## JIT object cache
 

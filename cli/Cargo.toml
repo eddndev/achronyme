@@ -15,7 +15,7 @@ name = "ach"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["llvm"]
 llvm = ["dep:akron-llvm", "akron-llvm/llvm", "akron-llvm/aot"]
 
 [dependencies]

@@ -56,13 +56,6 @@ type RunPassesFn =
 type CreatePassBuilderOptionsFn = unsafe extern "C" fn() -> PassBuilderOptionsRef;
 type DisposePassBuilderOptionsFn = unsafe extern "C" fn(PassBuilderOptionsRef);
 
-#[cfg(target_os = "linux")]
-#[link(name = "LLVM-21")]
-unsafe extern "C" {
-    #[link_name = "LLVMGetVersion"]
-    fn linked_llvm_get_version(major: *mut u32, minor: *mut u32, patch: *mut u32);
-}
-
 pub(super) struct LlvmApi {
     _library: Arc<Library>,
     pub path: String,
@@ -229,19 +222,6 @@ impl LlvmApi {
 }
 
 fn load_library() -> Result<SharedLibrary, String> {
-    #[cfg(target_os = "linux")]
-    {
-        let mut major = 0;
-        let mut minor = 0;
-        let mut patch = 0;
-        unsafe { linked_llvm_get_version(&mut major, &mut minor, &mut patch) };
-        if major != 21 {
-            return Err(format!(
-                "linked LLVM C API {major}.{minor}.{patch} is unsupported; this backend requires LLVM 21"
-            ));
-        }
-    }
-
     let candidates = library_candidates(env::var_os("AKRON_LLVM_DYLIB"));
     let mut errors = Vec::new();
     for candidate in candidates {

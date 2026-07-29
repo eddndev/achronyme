@@ -101,12 +101,19 @@ jobs:
       - name: Verify LLVM link contract
         run: bash test/llvm_link_contract.sh
 
+      - name: Verify interpreter-only CLI
+        run: |
+          cargo test -p cli --no-default-features --lib
+          cargo test -p cli --no-default-features \
+            --test default_feature_contract \
+            --test engine_feature_gate_test
+
       - name: Test LLVM backend
         run: cargo test -p akron-llvm --features llvm,aot
 
       - name: Test LLVM CLI engines
         run: >-
-          cargo test -p cli --features llvm
+          cargo test -p cli
           --test llvm_engine_test
           --test engine_oracle
           --test aot_cli_test
