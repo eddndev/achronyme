@@ -49,8 +49,10 @@ impl ProgramCapabilities {
     pub const CIRCOM: Self = Self(1 << 1);
     pub const NATIVE_CALLS: Self = Self(1 << 2);
     pub const FILE_IO: Self = Self(1 << 3);
+    pub const VERIFY: Self = Self(1 << 4);
 
-    const KNOWN_BITS: u64 = Self::PROVE.0 | Self::CIRCOM.0 | Self::NATIVE_CALLS.0 | Self::FILE_IO.0;
+    const KNOWN_BITS: u64 =
+        Self::PROVE.0 | Self::CIRCOM.0 | Self::NATIVE_CALLS.0 | Self::FILE_IO.0 | Self::VERIFY.0;
 
     pub const fn empty() -> Self {
         Self(0)
@@ -143,11 +145,18 @@ impl CompiledProgram {
 
     pub fn derived_capabilities(&self) -> ProgramCapabilities {
         let mut capabilities = ProgramCapabilities::empty();
+        let verify_global = resolve::BuiltinRegistry::default()
+            .lookup("verify_proof")
+            .and_then(|entry| entry.vm_fn)
+            .and_then(|handle| u16::try_from(handle.as_u32()).ok());
         for function in std::iter::once(&self.main).chain(self.functions.iter()) {
             for &instruction in &function.chunk {
                 match OpCode::from_u8(decode_opcode(instruction)) {
                     Some(OpCode::Prove) => capabilities |= ProgramCapabilities::PROVE,
                     Some(OpCode::CallCircomTemplate) => capabilities |= ProgramCapabilities::CIRCOM,
+                    Some(OpCode::GetGlobal) if Some(decode_bx(instruction)) == verify_global => {
+                        capabilities |= ProgramCapabilities::VERIFY
+                    }
                     Some(OpCode::Call) | Some(OpCode::MethodCall) => {
                         capabilities |= ProgramCapabilities::NATIVE_CALLS
                     }

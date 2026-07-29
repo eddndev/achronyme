@@ -8,7 +8,7 @@ use crate::opcode::instruction::encode_abx;
 use crate::opcode::OpCode;
 use crate::VM;
 
-use super::CompiledProgram;
+use super::{CompiledProgram, ProgramCapabilities};
 
 fn minimal_program() -> CompiledProgram {
     CompiledProgram::new(
@@ -140,6 +140,49 @@ fn validation_allows_reachable_cycle_without_exit() {
     program.main.line_info = vec![1];
 
     program.validate().unwrap();
+}
+
+#[test]
+fn capabilities_detect_verify_proof_global_usage() {
+    let registry = resolve::BuiltinRegistry::default();
+    let verify_index = registry
+        .lookup("verify_proof")
+        .and_then(|entry| entry.vm_fn)
+        .unwrap()
+        .as_u32() as u16;
+    let mut program = minimal_program();
+    program.main.chunk = vec![
+        encode_abx(OpCode::GetGlobal.as_u8(), 0, verify_index),
+        encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+    ];
+    program.main.line_info = vec![1; 2];
+
+    assert!(program
+        .derived_capabilities()
+        .contains(ProgramCapabilities::VERIFY));
+}
+
+#[test]
+fn executable_roundtrip_preserves_verify_capability() {
+    let registry = resolve::BuiltinRegistry::default();
+    let verify_index = registry
+        .lookup("verify_proof")
+        .and_then(|entry| entry.vm_fn)
+        .unwrap()
+        .as_u32() as u16;
+    let mut program = minimal_program();
+    program.main.chunk = vec![
+        encode_abx(OpCode::GetGlobal.as_u8(), 0, verify_index),
+        encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+    ];
+    program.main.line_info = vec![1; 2];
+    program.capabilities = program.derived_capabilities();
+    let mut bytes = Vec::new();
+    program.write_executable(&mut bytes).unwrap();
+
+    let decoded = CompiledProgram::read_executable(&mut bytes.as_slice()).unwrap();
+
+    assert!(decoded.capabilities.contains(ProgramCapabilities::VERIFY));
 }
 
 #[test]

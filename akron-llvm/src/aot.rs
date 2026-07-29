@@ -2,7 +2,7 @@ use std::fmt::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use akron::CompiledProgram;
+use akron::{CompiledProgram, ProgramCapabilities};
 
 use crate::{lower_program_with_options, LlvmTierOptions, LoweringError};
 
@@ -60,6 +60,7 @@ impl AotCompiler {
         program
             .validate()
             .map_err(|error| AotError::Program(error.to_string()))?;
+        validate_host_capabilities(program)?;
         if !self.options.runtime_archive.is_file() {
             return Err(AotError::Configuration(format!(
                 "AOT runtime archive not found: {}",
@@ -113,6 +114,26 @@ impl AotCompiler {
             native_instruction_count: lowered.native_instruction_count,
         })
     }
+}
+
+fn validate_host_capabilities(program: &CompiledProgram) -> Result<(), AotError> {
+    let supported = ProgramCapabilities::NATIVE_CALLS.bits() | ProgramCapabilities::FILE_IO.bits();
+    let unsupported = program.capabilities.bits() & !supported;
+    if unsupported == 0 {
+        return Ok(());
+    }
+
+    let mut names = Vec::new();
+    for (capability, name) in [
+        (ProgramCapabilities::PROVE, "PROVE"),
+        (ProgramCapabilities::VERIFY, "VERIFY"),
+        (ProgramCapabilities::CIRCOM, "CIRCOM"),
+    ] {
+        if unsupported & capability.bits() != 0 {
+            names.push(name);
+        }
+    }
+    Err(AotError::UnsupportedCapabilities(names.join(", ")))
 }
 
 fn link_command(options: &AotOptions, object: &Path, output: &Path) -> Command {
@@ -213,6 +234,7 @@ fn require_success(action: &str, output: Output) -> Result<(), AotError> {
 pub enum AotError {
     Configuration(String),
     Program(String),
+    UnsupportedCapabilities(String),
     Lowering(LoweringError),
     Io(std::io::Error),
     Tool(String),
@@ -224,6 +246,10 @@ impl fmt::Display for AotError {
             Self::Configuration(message) | Self::Program(message) | Self::Tool(message) => {
                 formatter.write_str(message)
             }
+            Self::UnsupportedCapabilities(capabilities) => write!(
+                formatter,
+                "standalone AOT runtime does not provide required capabilities: {capabilities}"
+            ),
             Self::Lowering(error) => write!(formatter, "{error}"),
             Self::Io(error) => write!(formatter, "AOT I/O error: {error}"),
         }
@@ -245,73 +271,4 @@ impl From<std::io::Error> for AotError {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::ffi::OsStr;
-    use std::path::Path;
-
-    use akron::opcode::instruction::encode_abx;
-    use akron::{CompiledProgram, OpCode};
-    use memory::field::PrimeId;
-    use memory::{Function, Value};
-
-    use super::{link_command, AotCompiler, AotError, AotOptions};
-
-    fn contains_arg(command: &std::process::Command, expected: &str) -> bool {
-        command
-            .get_args()
-            .any(|argument| argument == OsStr::new(expected))
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn linker_gc_sections_are_enabled_by_default_and_can_be_disabled() {
-        let enabled = AotOptions::new("clang-21", "runtime.a");
-        let object = Path::new("program.o");
-        let executable = Path::new("program");
-
-        let enabled_link = link_command(&enabled, object, executable);
-        assert!(contains_arg(&enabled_link, "-Wl,--gc-sections"));
-
-        let mut disabled = enabled;
-        disabled.linker_gc_sections = false;
-        let disabled_link = link_command(&disabled, object, executable);
-        assert!(!contains_arg(&disabled_link, "-Wl,--gc-sections"));
-    }
-
-    #[test]
-    fn invalid_program_is_rejected_before_aot_tools() {
-        let program = CompiledProgram::new(
-            PrimeId::Bn254,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Function {
-                name: "main".to_string(),
-                arity: 0,
-                max_slots: 1,
-                chunk: vec![encode_abx(OpCode::LoadConst.as_u8(), 0, 0)],
-                constants: vec![Value::int(1)],
-                upvalue_info: Vec::new(),
-                line_info: vec![1],
-            },
-            HashMap::new(),
-        );
-        let compiler = AotCompiler::new(AotOptions::new("missing-clang", "missing-runtime"));
-
-        let error = compiler
-            .build_executable(&program, "unused-output")
-            .unwrap_err();
-
-        assert!(matches!(error, AotError::Program(_)), "{error}");
-        assert!(
-            error
-                .to_string()
-                .contains("reachable path exits without Return"),
-            "{error}"
-        );
-    }
-}
+mod tests;
