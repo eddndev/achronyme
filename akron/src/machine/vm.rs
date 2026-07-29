@@ -146,6 +146,11 @@ impl VM {
         Ok(())
     }
 
+    /// Finish a compiled main frame through the canonical VM return path.
+    pub fn finish_compiled_top_level(&mut self, result: Value) -> Result<(), RuntimeError> {
+        self.finish_compiled_call(0, result)
+    }
+
     /// Register an external `NativeModule` after bootstrap.
     ///
     /// Used by the CLI to add stdlib modules (`achronyme-std`) whose

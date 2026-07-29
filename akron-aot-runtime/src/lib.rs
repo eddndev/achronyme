@@ -145,12 +145,17 @@ fn execute_loaded(
     }
     let result = Value::from_abi_bits(result_bits)
         .ok_or_else(|| "compiled entry returned noncanonical Value bits".to_string())?;
-    vm.last_result = if bailout_ip.is_some() {
-        vm.last_result
+    if bailout_ip.is_some() {
+        if !vm.frames.is_empty() {
+            return Err(format!(
+                "interpreter bailout left {} frames active",
+                vm.frames.len()
+            ));
+        }
     } else {
-        result
-    };
-    vm.frames.pop();
+        vm.finish_compiled_top_level(result)
+            .map_err(|error| format_runtime_error(vm, &error))?;
+    }
     Ok((bailout_ip, stats))
 }
 
@@ -238,9 +243,73 @@ fn format_runtime_error(vm: &VM, error: &akron::RuntimeError) -> String {
 
 #[cfg(test)]
 mod tests {
-    use akron::compiled::ExecutionStats;
+    use std::collections::HashMap;
+    use std::ffi::c_void;
 
-    use super::format_stats;
+    use akron::compiled::{ExecutionStats, RuntimeApi, RuntimeStatus, STATUS_OK};
+    use akron::opcode::instruction::{encode_abc, encode_abx};
+    use akron::{CompiledProgram, OpCode, VM};
+    use memory::field::PrimeId;
+    use memory::{Function, UpvalueLocation, Value};
+
+    use super::{execute_loaded, format_stats};
+
+    fn captured_main_local_program() -> CompiledProgram {
+        let add_offset = Function {
+            name: "add_offset".to_string(),
+            arity: 1,
+            max_slots: 2,
+            chunk: vec![
+                encode_abx(OpCode::GetUpvalue.as_u8(), 1, 0),
+                encode_abc(OpCode::Add.as_u8(), 0, 0, 1),
+                encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+            ],
+            constants: Vec::new(),
+            upvalue_info: vec![1, 0],
+            line_info: vec![2; 3],
+        };
+        let main = Function {
+            name: "main".to_string(),
+            arity: 0,
+            max_slots: 2,
+            chunk: vec![
+                encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+                encode_abx(OpCode::Closure.as_u8(), 1, 0),
+                encode_abc(OpCode::Return.as_u8(), 1, 1, 0),
+            ],
+            constants: vec![Value::int(5)],
+            upvalue_info: Vec::new(),
+            line_info: vec![1; 3],
+        };
+        CompiledProgram::new(
+            PrimeId::Bn254,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![add_offset],
+            main,
+            HashMap::new(),
+        )
+    }
+
+    unsafe extern "C" fn compiled_closure_entry(
+        api: *const RuntimeApi,
+        context: *mut c_void,
+        frame_index: u32,
+        base: u32,
+        output: *mut u64,
+    ) -> RuntimeStatus {
+        let api = unsafe { &*api };
+        for instruction in 0..2 {
+            let status = unsafe { (api.execute_instruction)(context, frame_index, instruction) };
+            if status != STATUS_OK {
+                return status;
+            }
+        }
+        unsafe { (api.load_register)(context, base, 1, output) }
+    }
 
     #[test]
     fn trace_format_preserves_tier1_and_exposes_tier2_counters() {
@@ -263,5 +332,30 @@ mod tests {
         assert!(trace.contains("known_call_fast_misses=5"));
         assert!(trace.contains("specialization_hits=6"));
         assert!(trace.contains("specialization_misses=7"));
+    }
+
+    #[test]
+    fn aot_host_closes_captured_main_locals() {
+        let mut vm = VM::new();
+        vm.load_program(captured_main_local_program()).unwrap();
+
+        let (bailout, _) = execute_loaded(&mut vm, compiled_closure_entry).unwrap();
+
+        assert_eq!(bailout, None);
+        assert!(vm.frames.is_empty());
+        assert!(vm.open_upvalues.is_none());
+        let closure_value = vm.last_result;
+        let closure = vm
+            .heap
+            .get_closure(closure_value.as_handle().unwrap())
+            .unwrap();
+        assert!(matches!(
+            vm.heap.get_upvalue(closure.upvalues[0]).unwrap().location,
+            UpvalueLocation::Closed(value) if value.as_int() == Some(5)
+        ));
+        assert_eq!(
+            vm.call_value(closure_value, &[Value::int(7)]).unwrap(),
+            Value::int(12)
+        );
     }
 }

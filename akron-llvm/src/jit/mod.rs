@@ -155,9 +155,14 @@ impl JitEngine {
         let value = Value::from_abi_bits(result_bits)
             .ok_or_else(|| JitError::State("JIT returned noncanonical Value bits".to_string()))?;
         if bailout_ip.is_none() {
-            vm.last_result = value;
+            vm.finish_compiled_top_level(value)
+                .map_err(JitError::Runtime)?;
+        } else if !vm.frames.is_empty() {
+            return Err(JitError::State(format!(
+                "interpreter bailout left {} frames active",
+                vm.frames.len()
+            )));
         }
-        vm.frames.pop();
         let outcome = match bailout_ip {
             Some(instruction) => ExecutionOutcome::InterpreterBailout { instruction },
             None => ExecutionOutcome::Native,

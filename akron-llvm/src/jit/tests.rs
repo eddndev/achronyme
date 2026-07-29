@@ -7,6 +7,7 @@ use memory::{Function, Value};
 
 use super::{ExecutionOutcome, JitCacheStats, JitEngine};
 
+mod frames;
 mod globals;
 mod rollback;
 mod specializations;
