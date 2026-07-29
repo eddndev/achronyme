@@ -1,3 +1,10 @@
+//! Runtime boundary shared by compiled Akron backends.
+//!
+//! Expected execution failures are represented by runtime status values and a
+//! pending [`crate::RuntimeError`]. Unexpected internal panics are fatal. ABI
+//! helpers do not recover panics, and no unwind may cross an `extern "C"`
+//! boundary.
+
 mod abi;
 mod calls;
 mod context;

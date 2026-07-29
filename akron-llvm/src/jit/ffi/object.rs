@@ -1,5 +1,4 @@
 use std::ffi::{c_char, c_void, CStr};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::time::{Duration, Instant};
 
@@ -67,11 +66,10 @@ unsafe extern "C" fn capture_object(
         return ptr::null_mut();
     }
     let capture = unsafe { &mut *context.cast::<ObjectCapture>() };
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let object = unsafe { object_in_out.as_ref().copied() }.ok_or(())?;
-        capture.capture(object)
-    }));
-    if !matches!(result, Ok(Ok(()))) {
+    let result = unsafe { object_in_out.as_ref().copied() }
+        .ok_or(())
+        .and_then(|object| capture.capture(object));
+    if result.is_err() {
         capture.failed = true;
     }
     ptr::null_mut()

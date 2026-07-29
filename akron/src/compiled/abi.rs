@@ -18,6 +18,10 @@ pub type CompiledEntry =
 pub const STATUS_OK: RuntimeStatus = 0;
 pub const STATUS_RUNTIME_ERROR: RuntimeStatus = 1;
 pub const STATUS_INVALID_ARGUMENT: RuntimeStatus = 2;
+/// The compiled entry reported an internal failure without a recoverable error.
+///
+/// This status does not represent a recovered Rust panic. Unexpected panics are
+/// fatal at the compiled runtime ABI boundary.
 pub const STATUS_INTERNAL_ERROR: RuntimeStatus = 3;
 pub const STATUS_BAILOUT_REQUIRED: RuntimeStatus = 4;
 pub const STATUS_NATIVE_CALL_COMPLETE: RuntimeStatus = 5;

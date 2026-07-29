@@ -74,6 +74,9 @@ jobs:
           cargo build -p akron-aot-runtime
           cargo build -p akron-aot-runtime --release
 
+      - name: Verify release panic contract
+        run: bash test/release_panic_contract.sh
+
       - name: Test LLVM backend
         run: cargo test -p akron-llvm --features llvm,aot
 

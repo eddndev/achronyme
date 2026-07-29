@@ -1,4 +1,3 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 use std::time::Instant;
 
@@ -18,7 +17,9 @@ const MAX_PROGRAM_IMAGE: usize = 512 * 1024 * 1024;
 /// `program_bytes` must identify `program_len` readable bytes for the duration
 /// of this call. `entry` must be a valid function with the `CompiledEntry` ABI
 /// generated for that exact program image. The ABI requirement values must be
-/// the ones used to lower `entry`.
+/// the ones used to lower `entry`. Expected loader and runtime failures return
+/// an exit status. An unexpected internal panic is fatal and is never unwound
+/// across this C ABI boundary.
 pub unsafe extern "C" fn akron_aot_runtime_main(
     program_bytes: *const u8,
     program_len: usize,
@@ -32,25 +33,18 @@ pub unsafe extern "C" fn akron_aot_runtime_main(
         return 2;
     }
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let bytes = unsafe { slice::from_raw_parts(program_bytes, program_len) };
-        run(
-            bytes,
-            entry,
-            required_abi_version,
-            required_abi_size,
-            required_capabilities,
-        )
-    }));
-    match result {
-        Ok(Ok(())) => 0,
-        Ok(Err(message)) => {
+    let bytes = unsafe { slice::from_raw_parts(program_bytes, program_len) };
+    match run(
+        bytes,
+        entry,
+        required_abi_version,
+        required_abi_size,
+        required_capabilities,
+    ) {
+        Ok(()) => 0,
+        Err(message) => {
             eprintln!("Error: {message}");
             1
-        }
-        Err(_) => {
-            eprintln!("Error: Akron AOT runtime panicked");
-            2
         }
     }
 }

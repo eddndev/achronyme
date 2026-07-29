@@ -1,6 +1,5 @@
 use std::ffi::c_void;
 use std::marker::PhantomData;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr::{self, NonNull};
 
 use memory::Value;
@@ -9,8 +8,8 @@ use crate::{RuntimeError, VM};
 
 use super::abi::{
     RuntimeStatus, ERROR_ASSERTION_FAILED, ERROR_DIVISION_BY_ZERO, ERROR_INTEGER_OVERFLOW,
-    ERROR_INVALID_OPERAND, ERROR_STACK_OVERFLOW, STATUS_INTERNAL_ERROR,
-    STATUS_INTERPRETER_COMPLETED, STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
+    ERROR_INVALID_OPERAND, ERROR_STACK_OVERFLOW, STATUS_INTERPRETER_COMPLETED,
+    STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
 };
 use super::stats::ExecutionStats;
 
@@ -119,15 +118,9 @@ where
     }
 
     let state = unsafe { &mut *context.cast::<RuntimeContextState>() };
-    match catch_unwind(AssertUnwindSafe(|| operation(state))) {
-        Ok(Ok(status)) => status,
-        Ok(Err(error)) => state.fail(error),
-        Err(_) => {
-            state.pending_error = Some(RuntimeError::resource_limit_exceeded(
-                "compiled runtime helper panicked",
-            ));
-            STATUS_INTERNAL_ERROR
-        }
+    match operation(state) {
+        Ok(status) => status,
+        Err(error) => state.fail(error),
     }
 }
 
