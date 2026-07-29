@@ -66,8 +66,29 @@ jobs:
             x86_64|aarch64) ;;
             *) echo "::error::Unsupported LLVM host architecture: $(uname -m)" >&2; exit 1 ;;
           esac
-          clang-21 --version | sed -n '1p' | grep -E '^clang version 21\.'
-          clang --version | sed -n '1p' | grep -E '^clang version 21\.'
+          clang_path=""
+          for candidate in clang-21 clang; do
+            candidate_path="$(command -v "$candidate" || true)"
+            if [ -z "$candidate_path" ]; then
+              continue
+            fi
+            version="$($candidate_path --version | sed -n '1p')"
+            major="$(printf '%s\n' "$version" | sed -n 's/.*clang version \([0-9][0-9]*\).*/\1/p')"
+            if [ "$major" = "21" ]; then
+              clang_path="$candidate_path"
+              break
+            fi
+            echo "::notice::Ignoring $candidate_path: $version"
+          done
+          if [ -z "$clang_path" ]; then
+            echo "::error::No Clang 21 executable found as clang-21 or clang" >&2
+            exit 1
+          fi
+          llvm_tools="$RUNNER_TEMP/akron-llvm-tools"
+          mkdir -p "$llvm_tools"
+          ln -s "$clang_path" "$llvm_tools/clang"
+          echo "$llvm_tools" >> "$GITHUB_PATH"
+          "$llvm_tools/clang" --version | sed -n '1p'
 
       - name: Build AOT runtimes
         run: |
