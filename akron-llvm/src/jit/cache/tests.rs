@@ -1,8 +1,12 @@
-use std::fs;
+use std::fs::{self, File};
 
+use sha2::Digest;
 use tempfile::TempDir;
 
-use super::{CacheIdentity, CacheMetadata, CachedObject, ObjectCache};
+use super::{
+    decode_entry, encode_entry, CacheIdentity, CacheMetadata, CachedObject, ObjectCache,
+    ABSOLUTE_MAX_CACHE_BYTES, ABSOLUTE_MAX_ENTRY_BYTES,
+};
 use crate::jit::LlvmVersion;
 
 fn identity() -> CacheIdentity {
@@ -148,4 +152,77 @@ fn disabled_cache_performs_no_io() {
     let key = identity().key();
     cache.store(key, &cached(b"object"));
     assert_eq!(cache.lookup(key), None);
+}
+
+#[test]
+fn configured_bound_is_capped_by_the_absolute_limit() {
+    let directory = TempDir::new().unwrap();
+    let cache = ObjectCache::new(directory.path().to_path_buf(), u64::MAX);
+
+    assert_eq!(cache.max_bytes, ABSOLUTE_MAX_CACHE_BYTES);
+}
+
+#[test]
+fn oversized_sparse_entry_is_removed_before_contents_are_read() {
+    let directory = TempDir::new().unwrap();
+    let cache = ObjectCache::new(directory.path().to_path_buf(), u64::MAX);
+    let key = identity().key();
+    let path = cache.entry_path(key);
+    File::create(&path)
+        .unwrap()
+        .set_len(ABSOLUTE_MAX_ENTRY_BYTES + 1)
+        .unwrap();
+
+    assert_eq!(cache.lookup(key), None);
+    assert!(!path.exists());
+}
+
+#[test]
+fn zero_bound_disables_cache_without_creating_its_directory() {
+    let root = TempDir::new().unwrap();
+    let directory = root.path().join("disabled");
+    let cache = ObjectCache::new(directory.clone(), 0);
+    let key = identity().key();
+
+    cache.store(key, &cached(b"object"));
+
+    assert_eq!(cache.lookup(key), None);
+    assert!(!directory.exists());
+}
+
+#[test]
+fn overflowing_object_length_is_a_safe_decode_miss() {
+    let key = identity().key();
+    let mut bytes = encode_entry(key, &cached(b"object")).unwrap();
+    bytes[116..124].copy_from_slice(&u64::MAX.to_le_bytes());
+    let checksum: [u8; 32] = sha2::Sha256::digest(&bytes[76..]).into();
+    bytes[44..76].copy_from_slice(&checksum);
+
+    assert_eq!(decode_entry(&bytes, key), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn permission_denied_entry_is_a_safe_miss_without_deletion() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let cache = ObjectCache::new(directory.path().to_path_buf(), 1024 * 1024);
+    let key = identity().key();
+    let artifact = cached(b"object");
+    cache.store(key, &artifact);
+    let path = cache.entry_path(key);
+    let original_permissions = fs::metadata(&path).unwrap().permissions();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    let access_is_denied = File::open(&path).is_err();
+
+    let result = cache.lookup(key);
+
+    fs::set_permissions(&path, original_permissions).unwrap();
+    if access_is_denied {
+        assert_eq!(result, None);
+        assert!(path.exists());
+    } else {
+        assert_eq!(result, Some(artifact));
+    }
 }

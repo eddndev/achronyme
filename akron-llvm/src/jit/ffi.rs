@@ -242,7 +242,7 @@ fn load_library() -> Result<SharedLibrary, String> {
         }
     }
 
-    let candidates = library_candidates();
+    let candidates = library_candidates(env::var_os("AKRON_LLVM_DYLIB"));
     let mut errors = Vec::new();
     for candidate in candidates {
         match unsafe { load_library_candidate(&candidate) } {
@@ -286,11 +286,11 @@ unsafe fn symbol<T: Copy>(library: &Library, name: &[u8]) -> Result<T, String> {
         .map_err(|error| error.to_string())
 }
 
-fn library_candidates() -> Vec<OsString> {
-    let mut candidates = Vec::new();
-    if let Some(path) = env::var_os("AKRON_LLVM_DYLIB") {
-        candidates.push(path);
+fn library_candidates(selected: Option<OsString>) -> Vec<OsString> {
+    if let Some(path) = selected {
+        return vec![path];
     }
+    let mut candidates = Vec::new();
     #[cfg(target_os = "linux")]
     {
         candidates.extend(
@@ -312,4 +312,17 @@ fn library_candidates() -> Vec<OsString> {
             .map(OsString::from),
     );
     candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::library_candidates;
+    use std::ffi::OsString;
+
+    #[test]
+    fn explicit_library_path_disables_runtime_name_fallbacks() {
+        let selected = OsString::from("/opt/llvm-21/lib/libLLVM.so");
+
+        assert_eq!(library_candidates(Some(selected.clone())), vec![selected]);
+    }
 }

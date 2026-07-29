@@ -1,7 +1,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::UNIX_EPOCH;
@@ -15,6 +15,8 @@ const CACHE_FORMAT_VERSION: u32 = 2;
 const METADATA_FIELDS: usize = 5;
 const HEADER_SIZE: usize = 8 + 4 + 32 + 32 + (METADATA_FIELDS * 8) + 8;
 const DEFAULT_MAX_BYTES: u64 = 128 * 1024 * 1024;
+const ABSOLUTE_MAX_ENTRY_BYTES: u64 = 64 * 1024 * 1024;
+const ABSOLUTE_MAX_CACHE_BYTES: u64 = 1024 * 1024 * 1024;
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -168,7 +170,7 @@ impl ObjectCache {
     pub(super) fn new(directory: PathBuf, max_bytes: u64) -> Self {
         Self {
             directory: Some(directory),
-            max_bytes,
+            max_bytes: max_bytes.min(ABSOLUTE_MAX_CACHE_BYTES),
         }
     }
 
@@ -193,9 +195,34 @@ impl ObjectCache {
     }
 
     pub(super) fn lookup(&self, key: CacheKey) -> Option<CachedObject> {
-        self.directory.as_ref()?;
+        if !self.is_enabled() {
+            return None;
+        }
         let path = self.entry_path(key);
-        let bytes = fs::read(&path).ok()?;
+        let file = File::open(&path).ok()?;
+        let metadata = file.metadata().ok()?;
+        let max_entry_bytes = self.max_bytes.min(ABSOLUTE_MAX_ENTRY_BYTES);
+        if !metadata.is_file()
+            || metadata.len() < HEADER_SIZE as u64
+            || metadata.len() > max_entry_bytes
+        {
+            let _ = fs::remove_file(path);
+            return None;
+        }
+
+        let expected_len = usize::try_from(metadata.len()).ok()?;
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(expected_len).ok()?;
+        let read_limit = max_entry_bytes.checked_add(1)?;
+        if file.take(read_limit).read_to_end(&mut bytes).is_err() {
+            return None;
+        }
+        let actual_len = u64::try_from(bytes.len()).ok()?;
+        if bytes.len() != expected_len || actual_len > max_entry_bytes {
+            let _ = fs::remove_file(path);
+            return None;
+        }
+
         let object = decode_entry(&bytes, key);
         if object.is_none() {
             let _ = fs::remove_file(path);
@@ -204,11 +231,25 @@ impl ObjectCache {
     }
 
     pub(super) fn store(&self, key: CacheKey, object: &CachedObject) {
+        if !self.is_enabled() {
+            return;
+        }
         let Some(directory) = &self.directory else {
             return;
         };
-        let entry = encode_entry(key, object);
-        if entry.len() as u64 > self.max_bytes || fs::create_dir_all(directory).is_err() {
+        let Some(entry_len) = HEADER_SIZE.checked_add(object.object.len()) else {
+            return;
+        };
+        let Ok(entry_len) = u64::try_from(entry_len) else {
+            return;
+        };
+        if entry_len > self.max_bytes || entry_len > ABSOLUTE_MAX_ENTRY_BYTES {
+            return;
+        }
+        let Some(entry) = encode_entry(key, object) else {
+            return;
+        };
+        if fs::create_dir_all(directory).is_err() {
             return;
         }
         let final_path = self.entry_path(key);
@@ -264,7 +305,9 @@ impl ObjectCache {
                 Some((modified, path, metadata.len()))
             })
             .collect::<Vec<_>>();
-        let mut total = entries.iter().map(|entry| entry.2).sum::<u64>();
+        let mut total = entries
+            .iter()
+            .fold(0u64, |total, entry| total.saturating_add(entry.2));
         entries.sort_by(|left, right| (left.0, &left.1).cmp(&(right.0, &right.1)));
         for (_, path, size) in entries {
             if total <= self.max_bytes {
@@ -286,8 +329,14 @@ fn write_entry(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     file.sync_all()
 }
 
-fn encode_entry(key: CacheKey, cached: &CachedObject) -> Vec<u8> {
-    let mut payload = Vec::with_capacity((METADATA_FIELDS * 8) + 8 + cached.object.len());
+fn encode_entry(key: CacheKey, cached: &CachedObject) -> Option<Vec<u8>> {
+    let output_len = HEADER_SIZE.checked_add(cached.object.len())?;
+    let mut output = Vec::new();
+    output.try_reserve_exact(output_len).ok()?;
+    output.extend_from_slice(&CACHE_MAGIC);
+    output.extend_from_slice(&CACHE_FORMAT_VERSION.to_le_bytes());
+    output.extend_from_slice(&key.0);
+    output.extend_from_slice(&[0; 32]);
     for value in [
         cached.metadata.instruction_count,
         cached.metadata.native_instruction_count,
@@ -295,18 +344,13 @@ fn encode_entry(key: CacheKey, cached: &CachedObject) -> Vec<u8> {
         cached.metadata.runtime_instruction_count,
         cached.metadata.compiled_call_count,
     ] {
-        payload.extend_from_slice(&(value as u64).to_le_bytes());
+        output.extend_from_slice(&u64::try_from(value).ok()?.to_le_bytes());
     }
-    payload.extend_from_slice(&(cached.object.len() as u64).to_le_bytes());
-    payload.extend_from_slice(&cached.object);
-    let checksum: [u8; 32] = Sha256::digest(&payload).into();
-    let mut output = Vec::with_capacity(HEADER_SIZE + cached.object.len());
-    output.extend_from_slice(&CACHE_MAGIC);
-    output.extend_from_slice(&CACHE_FORMAT_VERSION.to_le_bytes());
-    output.extend_from_slice(&key.0);
-    output.extend_from_slice(&checksum);
-    output.extend_from_slice(&payload);
-    output
+    output.extend_from_slice(&u64::try_from(cached.object.len()).ok()?.to_le_bytes());
+    output.extend_from_slice(&cached.object);
+    let checksum: [u8; 32] = Sha256::digest(&output[76..]).into();
+    output[44..76].copy_from_slice(&checksum);
+    Some(output)
 }
 
 fn decode_entry(bytes: &[u8], expected: CacheKey) -> Option<CachedObject> {
@@ -336,12 +380,12 @@ fn decode_entry(bytes: &[u8], expected: CacheKey) -> Option<CachedObject> {
         runtime_instruction_count: next_usize()?,
         compiled_call_count: next_usize()?,
     };
-    let object_len = u64::from_le_bytes(bytes.get(offset..offset + 8)?.try_into().ok()?);
-    let object_len = usize::try_from(object_len).ok()?;
-    if HEADER_SIZE.checked_add(object_len)? != bytes.len() {
+    let object_len = next_usize()?;
+    let end = offset.checked_add(object_len)?;
+    if end != bytes.len() {
         return None;
     }
-    let object = bytes[HEADER_SIZE..].to_vec();
+    let object = bytes.get(offset..end)?.to_vec();
     Some(CachedObject { metadata, object })
 }
 
