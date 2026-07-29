@@ -1,0 +1,24 @@
+name: Setup repository Rust toolchain
+description: Put the isolated self-hosted runner Rust toolchain on PATH
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+        rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+        echo "ISO-CHECK cargo_home=$cargo_home rustup_home=$rustup_home"
+        if [ -x "$cargo_home/bin/rustup" ] && [ -x "$cargo_home/bin/cargo" ]; then
+          echo "$cargo_home/bin" >> "$GITHUB_PATH"
+          exit 0
+        fi
+        channel="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' rust-toolchain.toml 2>/dev/null)"
+        for toolchain in "$rustup_home/toolchains/${channel}-"* "$rustup_home/toolchains/"*; do
+          if [ -x "$toolchain/bin/cargo" ]; then
+            echo "$toolchain/bin" >> "$GITHUB_PATH"
+            exit 0
+          fi
+        done
+        echo "::error::No usable Rust toolchain under $cargo_home or $rustup_home." >&2
+        exit 1

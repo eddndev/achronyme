@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -14,31 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Ensure a Rust toolchain is on PATH
-        run: |
-          # This self-hosted runner is isolated: CARGO_HOME/RUSTUP_HOME
-          # point to a private per-runner Rust home so a neighbouring
-          # repo sharing the runner user can never clobber this
-          # toolchain; both fall back to the user default when unset.
-          # Prefer the rustup proxy when intact (it honors
-          # rust-toolchain.toml and can install new channels); otherwise
-          # fall back to the installed toolchain's real binaries, which
-          # survive the proxy binary going missing.
-          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
-          rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
-          echo "ISO-CHECK cargo_home=$cargo_home rustup_home=$rustup_home"
-          if [ -x "$cargo_home/bin/rustup" ] && [ -x "$cargo_home/bin/cargo" ]; then
-            echo "$cargo_home/bin" >> "$GITHUB_PATH"
-            exit 0
-          fi
-          channel="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' rust-toolchain.toml 2>/dev/null)"
-          for tc in "$rustup_home/toolchains/${channel}-"* "$rustup_home/toolchains/"*; do
-            if [ -x "$tc/bin/cargo" ]; then
-              echo "$tc/bin" >> "$GITHUB_PATH"
-              exit 0
-            fi
-          done
-          echo "::error::No usable Rust toolchain: no rustup proxy and no toolchains/*/bin/cargo under $cargo_home or $rustup_home." >&2
-          exit 1
+        uses: ./.github/actions/setup-rust
 
       - name: Format check
         run: cargo fmt --all -- --check
@@ -56,31 +33,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Ensure a Rust toolchain is on PATH
-        run: |
-          # This self-hosted runner is isolated: CARGO_HOME/RUSTUP_HOME
-          # point to a private per-runner Rust home so a neighbouring
-          # repo sharing the runner user can never clobber this
-          # toolchain; both fall back to the user default when unset.
-          # Prefer the rustup proxy when intact (it honors
-          # rust-toolchain.toml and can install new channels); otherwise
-          # fall back to the installed toolchain's real binaries, which
-          # survive the proxy binary going missing.
-          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
-          rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
-          echo "ISO-CHECK cargo_home=$cargo_home rustup_home=$rustup_home"
-          if [ -x "$cargo_home/bin/rustup" ] && [ -x "$cargo_home/bin/cargo" ]; then
-            echo "$cargo_home/bin" >> "$GITHUB_PATH"
-            exit 0
-          fi
-          channel="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' rust-toolchain.toml 2>/dev/null)"
-          for tc in "$rustup_home/toolchains/${channel}-"* "$rustup_home/toolchains/"*; do
-            if [ -x "$tc/bin/cargo" ]; then
-              echo "$tc/bin" >> "$GITHUB_PATH"
-              exit 0
-            fi
-          done
-          echo "::error::No usable Rust toolchain: no rustup proxy and no toolchains/*/bin/cargo under $cargo_home or $rustup_home." >&2
-          exit 1
+        uses: ./.github/actions/setup-rust
 
       - name: Build
         run: cargo build --workspace
@@ -93,3 +46,40 @@ jobs:
 
       - name: Integration tests
         run: bash test/run_tests.sh
+
+  llvm:
+    name: LLVM 21 JIT and AOT
+    runs-on: self-hosted
+    concurrency:
+      group: ci-llvm-self-hosted
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure a Rust toolchain is on PATH
+        uses: ./.github/actions/setup-rust
+
+      - name: Verify LLVM toolchain
+        run: |
+          test "$(uname -s)" = "Linux"
+          case "$(uname -m)" in
+            x86_64|aarch64) ;;
+            *) echo "::error::Unsupported LLVM host architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          clang-21 --version | sed -n '1p' | grep -E '^clang version 21\.'
+          clang --version | sed -n '1p' | grep -E '^clang version 21\.'
+
+      - name: Build AOT runtimes
+        run: |
+          cargo build -p akron-aot-runtime
+          cargo build -p akron-aot-runtime --release
+
+      - name: Test LLVM backend
+        run: cargo test -p akron-llvm --features llvm,aot
+
+      - name: Test LLVM CLI engines
+        run: >-
+          cargo test -p cli --features llvm
+          --test llvm_engine_test
+          --test engine_oracle
+          --test aot_cli_test
