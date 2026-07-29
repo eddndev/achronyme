@@ -1,7 +1,6 @@
 use crate::error::RuntimeError;
 use crate::globals::GlobalEntry;
 use crate::opcode::{instruction::*, OpCode};
-use memory::Value;
 
 use super::stack::StackOps;
 
@@ -37,24 +36,15 @@ impl GlobalOps for super::vm::VM {
                 if bx >= self.globals.len() {
                     // Resize to fit. Since compiler emits sequential indices, this should be fine.
                     // Fill gaps with Nil if any (though logic suggests sequential)
-                    self.globals.resize(
-                        bx + 1,
-                        GlobalEntry {
-                            value: Value::nil(),
-                            mutable: true, // safe default
-                        },
-                    );
+                    self.globals.resize(bx + 1, GlobalEntry::undefined());
                 }
 
-                self.globals[bx] = GlobalEntry {
-                    value: val,
-                    mutable,
-                };
+                self.globals[bx] = GlobalEntry::new(val, mutable);
             }
 
             OpCode::GetGlobal => {
                 let a = decode_a(instruction) as usize;
-                if bx >= self.globals.len() {
+                if bx >= self.globals.len() || !self.globals[bx].defined {
                     let name = self
                         .debug_symbols
                         .as_ref()
@@ -72,7 +62,7 @@ impl GlobalOps for super::vm::VM {
                 let a = decode_a(instruction) as usize;
                 let val = self.get_reg(base, a)?;
 
-                if bx >= self.globals.len() {
+                if bx >= self.globals.len() || !self.globals[bx].defined {
                     let name = self
                         .debug_symbols
                         .as_ref()

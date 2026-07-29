@@ -82,6 +82,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "akron-aot-runtime"
+version = "0.1.0-beta.22"
+dependencies = [
+ "achronyme-std",
+ "akron",
+ "memory",
+]
+
+[[package]]
+name = "akron-llvm"
+version = "0.1.0-beta.22"
+dependencies = [
+ "akron",
+ "libloading",
+ "memory",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "akronc"
 version = "0.1.0-beta.22"
 dependencies = [
@@ -679,6 +699,7 @@ dependencies = [
  "achronyme-parser",
  "achronyme-std",
  "akron",
+ "akron-llvm",
  "akronc",
  "anyhow",
  "artik",
@@ -1347,6 +1368,16 @@ name = "libc"
 version = "0.2.182"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+
+[[package]]
+name = "libloading"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
 
 [[package]]
 name = "linux-raw-sys"

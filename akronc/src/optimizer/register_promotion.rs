@@ -53,7 +53,7 @@ pub(super) fn register_promotion(instrs: Vec<(u32, u32)>, max_slots: &mut u16) -
         }
 
         // Collect global accesses: idx → (get_positions, set_positions)
-        let mut globals: HashMap<u16, (Vec<usize>, Vec<usize>)> = HashMap::new();
+        let mut globals: BTreeMap<u16, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
         for (pos, &(word, _)) in instrs.iter().enumerate().take(back_edge + 1).skip(start) {
             let op = decode_opcode(word);
             let idx = decode_bx(word);

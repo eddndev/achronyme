@@ -1,11 +1,12 @@
 use std::rc::Rc;
 
-use akron::{CallFrame, ValueOps, VM};
+use akron::{CompiledProgram, ValueOps, EXECUTABLE_FORMAT_VERSION, VM};
 use anyhow::{Context, Result};
-use memory::Function;
 use std::fs;
+use std::io::Cursor;
 
 use super::ErrorFormat;
+use crate::commands::engine::{ExecutionEngine, ExecutionError, PreparedEngine};
 use crate::prove_handler::{DefaultProveHandler, ProveBackend, SharedProveHandler};
 
 #[allow(clippy::too_many_arguments)]
@@ -21,6 +22,37 @@ pub fn run_file(
     error_format: ErrorFormat,
     circom_lib_dirs: &[std::path::PathBuf],
 ) -> Result<()> {
+    run_file_with_engine(
+        path,
+        stress_gc,
+        ptau,
+        prove_backend,
+        prime_id,
+        max_heap,
+        None,
+        gc_stats,
+        circuit_stats,
+        error_format,
+        circom_lib_dirs,
+        ExecutionEngine::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_file_with_engine(
+    path: &str,
+    stress_gc: bool,
+    ptau: Option<&str>,
+    prove_backend: &str,
+    prime_id: memory::field::PrimeId,
+    max_heap: Option<&str>,
+    max_instructions: Option<u64>,
+    gc_stats: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[std::path::PathBuf],
+    engine: ExecutionEngine,
+) -> Result<()> {
     if ptau.is_some() {
         eprintln!(
             "Warning: --ptau is deprecated and ignored (native Groth16 backend does not use ptau files)"
@@ -32,172 +64,123 @@ pub fn run_file(
         _ => ProveBackend::R1cs,
     };
 
-    if path.ends_with(".achb") {
-        let mut file = fs::File::open(path).context("Failed to open binary file")?;
+    let (mut vm, handler) = configured_vm(
+        backend,
+        prime_id,
+        error_format,
+        circuit_stats,
+        stress_gc,
+        max_heap,
+        max_instructions,
+    )?;
 
-        let mut vm = VM::new();
-        super::register_std_modules(&mut vm)?;
-        vm.stress_mode = stress_gc;
-        if let Some(limit_str) = max_heap {
-            let limit = parse_size(limit_str).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "invalid --max-heap value: `{limit_str}` (expected e.g. \"256M\", \"1G\", \"512K\")"
-                )
-            })?;
-            vm.heap.max_heap_bytes = limit;
-        }
-        let handler = Rc::new(DefaultProveHandler::new(
-            backend,
-            prime_id,
-            error_format,
-            circuit_stats,
-        ));
-        vm.verify_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
-        vm.prove_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
-
-        // Use the new secure loader
-        vm.load_executable(&mut file)
-            .map_err(|e| anyhow::anyhow!("Loader error: {e}"))?;
-
-        let result = vm.interpret();
-        print_gc_stats(gc_stats, &vm);
-        handler.print_circuit_stats();
-        if let Err(e) = result {
-            let msg = format_runtime_error(&vm, &e);
-            return Err(anyhow::anyhow!("{}", msg));
-        }
-
-        if let Some(val) = vm.stack.last() {
-            println!("Exit Status: {}", vm.val_to_string(val));
-        }
-        Ok(())
+    let result = if path.ends_with(".achb") {
+        execute_binary(path, &mut vm, engine)
     } else {
         let content = fs::read_to_string(path).context("Failed to source file")?;
         let mut compiler = super::new_compiler();
-        compiler.prime_id = prime_id;
-        let source_path = std::path::Path::new(path);
-        compiler.base_path = Some(
-            source_path
-                .parent()
-                .unwrap_or(std::path::Path::new("."))
-                .to_path_buf(),
-        );
-        compiler.circom_lib_dirs = circom_lib_dirs.to_vec();
-        // Register the main file as "compiling" for circular import detection
-        if let Ok(canonical) = source_path.canonicalize() {
-            compiler.compiling_modules.insert(canonical);
-        }
-        let bytecode = compiler.compile(&content).map_err(|e| {
+        let options = akronc::CompileOptions::for_source(path)
+            .with_prime(prime_id)
+            .with_circom_lib_dirs(circom_lib_dirs.to_vec());
+        let program = compiler.compile_program(&content, &options).map_err(|e| {
             let rendered = super::render_compile_error(&e, &content, error_format);
             anyhow::anyhow!("{rendered}")
         })?;
 
         super::print_warnings(&mut compiler, &content, error_format);
 
-        let mut vm = VM::new();
-        super::register_std_modules(&mut vm)?;
-        vm.stress_mode = stress_gc;
-        if let Some(limit_str) = max_heap {
-            let limit = parse_size(limit_str).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "invalid --max-heap value: `{limit_str}` (expected e.g. \"256M\", \"1G\", \"512K\")"
-                )
-            })?;
-            vm.heap.max_heap_bytes = limit;
-        }
-        let handler = Rc::new(DefaultProveHandler::new(
-            backend,
-            prime_id,
-            error_format,
-            circuit_stats,
-        ));
-        vm.verify_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
-        vm.prove_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
-
-        // Transfer strings from compiler to VM
-        vm.import_strings(compiler.interner.strings);
-        // Transfer byte blobs (serialized ProveIR) from compiler to VM
-        vm.heap.import_bytes(compiler.bytes_interner.blobs);
-        // Transfer compile-time circom handles into the VM heap so
-        // `Value::circom_handle(idx)` constants resolve at runtime.
-        vm.heap
-            .import_circom_handles(std::mem::take(&mut compiler.circom_handle_interner.handles));
-        // Install the circom witness dispatcher with the same
-        // library registry the compiler used at compile time.
         vm.circom_handler = Some(Box::new(
             crate::circom_handler::DefaultCircomWitnessHandler::new(
                 compiler.circom_library_registry.take_libraries(),
             ),
         ));
+        execute_program(&mut vm, program, engine)
+    };
 
-        // Transfer field literals from compiler to VM
-        let field_map = vm.heap.import_fields(compiler.field_interner.fields)?;
-        // Transfer bigint literals from compiler to VM
-        let bigint_map = vm.heap.import_bigints(compiler.bigint_interner.bigints)?;
-        // Remap field and bigint handles in constants
-        for proto in &mut compiler.prototypes {
-            remap_field_handles(&mut proto.constants, &field_map);
-            remap_bigint_handles(&mut proto.constants, &bigint_map);
-        }
+    print_gc_stats(gc_stats, &vm);
+    handler.print_circuit_stats();
+    result?;
 
-        // Transfer Debug Symbols (Source Mode)
-        let mut debug_map = std::collections::HashMap::new();
-        for (name, entry) in &compiler.global_symbols {
-            debug_map.insert(entry.index, name.clone());
-        }
-        vm.debug_symbols = Some(debug_map);
+    println!("Exit Status: {}", vm.val_to_string(&vm.last_result));
+    Ok(())
+}
 
-        // Get constants and max_slots from the main function compiler
-        let main_func = compiler
-            .compilers
-            .last()
-            .ok_or_else(|| anyhow::anyhow!("compiler has no main function"))?;
-
-        // Allocate ALL prototypes on heap (flat global architecture)
-        for proto in &compiler.prototypes {
-            let handle = vm.heap.alloc_function(proto.clone())?;
-            vm.prototypes.push(handle);
-        }
-
-        let mut main_constants = main_func.constants.clone();
-        remap_field_handles(&mut main_constants, &field_map);
-        remap_bigint_handles(&mut main_constants, &bigint_map);
-
-        let func = Function {
-            name: "main".to_string(),
-            arity: 0,
-            chunk: bytecode,
-            constants: main_constants,
-            max_slots: main_func.max_slots,
-            upvalue_info: vec![],
-            line_info: main_func.line_info.clone(),
-        };
-        let func_idx = vm.heap.alloc_function(func)?;
-        let closure_idx = vm.heap.alloc_closure(memory::Closure {
-            function: func_idx,
-            upvalues: vec![],
+fn configured_vm(
+    backend: ProveBackend,
+    prime_id: memory::field::PrimeId,
+    error_format: ErrorFormat,
+    circuit_stats: bool,
+    stress_gc: bool,
+    max_heap: Option<&str>,
+    max_instructions: Option<u64>,
+) -> Result<(VM, Rc<DefaultProveHandler>)> {
+    let mut vm = VM::new();
+    super::register_std_modules(&mut vm)?;
+    vm.stress_mode = stress_gc;
+    if let Some(limit_str) = max_heap {
+        let limit = parse_size(limit_str).ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid --max-heap value: `{limit_str}` (expected e.g. \"256M\", \"1G\", \"512K\")"
+            )
         })?;
+        vm.heap.set_max_heap_bytes(limit);
+    }
+    if let Some(limit) = max_instructions {
+        vm.instruction_budget = limit;
+    }
+    let handler = Rc::new(DefaultProveHandler::new(
+        backend,
+        prime_id,
+        error_format,
+        circuit_stats,
+    ));
+    vm.verify_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
+    vm.prove_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
+    Ok((vm, handler))
+}
 
-        vm.frames.push(CallFrame {
-            closure: closure_idx,
-            ip: 0,
-            base: 0,
-            dest_reg: 0, // Top-level script, unused
-        });
+fn execute_binary(path: &str, vm: &mut VM, engine: ExecutionEngine) -> Result<()> {
+    let bytes = fs::read(path).context("Failed to open binary file")?;
+    let is_current = bytes.get(3).copied() == Some(EXECUTABLE_FORMAT_VERSION);
+    if is_current {
+        let program = CompiledProgram::read_executable(&mut Cursor::new(bytes))
+            .map_err(|error| anyhow::anyhow!("Loader error: {error}"))?;
+        return execute_program(vm, program, engine);
+    }
 
-        let result = vm.interpret();
-        print_gc_stats(gc_stats, &vm);
-        handler.print_circuit_stats();
-        if let Err(e) = result {
-            let msg = format_runtime_error(&vm, &e);
-            return Err(anyhow::anyhow!("{}", msg));
+    match engine {
+        ExecutionEngine::Jit => {
+            return Err(anyhow::anyhow!(
+                "LLVM JIT requires current ACHB format 0x{EXECUTABLE_FORMAT_VERSION:02x}"
+            ));
         }
-
-        if let Some(val) = vm.stack.last() {
-            println!("Exit Status: {}", vm.val_to_string(val));
+        ExecutionEngine::Auto => {
+            eprintln!("LLVM JIT fallback: legacy ACHB images execute with the interpreter")
         }
+        ExecutionEngine::Interpreter => {}
+    }
+    vm.load_executable(&mut Cursor::new(bytes))
+        .map_err(|error| anyhow::anyhow!("Loader error: {error}"))?;
+    let result = vm.interpret().map_err(ExecutionError::Runtime);
+    map_execution_result(vm, result)
+}
 
-        Ok(())
+fn execute_program(vm: &mut VM, program: CompiledProgram, engine: ExecutionEngine) -> Result<()> {
+    let prepared = PreparedEngine::prepare(engine, &program)?;
+    vm.load_program(program)
+        .map_err(|error| anyhow::anyhow!("Program loader error: {error}"))?;
+    let result = prepared.execute(vm);
+    map_execution_result(vm, result)
+}
+
+fn map_execution_result(vm: &VM, result: Result<(), ExecutionError>) -> Result<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(ExecutionError::Runtime(error)) => {
+            Err(anyhow::anyhow!(format_runtime_error(vm, &error)))
+        }
+        #[cfg(feature = "llvm")]
+        Err(ExecutionError::Engine(error)) => Err(error),
     }
 }
 

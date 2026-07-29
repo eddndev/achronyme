@@ -1,12 +1,22 @@
 use akron::opcode::{instruction::*, OpCode};
 use anyhow::{Context, Result};
 use std::fs;
+use std::path::PathBuf;
 
 use achronyme_parser::ast::*;
 
 use super::ErrorFormat;
 
 pub fn disassemble_file(path: &str, error_format: ErrorFormat) -> Result<()> {
+    disassemble_file_with_options(path, error_format, memory::field::PrimeId::Bn254, &[])
+}
+
+pub fn disassemble_file_with_options(
+    path: &str,
+    error_format: ErrorFormat,
+    prime_id: memory::field::PrimeId,
+    circom_lib_dirs: &[PathBuf],
+) -> Result<()> {
     let content = fs::read_to_string(path).context("Failed to read file")?;
 
     // Parse AST to detect circuit mode
@@ -18,7 +28,7 @@ pub fn disassemble_file(path: &str, error_format: ErrorFormat) -> Result<()> {
     } else {
         // VM mode (pure or mixed with prove blocks).
         // Prove blocks are dumped from the compiled bytecode, not re-parsed.
-        disassemble_vm(path, &content, error_format)
+        disassemble_vm(path, &content, error_format, prime_id, circom_lib_dirs)
     }
 }
 
@@ -55,7 +65,7 @@ fn disassemble_circuit(
         return Ok(());
     }
 
-    // Self-contained lowering failed — extract each CircuitDecl's body
+    // Self-contained lowering failed - extract each CircuitDecl's body
     // from the source using byte-range spans and reconstruct the input
     // declarations from the typed parameters.
     let mut found = false;
@@ -160,12 +170,22 @@ fn print_circuit_ir(
 // VM bytecode disassembly (with prove block IR dump)
 // ---------------------------------------------------------------------------
 
-fn disassemble_vm(path: &str, source: &str, error_format: ErrorFormat) -> Result<()> {
+fn disassemble_vm(
+    path: &str,
+    source: &str,
+    error_format: ErrorFormat,
+    prime_id: memory::field::PrimeId,
+    circom_lib_dirs: &[PathBuf],
+) -> Result<()> {
     let mut compiler = super::new_compiler();
-    let bytecode = compiler.compile(source).map_err(|e| {
+    let options = akronc::CompileOptions::for_source(path)
+        .with_prime(prime_id)
+        .with_circom_lib_dirs(circom_lib_dirs.to_vec());
+    let program = compiler.compile_program(source, &options).map_err(|e| {
         let rendered = super::render_compile_error(&e, source, error_format);
         anyhow::anyhow!("{rendered}")
     })?;
+    let bytecode = &program.main.chunk;
 
     super::print_warnings(&mut compiler, source, error_format);
 
@@ -188,11 +208,7 @@ fn disassemble_vm(path: &str, source: &str, error_format: ErrorFormat) -> Result
 
         match OpCode::from_u8(op_byte) {
             Some(OpCode::LoadConst) => {
-                let main_func = compiler
-                    .compilers
-                    .last()
-                    .ok_or_else(|| anyhow::anyhow!("compiler has no main function"))?;
-                let val_opt = main_func.constants.get(bx as usize);
+                let val_opt = program.main.constants.get(bx as usize);
 
                 let val_str = if let Some(val) = val_opt {
                     if val.is_string() {
@@ -237,22 +253,17 @@ fn disassemble_vm(path: &str, source: &str, error_format: ErrorFormat) -> Result
         }
     }
 
-    // ── Dump ProveIR for each PROVE instruction ─────────────────────────
-    dump_prove_blocks_from_bytecode(&bytecode, &compiler);
+    // Dump ProveIR for each PROVE instruction.
+    dump_prove_blocks_from_program(&program);
 
     Ok(())
 }
 
 /// Scan compiled bytecode for PROVE instructions, deserialize the ProveIR
 /// from the constant pool, and print it.
-fn dump_prove_blocks_from_bytecode(bytecode: &[u32], compiler: &akronc::Compiler) {
-    let main_func = match compiler.compilers.last() {
-        Some(f) => f,
-        None => return,
-    };
-
+fn dump_prove_blocks_from_program(program: &akron::CompiledProgram) {
     let mut block_num = 0u32;
-    for (i, &inst) in bytecode.iter().enumerate() {
+    for (i, &inst) in program.main.chunk.iter().enumerate() {
         if decode_opcode(inst) != OpCode::Prove.as_u8() {
             continue;
         }
@@ -262,7 +273,7 @@ fn dump_prove_blocks_from_bytecode(bytecode: &[u32], compiler: &akronc::Compiler
         println!();
         println!("  -- ProveIR block {} (instruction {:04}) --", block_num, i);
 
-        let Some(val) = main_func.constants.get(bx) else {
+        let Some(val) = program.main.constants.get(bx) else {
             println!("  (constant K[{bx}] not found)");
             continue;
         };
@@ -277,7 +288,7 @@ fn dump_prove_blocks_from_bytecode(bytecode: &[u32], compiler: &akronc::Compiler
             continue;
         };
 
-        let Some(blob) = compiler.bytes_interner.blobs.get(handle as usize) else {
+        let Some(blob) = program.blobs.get(handle as usize) else {
             println!("  (bytes handle {handle} not found in interner)");
             continue;
         };

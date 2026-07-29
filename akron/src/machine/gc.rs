@@ -1,5 +1,7 @@
 use memory::Value;
 
+use crate::RuntimeError;
+
 /// Trait for garbage collection operations
 pub trait GarbageCollector {
     fn collect_garbage(&mut self);
@@ -76,5 +78,26 @@ impl GarbageCollector for super::vm::VM {
         roots.extend_from_slice(&self.native_roots);
 
         roots
+    }
+}
+
+impl super::vm::VM {
+    pub(crate) fn poll_gc(&mut self) -> Result<(), RuntimeError> {
+        if self.heap.request_gc || self.stress_mode {
+            self.collect_garbage();
+            self.heap.request_gc = false;
+        }
+
+        if self.heap.heap_limit_exceeded {
+            self.collect_garbage();
+            self.heap.heap_limit_exceeded = false;
+            if self.heap.bytes_allocated > self.heap.max_heap_bytes {
+                return Err(RuntimeError::heap_limit_exceeded(
+                    self.heap.max_heap_bytes,
+                    self.heap.bytes_allocated,
+                ));
+            }
+        }
+        Ok(())
     }
 }

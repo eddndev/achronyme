@@ -1,7 +1,7 @@
 use crate::specs::{
     SER_TAG_BIGINT, SER_TAG_BYTES, SER_TAG_FIELD, SER_TAG_INT, SER_TAG_NIL, SER_TAG_STRING,
 };
-use crate::{CallFrame, VM};
+use crate::{CallFrame, CompiledProgram, EXECUTABLE_FORMAT_VERSION, VM};
 use byteorder::{LittleEndian, ReadBytesExt};
 use memory::field::PrimeId;
 use memory::{Closure, Function, Value};
@@ -40,13 +40,13 @@ impl From<memory::ArenaError> for LoaderError {
 
 /// Validate that canonical limbs `[l0, l1, l2, l3]` are less than the modulus
 /// for the given `PrimeId`. Returns `true` if valid.
-fn validate_field_limbs(limbs: [u64; 4], prime_id: PrimeId) -> bool {
+pub(crate) fn validate_field_limbs(limbs: [u64; 4], prime_id: PrimeId) -> bool {
     use memory::field::FieldBackend;
     let modulus_bytes = match prime_id {
         PrimeId::Bn254 => memory::field::Bn254Fr::modulus_le_bytes(),
         PrimeId::Bls12_381 => memory::field::Bls12_381Fr::modulus_le_bytes(),
         PrimeId::Goldilocks => memory::field::GoldilocksFr::modulus_le_bytes(),
-        _ => return true, // Skip validation for backends without impl yet
+        _ => return true, // Skip validation for backends without an implementation.
     };
     // Convert modulus bytes back to limbs for comparison
     let mut mod_limbs = [0u64; 4];
@@ -66,7 +66,7 @@ fn validate_field_limbs(limbs: [u64; 4], prime_id: PrimeId) -> bool {
             return false;
         }
     }
-    // Equal to modulus — not valid (must be strictly less)
+    // Equal to the modulus is invalid because values must be strictly less.
     false
 }
 
@@ -79,10 +79,19 @@ impl VM {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
         let version = magic[3];
-        if &magic[..3] != b"ACH" || !matches!(version, 0x09..=0x0B) {
+        if &magic[..3] != b"ACH" || !matches!(version, 0x09..=EXECUTABLE_FORMAT_VERSION) {
             return Err(LoaderError::Format(
                 "Invalid binary magic or version".to_string(),
             ));
+        }
+
+        // Current images deserialize into the canonical program boundary and
+        // use the same materialization path as source compilation and native
+        // backends. Versions 0x09..=0x0B retain their legacy compatibility
+        // reader below.
+        if version == EXECUTABLE_FORMAT_VERSION {
+            let program = CompiledProgram::read_v12_body(reader)?;
+            return self.load_program(program);
         }
 
         // v0x0B+: PrimeId byte after magic, before max_slots

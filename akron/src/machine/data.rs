@@ -113,32 +113,8 @@ impl DataOps for super::vm::VM {
                     let handle = target
                         .as_handle()
                         .ok_or_else(|| RuntimeError::type_mismatch("bad list handle"))?;
-                    let list = self
-                        .heap
-                        .get_list(handle)
-                        .ok_or(RuntimeError::stale_heap("List", "GetIndex"))?;
-
-                    if let Some(idx_val) = key.as_int() {
-                        if idx_val < 0 {
-                            return Err(RuntimeError::out_of_bounds(format!(
-                                "Negative index {}",
-                                idx_val
-                            )));
-                        }
-                        let idx = idx_val as usize;
-                        if idx < list.len() {
-                            let val = list[idx];
-                            self.set_reg(base, a, val)?;
-                        } else {
-                            return Err(RuntimeError::out_of_bounds(format!(
-                                "Index {} out of bounds (len {})",
-                                idx,
-                                list.len()
-                            )));
-                        }
-                    } else {
-                        return Err(RuntimeError::type_mismatch("List index must be an integer"));
-                    }
+                    let value = self.list_index_value(handle, key)?;
+                    self.set_reg(base, a, value)?;
                 } else if target.is_map() {
                     let handle = target
                         .as_handle()
@@ -265,5 +241,26 @@ impl DataOps for super::vm::VM {
             _ => return Err(RuntimeError::InvalidOpcode(op as u8)),
         }
         Ok(())
+    }
+}
+
+impl super::vm::VM {
+    pub(crate) fn list_index_value(&self, handle: u32, key: Value) -> Result<Value, RuntimeError> {
+        let list = self
+            .heap
+            .get_list(handle)
+            .ok_or(RuntimeError::stale_heap("List", "GetIndex"))?;
+        let index = key
+            .as_int()
+            .ok_or_else(|| RuntimeError::type_mismatch("List index must be an integer"))?;
+        if index < 0 {
+            return Err(RuntimeError::out_of_bounds(format!(
+                "Negative index {index}"
+            )));
+        }
+        let index = index as usize;
+        list.get(index).copied().ok_or_else(|| {
+            RuntimeError::out_of_bounds(format!("Index {index} out of bounds (len {})", list.len()))
+        })
     }
 }

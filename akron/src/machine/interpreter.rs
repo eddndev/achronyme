@@ -7,9 +7,9 @@ use super::closure::ClosureOps;
 use super::comparison::ComparisonOps;
 use super::control::ControlFlowOps;
 use super::data::DataOps;
-use super::gc::GarbageCollector;
 use super::globals::GlobalOps;
 use super::iterator::IteratorOps;
+use super::method_call::MethodCallOps;
 use super::stack::StackOps;
 use super::value_ops::ValueOps;
 use super::vm::STACK_MAX;
@@ -82,28 +82,14 @@ impl super::vm::VM {
         while self.frames.len() > target_depth {
             // Batched GC check point
             gc_countdown -= 1;
-            if gc_countdown == 0 {
+            if gc_countdown == 0 || self.heap.heap_limit_exceeded {
                 gc_countdown = if self.stress_mode {
                     1
                 } else {
                     GC_CHECK_INTERVAL
                 };
 
-                if self.heap.request_gc || self.stress_mode {
-                    self.collect_garbage();
-                    self.heap.request_gc = false;
-                }
-
-                if self.heap.heap_limit_exceeded {
-                    self.collect_garbage();
-                    self.heap.heap_limit_exceeded = false;
-                    if self.heap.bytes_allocated > self.heap.max_heap_bytes {
-                        return Err(RuntimeError::heap_limit_exceeded(
-                            self.heap.max_heap_bytes,
-                            self.heap.bytes_allocated,
-                        ));
-                    }
-                }
+                self.poll_gc()?;
             }
 
             let frame_idx = self.frames.len() - 1;
@@ -133,7 +119,11 @@ impl super::vm::VM {
             let func = unsafe { self.heap.get_function_unchecked(func_idx) };
 
             if ip >= func.chunk.len() {
-                self.frames.pop();
+                if let Some(frame) = self.frames.pop() {
+                    if self.frames.is_empty() {
+                        self.last_result = self.stack[frame.base];
+                    }
+                }
                 continue;
             }
 
@@ -245,82 +235,7 @@ impl super::vm::VM {
                     self.handle_prove(instruction, base, closure_idx)?;
                 }
 
-                MethodCall => {
-                    let a = decode_a(instruction) as usize;
-                    let b = decode_b(instruction) as usize;
-                    let c = decode_c(instruction) as usize;
-
-                    // Method name is in R[base + b - 1] (LoadConst prior)
-                    let name_val = self.get_reg(base, b.wrapping_sub(1))?;
-                    let name_handle = name_val.as_handle().ok_or_else(|| {
-                        RuntimeError::type_mismatch(
-                            "MethodCall: method name register is not a string",
-                        )
-                    })?;
-                    let method_name = self
-                        .heap
-                        .get_string(name_handle)
-                        .ok_or(RuntimeError::stale_heap("String", "MethodCall name"))?
-                        .clone();
-
-                    // Receiver is in R[base + b]
-                    let receiver = self.get_reg(base, b)?;
-                    let tag = receiver.tag();
-
-                    // Collect arguments from R[base+b+1..base+b+c]
-                    let mut args = Vec::with_capacity(c);
-                    for i in 1..=c {
-                        args.push(self.get_reg(base, b + i)?);
-                    }
-
-                    // Lookup method in prototype registry
-                    if let Some(method_fn) = self.prototype_registry.lookup(tag, &method_name) {
-                        let result = method_fn(self, receiver, &args)?;
-                        self.set_reg(base, a, result)?;
-                    } else if receiver.is_map() {
-                        // Fallback: map-as-object pattern — look up the key
-                        // in the map and call it if it's a function/closure.
-                        let map_handle = receiver
-                            .as_handle()
-                            .ok_or_else(|| RuntimeError::type_mismatch("bad map handle"))?;
-                        let callee = self
-                            .heap
-                            .get_map(map_handle)
-                            .and_then(|m| m.get(&method_name).copied())
-                            .ok_or_else(|| {
-                                RuntimeError::type_mismatch(format!(
-                                    "Map has no method or key '{method_name}'"
-                                ))
-                            })?;
-                        if !callee.is_closure() && !callee.is_native() {
-                            return Err(RuntimeError::type_mismatch(format!(
-                                "Map key '{method_name}' is not callable"
-                            )));
-                        }
-                        let result = self.call_value(callee, &args)?;
-                        self.set_reg(base, a, result)?;
-                    } else {
-                        let type_name = match tag {
-                            0 => "Int",
-                            1 => "Nil",
-                            2 | 3 => "Bool",
-                            4 => "String",
-                            5 => "List",
-                            6 => "Map",
-                            7 => "Function",
-                            8 => "Field",
-                            9 => "Proof",
-                            10 => "Native",
-                            11 => "Function",
-                            12 => "Iterator",
-                            13 => "BigInt",
-                            _ => "Unknown",
-                        };
-                        return Err(RuntimeError::type_mismatch(format!(
-                            "{type_name} has no method '{method_name}'"
-                        )));
-                    }
-                }
+                MethodCall => self.handle_method_call(instruction, base)?,
 
                 BuildList | BuildMap | GetIndex | SetIndex => {
                     self.handle_data(op, instruction, base)?;
@@ -344,5 +259,65 @@ impl super::vm::VM {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn execute_compiled_runtime_instruction(
+        &mut self,
+        frame_index: usize,
+        instruction_index: usize,
+    ) -> Result<(), RuntimeError> {
+        let (closure_index, base, instruction, constant) = {
+            let frame = self
+                .frames
+                .get(frame_index)
+                .ok_or(RuntimeError::StackUnderflow)?;
+            let closure = self
+                .heap
+                .get_closure(frame.closure)
+                .ok_or(RuntimeError::FunctionNotFound)?;
+            let function = self
+                .heap
+                .get_function(closure.function)
+                .ok_or(RuntimeError::FunctionNotFound)?;
+            let instruction = *function
+                .chunk
+                .get(instruction_index)
+                .ok_or_else(|| RuntimeError::out_of_bounds("compiled instruction index"))?;
+            let constant = function
+                .constants
+                .get(decode_bx(instruction) as usize)
+                .copied();
+            (frame.closure, frame.base, instruction, constant)
+        };
+        let opcode_byte = decode_opcode(instruction);
+        let opcode =
+            OpCode::from_u8(opcode_byte).ok_or(RuntimeError::InvalidOpcode(opcode_byte))?;
+
+        use crate::opcode::OpCode::*;
+        match opcode {
+            DefGlobalVar | DefGlobalLet | GetGlobal | SetGlobal => {
+                self.handle_globals(opcode, instruction, base, closure_index)
+            }
+            Closure | GetUpvalue | SetUpvalue | CloseUpvalue => {
+                self.handle_closure(opcode, instruction, base, frame_index)
+            }
+            BuildList | BuildMap | GetIndex | SetIndex => {
+                self.handle_data(opcode, instruction, base)
+            }
+            Eq | NotEq => self.handle_comparison(opcode, instruction, base),
+            MethodCall => self.handle_method_call(instruction, base),
+            LoadConst => {
+                let value = constant.ok_or_else(|| {
+                    RuntimeError::out_of_bounds("compiled runtime constant index")
+                })?;
+                self.set_reg(base, decode_a(instruction) as usize, value)
+            }
+            Print => {
+                let value = self.get_reg(base, decode_a(instruction) as usize)?;
+                println!("{}", self.val_to_string(&value));
+                Ok(())
+            }
+            _ => Err(RuntimeError::InvalidOpcode(opcode as u8)),
+        }
     }
 }

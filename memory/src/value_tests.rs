@@ -135,4 +135,30 @@ mod tests {
         let v = Value::circom_handle(7);
         assert_eq!(format!("{v:?}"), "CircomHandle(7)");
     }
+
+    #[test]
+    fn abi_bits_round_trip_for_valid_values() {
+        let values = [
+            Value::int(-42),
+            Value::nil(),
+            Value::bool(false),
+            Value::bool(true),
+            Value::string(u32::MAX),
+            Value::list(7),
+            Value::closure(11),
+            Value::circom_handle(13),
+        ];
+
+        for value in values {
+            let bits = value.to_abi_bits();
+            assert_eq!(Value::from_abi_bits(bits), Some(value));
+        }
+    }
+
+    #[test]
+    fn abi_bits_reject_noncanonical_payloads() {
+        assert!(Value::from_abi_bits((1u64 << 60) | 1).is_none());
+        assert!(Value::from_abi_bits((3u64 << 60) | 1).is_none());
+        assert!(Value::from_abi_bits((4u64 << 60) | (1u64 << 32)).is_none());
+    }
 }

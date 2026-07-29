@@ -1,7 +1,9 @@
+pub mod aot;
 pub mod circom;
 pub mod circuit;
 pub mod compile;
 pub mod disassemble;
+pub mod engine;
 pub mod inspect;
 pub mod run;
 

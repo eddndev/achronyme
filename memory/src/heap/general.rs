@@ -45,6 +45,11 @@ impl Heap {
         }
     }
 
+    pub fn set_max_heap_bytes(&mut self, limit: usize) {
+        self.max_heap_bytes = limit;
+        self.check_gc();
+    }
+
     /// Prevent `check_gc()` from requesting a GC cycle.
     /// Supports reentrant (nested) locking via a depth counter.
     pub fn lock_gc(&mut self) {
