@@ -5,6 +5,7 @@
 //! pools use table-relative handles. VM::load_program validates the image,
 //! materializes heap objects, and remaps handles exactly once.
 
+mod control_flow;
 mod decode;
 mod encode;
 mod load;
@@ -296,6 +297,7 @@ impl CompiledProgram {
                 _ => {}
             }
         }
+        control_flow::validate_reachable_returns(function, context)?;
         Ok(())
     }
 

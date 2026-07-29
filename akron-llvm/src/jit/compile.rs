@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use akron::CompiledProgram;
 
-use crate::{lower_program_with_options, LlvmTierOptions};
+use crate::{lower_program_with_options, LlvmTierOptions, LoweringError};
 
 use super::cache::{CacheIdentity, CacheMetadata, CachedObject, JitCacheConfig, ObjectCache};
 use super::ffi::{LlJitRef, LlvmApi, ObjectCapture, TargetIdentity};
@@ -49,6 +49,9 @@ impl JitEngine {
         config: &JitCacheConfig,
         options: LlvmTierOptions,
     ) -> Result<Self, JitError> {
+        program.validate().map_err(|error| {
+            JitError::Lowering(LoweringError::InvalidProgram(error.to_string()))
+        })?;
         let runtime_requirement = options.runtime_requirement();
         let mut timings = JitCompileTimings::default();
         let (llvm, library_open, symbol_bind) = LlvmApi::load_with_timings()?;

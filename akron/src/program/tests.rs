@@ -55,6 +55,94 @@ fn validation_rejects_unknown_opcode() {
 }
 
 #[test]
+fn validation_rejects_reachable_function_fallthrough() {
+    let fallthrough = Function {
+        name: "fallthrough".to_string(),
+        arity: 0,
+        max_slots: 1,
+        chunk: vec![encode_abx(OpCode::LoadConst.as_u8(), 0, 0)],
+        constants: vec![Value::int(99)],
+        upvalue_info: Vec::new(),
+        line_info: vec![2],
+    };
+    let mut program = minimal_program();
+    program.functions.push(fallthrough);
+    program.main.max_slots = 3;
+    program.main.chunk = vec![
+        encode_abx(OpCode::Closure.as_u8(), 0, 0),
+        encode_abx(OpCode::LoadConst.as_u8(), 2, 0),
+        encode_abc(OpCode::Call.as_u8(), 2, 0, 0),
+        encode_abc(OpCode::Return.as_u8(), 2, 1, 0),
+    ];
+    program.main.constants = vec![Value::int(7)];
+    program.main.line_info = vec![1; 4];
+    program.capabilities = program.derived_capabilities();
+
+    let error = program.validate().unwrap_err().to_string();
+
+    assert!(error.contains("prototype 0 (fallthrough)"), "{error}");
+    assert!(
+        error.contains("reachable path exits without Return"),
+        "{error}"
+    );
+}
+
+#[test]
+fn validation_rejects_empty_main() {
+    let mut program = minimal_program();
+    program.main.chunk.clear();
+    program.main.line_info.clear();
+
+    let error = program.validate().unwrap_err().to_string();
+
+    assert!(
+        error.contains("main reachable path exits without Return"),
+        "{error}"
+    );
+}
+
+#[test]
+fn validation_rejects_conditional_fallthrough_edge() {
+    let mut program = minimal_program();
+    program.main.chunk = vec![
+        encode_abx(OpCode::Jump.as_u8(), 0, 2),
+        encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        encode_abx(OpCode::JumpIfFalse.as_u8(), 0, 1),
+        encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+    ];
+    program.main.line_info = vec![1; 4];
+
+    let error = program.validate().unwrap_err().to_string();
+
+    assert!(
+        error.contains("reachable path exits without Return"),
+        "{error}"
+    );
+}
+
+#[test]
+fn validation_allows_unreachable_trailing_fallthrough() {
+    let mut program = minimal_program();
+    program.main.chunk = vec![
+        encode_abx(OpCode::Jump.as_u8(), 0, 1),
+        encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        encode_abx(OpCode::LoadConst.as_u8(), 0, 0),
+    ];
+    program.main.line_info = vec![1; 3];
+
+    program.validate().unwrap();
+}
+
+#[test]
+fn validation_allows_reachable_cycle_without_exit() {
+    let mut program = minimal_program();
+    program.main.chunk = vec![encode_abx(OpCode::Jump.as_u8(), 0, 0)];
+    program.main.line_info = vec![1];
+
+    program.validate().unwrap();
+}
+
+#[test]
 fn vm_load_program_materializes_main() {
     let mut vm = VM::new();
     vm.load_program(minimal_program()).unwrap();

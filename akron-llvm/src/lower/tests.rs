@@ -52,7 +52,7 @@ fn compiled_call_program() -> CompiledProgram {
         chunk: vec![
             encode_abx(OpCode::LoadConst.as_u8(), 1, 0),
             encode_abc(OpCode::Add.as_u8(), 0, 0, 1),
-            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
         ],
         constants: vec![Value::int(1)],
         upvalue_info: Vec::new(),
@@ -212,21 +212,27 @@ fn uninitialized_arithmetic_operand_lowers_to_bailout() {
 #[test]
 fn prove_and_circom_opcodes_lower_to_visible_bailouts() {
     let mut prove_program = scalar_program(
-        vec![encode_abx(OpCode::Prove.as_u8(), 0, 0)],
+        vec![
+            encode_abx(OpCode::Prove.as_u8(), 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+        ],
         vec![Value::string(0)],
     );
     prove_program.strings.push("prove source".to_string());
     let prove_module = lower_program(&prove_program).unwrap();
     assert_eq!(prove_module.native_instruction_count, 0);
-    assert_eq!(prove_module.ir.matches("call i32 %bailout_fn").count(), 1);
+    assert_eq!(prove_module.ir.matches("call i32 %bailout_fn").count(), 2);
 
     let circom_program = scalar_program(
-        vec![encode_abc(OpCode::CallCircomTemplate.as_u8(), 0, 1, 0)],
+        vec![
+            encode_abc(OpCode::CallCircomTemplate.as_u8(), 0, 1, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        ],
         Vec::new(),
     );
     let circom_module = lower_program(&circom_program).unwrap();
     assert_eq!(circom_module.native_instruction_count, 0);
-    assert_eq!(circom_module.ir.matches("call i32 %bailout_fn").count(), 1);
+    assert_eq!(circom_module.ir.matches("call i32 %bailout_fn").count(), 2);
 }
 
 #[test]

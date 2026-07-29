@@ -237,7 +237,10 @@ fn known_call_helper_preserves_arity_errors() {
         "main",
         0,
         1,
-        vec![encode_abx(OpCode::Closure.as_u8(), 0, 0)],
+        vec![
+            encode_abx(OpCode::Closure.as_u8(), 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        ],
     );
     let prototype = function(
         "one_argument",
@@ -283,7 +286,10 @@ fn known_call_helper_preserves_the_vm_frame_limit() {
         "main",
         0,
         1,
-        vec![encode_abx(OpCode::Closure.as_u8(), 0, 0)],
+        vec![
+            encode_abx(OpCode::Closure.as_u8(), 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        ],
     );
     let prototype = function(
         "zero_argument",
@@ -333,7 +339,10 @@ fn prepare_call_reports_native_completion_without_pushing_a_frame() {
         "main",
         0,
         1,
-        vec![encode_abc(OpCode::Call.as_u8(), 0, 0, 0)],
+        vec![
+            encode_abc(OpCode::Call.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 0, 0),
+        ],
     );
     let mut vm = VM::new();
     vm.load_program(function_program(main, Vec::new())).unwrap();

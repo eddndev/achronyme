@@ -57,6 +57,9 @@ impl AotCompiler {
         output: impl AsRef<Path>,
     ) -> Result<AotArtifact, AotError> {
         let output = output.as_ref();
+        program
+            .validate()
+            .map_err(|error| AotError::Program(error.to_string()))?;
         if !self.options.runtime_archive.is_file() {
             return Err(AotError::Configuration(format!(
                 "AOT runtime archive not found: {}",
@@ -243,10 +246,16 @@ impl From<std::io::Error> for AotError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::ffi::OsStr;
     use std::path::Path;
 
-    use super::{link_command, AotOptions};
+    use akron::opcode::instruction::encode_abx;
+    use akron::{CompiledProgram, OpCode};
+    use memory::field::PrimeId;
+    use memory::{Function, Value};
+
+    use super::{link_command, AotCompiler, AotError, AotOptions};
 
     fn contains_arg(command: &std::process::Command, expected: &str) -> bool {
         command
@@ -268,5 +277,41 @@ mod tests {
         disabled.linker_gc_sections = false;
         let disabled_link = link_command(&disabled, object, executable);
         assert!(!contains_arg(&disabled_link, "-Wl,--gc-sections"));
+    }
+
+    #[test]
+    fn invalid_program_is_rejected_before_aot_tools() {
+        let program = CompiledProgram::new(
+            PrimeId::Bn254,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Function {
+                name: "main".to_string(),
+                arity: 0,
+                max_slots: 1,
+                chunk: vec![encode_abx(OpCode::LoadConst.as_u8(), 0, 0)],
+                constants: vec![Value::int(1)],
+                upvalue_info: Vec::new(),
+                line_info: vec![1],
+            },
+            HashMap::new(),
+        );
+        let compiler = AotCompiler::new(AotOptions::new("missing-clang", "missing-runtime"));
+
+        let error = compiler
+            .build_executable(&program, "unused-output")
+            .unwrap_err();
+
+        assert!(matches!(error, AotError::Program(_)), "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains("reachable path exits without Return"),
+            "{error}"
+        );
     }
 }
