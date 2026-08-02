@@ -2,7 +2,7 @@
 
 All notable changes to the Achronyme language and CLI are recorded here.
 
-## [0.0.1] - Unreleased
+## [0.0.1] - 2026-08-02
 
 This release starts plain `MAJOR.MINOR.PATCH` numbering for the pre-1.0 line.
 It intentionally follows the historical `0.1.0-beta.22` series as a numbering
