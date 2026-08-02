@@ -18,6 +18,23 @@ An executable emitted by the AOT backend also does not link LLVM. Compilation
 requires Clang 21 and the Akron AOT runtime archive, but the generated
 executable contains the native program and runtime.
 
+## Production release gate
+
+Run `bash test/llvm_production_gate.sh` on Linux x86_64 or aarch64. The gate
+checks the interpreter rollback, JIT and AOT parity suites, resource limits,
+the panic and lazy-link contracts, and a release bundle extracted outside the
+repository. The installed-layout smoke requires native JIT execution, visible
+fallback when LLVM is absent, AOT runtime discovery without a workspace path,
+and native file I/O without interpreter bailout.
+
+`.github/workflows/llvm-production-gate.yml` runs the same gate on ephemeral
+Ubuntu x86_64 and aarch64 runners. CI and tag-based releases both call that
+workflow. Linux release archives contain `bin/ach`,
+`lib/libakron_aot_runtime.a`, licenses, and a detached SHA-256 checksum.
+
+This gate certifies the Linux GNU targets listed above. Other release targets
+retain interpreter fallback but are not certified here for native LLVM.
+
 ## JIT object cache
 
 The persistent cache is enabled by default when a platform cache directory can

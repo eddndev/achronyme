@@ -1,9 +1,20 @@
 name: Set up LLVM 21
 description: Resolve a Clang 21 executable and expose it as clang
 
+inputs:
+  install:
+    description: Install LLVM 21 from apt.llvm.org when it is unavailable
+    required: false
+    default: "false"
+
 runs:
   using: composite
   steps:
+    - name: Install LLVM 21
+      if: inputs.install == 'true'
+      shell: bash
+      run: bash .github/scripts/install-llvm-21.sh
+
     - name: Verify LLVM toolchain
       shell: bash
       run: |
