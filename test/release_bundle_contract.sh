@@ -12,6 +12,7 @@ install_root="$temporary_root/install"
 target="x86_64-unknown-linux-gnu"
 bundle="achronyme-linux-x86_64"
 archive="$output_root/$bundle.tar.gz"
+legacy_binary="$output_root/$bundle"
 
 mkdir -p "$fixture_root" "$output_root" "$repeat_output_root" "$install_root"
 printf '#!/usr/bin/env bash\nprintf "installed-ach\\n"\n' > "$fixture_root/ach"
@@ -33,6 +34,9 @@ printf 'runtime-archive\n' > "$fixture_root/libakron_aot_runtime.a"
 
 test -f "$archive"
 test -f "$archive.sha256"
+test -x "$legacy_binary"
+cmp "$fixture_root/ach" "$legacy_binary"
+cmp "$legacy_binary" "$repeat_output_root/$bundle"
 cmp "$archive" "$repeat_output_root/$bundle.tar.gz"
 cmp "$archive.sha256" "$repeat_output_root/$bundle.tar.gz.sha256"
 (cd "$output_root" && sha256sum --check "$(basename "$archive.sha256")")

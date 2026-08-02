@@ -103,5 +103,6 @@ printf '%s  %s\n' "$checksum" "$archive_name" > "$checksum_temp"
 
 install -m 0644 "$archive_temp" "$output_root/$archive_name"
 install -m 0644 "$checksum_temp" "$output_root/$archive_name.sha256"
+install -m 0755 "$binary" "$output_root/$bundle"
 
 echo "$output_root/$archive_name"

@@ -1,7 +1,7 @@
 # Achronyme: Estrategia Técnica y de Mercado
 
 > Última actualización: Junio 2026
-> Estado: v0.1.0-beta.22 — 2,000+ tests (cross-validados con snarkjs), 2 backends con provers nativos Rust, 2 auditorías criptográficas limpias, pipeline E2E funcional, interoperabilidad Groth16 verificada. Imports/módulos, multi-curva (`FieldBackend`: BN254 / BLS12-381 / Goldilocks) y comparaciones acotadas a paridad con Circom ya están en `main`; los únicos bloqueadores reales que faltan para un v1.0 estable son la honestidad del trusted-setup y la fachada de SDK pública.
+> Estado: v0.0.1 en preparacion - 2,000+ tests (cross-validados con snarkjs), 2 backends con provers nativos Rust, 2 auditorías criptográficas limpias, pipeline E2E funcional, interoperabilidad Groth16 verificada. Imports/módulos, multi-curva (`FieldBackend`: BN254 / BLS12-381 / Goldilocks) y comparaciones acotadas a paridad con Circom ya están en `main`; los únicos bloqueadores reales que faltan para un v1.0 estable son la honestidad del trusted-setup y la fachada de SDK pública.
 
 ---
 
