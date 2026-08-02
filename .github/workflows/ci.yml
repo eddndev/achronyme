@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
     branches: [main]
 
@@ -51,44 +51,5 @@ jobs:
         run: bash test/run_tests.sh
 
   llvm:
-    name: LLVM 21 JIT and AOT
-    runs-on: self-hosted
-    concurrency:
-      group: ci-llvm-self-hosted
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Ensure a Rust toolchain is on PATH
-        uses: ./.github/actions/setup-rust
-
-      - name: Ensure LLVM 21 tools are on PATH
-        uses: ./.github/actions/setup-llvm
-
-      - name: Build AOT runtimes
-        run: |
-          cargo build -p akron-aot-runtime
-          cargo build -p akron-aot-runtime --release
-
-      - name: Verify release panic contract
-        run: bash test/release_panic_contract.sh
-
-      - name: Verify LLVM link contract
-        run: bash test/llvm_link_contract.sh
-
-      - name: Verify interpreter-only CLI
-        run: |
-          cargo test -p cli --no-default-features --lib
-          cargo test -p cli --no-default-features \
-            --test default_feature_contract \
-            --test engine_feature_gate_test
-
-      - name: Test LLVM backend
-        run: cargo test -p akron-llvm --features llvm,aot
-
-      - name: Test LLVM CLI engines
-        run: >-
-          cargo test -p cli
-          --test llvm_engine_test
-          --test engine_oracle
-          --test aot_cli_test
+    name: LLVM production gate
+    uses: ./.github/workflows/llvm-production-gate.yml

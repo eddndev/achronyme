@@ -8,41 +8,45 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    name: LLVM production gate
+    uses: ./.github/workflows/llvm-production-gate.yml
+
   build:
     name: Build (${{ matrix.target }})
+    needs: gate
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
             artifact: achronyme-linux-x86_64
+            upload: dist/*
             pgo: true
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             artifact: achronyme-linux-aarch64
+            upload: dist/*
             pgo: false
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact: achronyme-macos-x86_64
+            upload: achronyme-macos-x86_64
             pgo: false
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: achronyme-macos-aarch64
+            upload: achronyme-macos-aarch64
             pgo: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: achronyme-windows-x86_64.exe
+            upload: achronyme-windows-x86_64.exe
             pgo: true
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -50,11 +54,15 @@ jobs:
           targets: ${{ matrix.target }}
           components: llvm-tools
 
+      - name: Install LLVM 21
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-llvm
+        with:
+          install: "true"
+
       - name: Build with PGO
         if: matrix.pgo
         shell: bash
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           set -euo pipefail
           SYSROOT="$(rustc --print sysroot)"
@@ -105,12 +113,26 @@ jobs:
 
       - name: Build without PGO
         if: "!matrix.pgo"
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo build -p cli --release --target ${{ matrix.target }}
 
-      - name: Rename binary (unix)
-        if: runner.os != 'Windows'
+      - name: Build Linux AOT runtime
+        if: runner.os == 'Linux'
+        run: >-
+          cargo build -p akron-aot-runtime --release
+          --target ${{ matrix.target }}
+
+      - name: Package Linux bundle
+        if: runner.os == 'Linux'
+        run: |
+          scripts/package-release.sh \
+            --target "${{ matrix.target }}" \
+            --name "${{ matrix.artifact }}" \
+            --binary "target/${{ matrix.target }}/release/ach" \
+            --runtime "target/${{ matrix.target }}/release/libakron_aot_runtime.a" \
+            --output dist
+
+      - name: Rename binary (macOS)
+        if: runner.os == 'macOS'
         run: |
           mv target/${{ matrix.target }}/release/ach ${{ matrix.artifact }}
           chmod +x ${{ matrix.artifact }}
@@ -123,7 +145,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          path: ${{ matrix.upload }}
 
   release:
     name: Create Release
