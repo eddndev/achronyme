@@ -50,6 +50,10 @@ jobs:
       - name: Integration tests
         run: bash test/run_tests.sh
 
+  proving:
+    name: Proving conformance
+    uses: ./.github/workflows/proving-conformance.yml
+
   llvm:
     name: LLVM production gate
     uses: ./.github/workflows/llvm-production-gate.yml
