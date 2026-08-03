@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ach-macros"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13,20 +13,21 @@ dependencies = [
 
 [[package]]
 name = "achronyme-parser"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "diagnostics",
 ]
 
 [[package]]
 name = "achronyme-std"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ach-macros",
  "akron",
  "akronc",
  "memory",
  "resolve",
+ "tempfile",
 ]
 
 [[package]]
@@ -68,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "akron"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ach-macros",
  "akronc",
@@ -77,13 +78,15 @@ dependencies = [
  "ir",
  "ir-forge",
  "memory",
+ "mio",
  "resolve",
+ "tempfile",
  "zkc",
 ]
 
 [[package]]
 name = "akron-aot-runtime"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-std",
  "akron",
@@ -92,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "akron-llvm"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "akron",
  "libloading",
@@ -103,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "akronc"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
  "akron",
@@ -426,7 +429,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "artik"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "memory",
  "num-bigint",
@@ -627,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "circom"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "akron",
  "akronc",
@@ -694,7 +697,7 @@ checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
 name = "cli"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
  "achronyme-std",
@@ -716,6 +719,7 @@ dependencies = [
  "prove-engine",
  "proving",
  "rand 0.8.5",
+ "resolve",
  "serde",
  "serde_json",
  "sha2",
@@ -740,7 +744,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "constraints"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "akronc",
  "ir",
@@ -886,7 +890,7 @@ dependencies = [
 
 [[package]]
 name = "diagnostics"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "digest"
@@ -1221,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "ir"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
  "artik",
@@ -1242,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "ir-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "diagnostics",
  "memory",
@@ -1251,7 +1255,7 @@ dependencies = [
 
 [[package]]
 name = "ir-forge"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
  "bincode",
@@ -1365,9 +1369,9 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
 name = "libc"
-version = "0.2.182"
+version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libloading"
@@ -1402,7 +1406,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "lysis"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "artik",
  "criterion",
@@ -1416,7 +1420,7 @@ dependencies = [
 
 [[package]]
 name = "lysis-types"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "memory",
 ]
@@ -1438,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "memory"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "criterion",
  "num-bigint",
@@ -1473,6 +1477,18 @@ name = "mintex"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c505b3e17ed6b70a7ed2e67fbb2c560ee327353556120d6e72f5232b6880d536"
+
+[[package]]
+name = "mio"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427"
+dependencies = [
+ "libc",
+ "log",
+ "wasi",
+ "windows-sys",
+]
 
 [[package]]
 name = "nix"
@@ -1722,7 +1738,7 @@ dependencies = [
 
 [[package]]
 name = "prove-engine"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "akron",
  "artik",
@@ -1736,7 +1752,7 @@ dependencies = [
 
 [[package]]
 name = "proving"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "akron",
  "akronc",
@@ -1929,7 +1945,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "resolve"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
 ]
@@ -2743,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "zkc"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "achronyme-parser",
  "akronc",
