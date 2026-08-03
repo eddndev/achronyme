@@ -30,7 +30,7 @@ pub(super) fn resolve_ident(ctx: &AnnotateCtx, name: &str) -> Option<SymbolId> {
     if let Some(kind) = ctx.lookup_local(name) {
         return match kind {
             LocalKind::Alias(sid) => Some(*sid),
-            LocalKind::Plain | LocalKind::DynamicFn | LocalKind::RuntimeMap => None,
+            LocalKind::Plain | LocalKind::DynamicFn(_) | LocalKind::RuntimeMap => None,
         };
     }
 

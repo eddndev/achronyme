@@ -1,4 +1,5 @@
 use crate::symbol::{Arity, Availability};
+use crate::{CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect};
 
 use super::{BuiltinAuditError, ProveIrLowerHandle, VmFnHandle};
 
@@ -27,6 +28,35 @@ pub struct BuiltinEntry {
     /// [`Availability::ProveIr`] and [`Availability::Both`]; must be
     /// `None` for [`Availability::Vm`].
     pub prove_ir_lower: Option<ProveIrLowerHandle>,
+    /// Effects inferred at every call site that resolves to this builtin.
+    pub effects: EffectSet,
+    /// Host authority required before the builtin may execute.
+    pub capabilities: CapabilitySet,
+    /// Whether the builtin completes immediately, blocks, or suspends.
+    pub behavior: NativeBehavior,
+    /// Cancellation behavior once the operation has been invoked.
+    pub cancellation: CancellationPolicy,
+    /// Owned resource created or consumed by the call.
+    pub resource: ResourceEffect,
+}
+
+/// Compiler-visible metadata for a VM native supplied by a host module.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeMeta {
+    /// Canonical source-level name.
+    pub name: &'static str,
+    /// Fixed arity, or -1 for a variadic function.
+    pub arity: isize,
+    /// Effects inferred at call sites.
+    pub effects: EffectSet,
+    /// Host authority required to invoke the function.
+    pub capabilities: CapabilitySet,
+    /// Whether the function completes, blocks, or suspends.
+    pub behavior: NativeBehavior,
+    /// Cancellation contract.
+    pub cancellation: CancellationPolicy,
+    /// Owned resource created or consumed by the call.
+    pub resource: ResourceEffect,
 }
 
 impl BuiltinEntry {
@@ -59,6 +89,25 @@ impl BuiltinEntry {
                     return Err(BuiltinAuditError::ProveIrDeclaresVm { name: self.name });
                 }
             }
+        }
+        let required_effects = self.capabilities.required_effects();
+        if !self.effects.contains(required_effects) {
+            return Err(BuiltinAuditError::CapabilityEffectMismatch {
+                name: self.name,
+                declared: self.effects,
+                required: required_effects,
+            });
+        }
+        if self.behavior == NativeBehavior::Suspending && !self.effects.contains(EffectSet::TASK) {
+            return Err(BuiltinAuditError::SuspendingWithoutTask { name: self.name });
+        }
+        if self.availability.includes_prove_ir()
+            && self.effects.intersects(EffectSet::FORBIDDEN_IN_CIRCUIT)
+        {
+            return Err(BuiltinAuditError::ProveIrHasHostEffect {
+                name: self.name,
+                effects: self.effects,
+            });
         }
         Ok(())
     }

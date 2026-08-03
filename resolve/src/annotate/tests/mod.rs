@@ -162,11 +162,16 @@ fn visit_expr<F: FnMut(&Expr)>(expr: &Expr, f: &mut F) {
                 visit_stmt(s, f);
             }
         }
-        Expr::Forever { body, .. } | Expr::FnExpr { body, .. } | Expr::Prove { body, .. } => {
+        Expr::Forever { body, .. }
+        | Expr::Concurrent { body, .. }
+        | Expr::FnExpr { body, .. }
+        | Expr::Prove { body, .. } => {
             for s in &body.stmts {
                 visit_stmt(s, f);
             }
         }
+        Expr::Spawn { call, .. } => visit_expr(call, f),
+        Expr::Await { task, .. } => visit_expr(task, f),
         Expr::Block { block, .. } => {
             for s in &block.stmts {
                 visit_stmt(s, f);

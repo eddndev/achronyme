@@ -6,7 +6,7 @@
 //! can consult the context without pulling in the walker's mutation
 //! paths.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use achronyme_parser::ast::Span;
 
@@ -38,7 +38,7 @@ pub(super) enum LocalKind {
     /// resolve to fn symbols — a dynamic fn value. Calling `a()`
     /// inside a prove block emits
     /// [`UnsupportedShape::DynamicFnValue`].
-    DynamicFn,
+    DynamicFn(Vec<SymbolId>),
     /// `let m = { k: v, ... }` — a Map literal. Field/index access
     /// on `m` inside a prove block emits
     /// [`UnsupportedShape::RuntimeMapAccess`].
@@ -57,10 +57,15 @@ pub(super) struct AnnotateCtx<'a> {
     /// to look up the current module's own symbols in [`SymbolTable`].
     pub(super) prefix: String,
     pub(super) annotations: &'a mut HashMap<AnnotationKey, SymbolId>,
+    /// Statically known target sets for dynamic call expressions.
+    pub(super) call_targets: &'a mut HashMap<AnnotationKey, Vec<SymbolId>>,
+    pub(super) circom_calls: &'a mut HashSet<AnnotationKey>,
     /// Accumulated diagnostics. The walker currently only pushes
     /// [`ResolveError::ProveBlockUnsupportedShape`] variants; future
     /// extensions may add more.
     pub(super) diagnostics: &'a mut Vec<ResolveError>,
+    pub(super) circom_namespaces: &'a HashSet<String>,
+    pub(super) circom_templates: &'a HashSet<String>,
     /// Stack of lexical scopes. Each entry binds a name to its
     /// [`LocalKind`]; inner layers shadow outer layers. At module top
     /// level the stack is empty — top-level `let`/`mut` bindings are

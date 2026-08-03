@@ -6,6 +6,7 @@ use crate::builtins::{BuiltinEntry, BuiltinRegistry, ProveIrLowerHandle, VmFnHan
 use crate::module_graph::ModuleId;
 use crate::symbol::{Arity, Availability, CallableKind, SymbolId};
 use crate::table::SymbolTable;
+use crate::{CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect};
 
 /// Build a minimal SymbolTable with some builtins for testing propagation.
 fn test_table() -> SymbolTable {
@@ -17,6 +18,11 @@ fn test_table() -> SymbolTable {
         availability: Availability::Both,
         vm_fn: Some(VmFnHandle::PLACEHOLDER),
         prove_ir_lower: Some(ProveIrLowerHandle::PLACEHOLDER),
+        effects: EffectSet::empty(),
+        capabilities: CapabilitySet::empty(),
+        behavior: NativeBehavior::Immediate,
+        cancellation: CancellationPolicy::None,
+        resource: ResourceEffect::None,
     });
     // 1: print (Vm)
     reg.push(BuiltinEntry {
@@ -25,6 +31,11 @@ fn test_table() -> SymbolTable {
         availability: Availability::Vm,
         vm_fn: Some(VmFnHandle::PLACEHOLDER),
         prove_ir_lower: None,
+        effects: EffectSet::IO_CONSOLE,
+        capabilities: CapabilitySet::CONSOLE_WRITE,
+        behavior: NativeBehavior::Blocking,
+        cancellation: CancellationPolicy::None,
+        resource: ResourceEffect::None,
     });
     // 2: range_check (ProveIr)
     reg.push(BuiltinEntry {
@@ -33,6 +44,11 @@ fn test_table() -> SymbolTable {
         availability: Availability::ProveIr,
         vm_fn: None,
         prove_ir_lower: Some(ProveIrLowerHandle::PLACEHOLDER),
+        effects: EffectSet::CIRCUIT,
+        capabilities: CapabilitySet::empty(),
+        behavior: NativeBehavior::Immediate,
+        cancellation: CancellationPolicy::None,
+        resource: ResourceEffect::None,
     });
     let mut table = SymbolTable::with_registry(reg).unwrap();
     // Install builtins as symbols

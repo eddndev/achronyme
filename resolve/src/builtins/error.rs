@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::EffectSet;
+
 /// Errors produced by [`BuiltinRegistry::audit`] and [`BuiltinEntry::audit`].
 ///
 /// Every variant names the offending builtin and explains the violation.
@@ -59,6 +61,27 @@ pub enum BuiltinAuditError {
         /// The colliding name.
         name: &'static str,
     },
+    /// A capability is not represented by the builtin's declared effects.
+    CapabilityEffectMismatch {
+        /// Name of the offending builtin.
+        name: &'static str,
+        /// Effects declared by the builtin.
+        declared: EffectSet,
+        /// Minimum effects implied by its capabilities.
+        required: EffectSet,
+    },
+    /// A suspending builtin omitted the task effect.
+    SuspendingWithoutTask {
+        /// Name of the offending builtin.
+        name: &'static str,
+    },
+    /// A builtin callable from ProveIR declares a forbidden host effect.
+    ProveIrHasHostEffect {
+        /// Name of the offending builtin.
+        name: &'static str,
+        /// Forbidden effects declared by the builtin.
+        effects: EffectSet,
+    },
 }
 
 impl fmt::Display for BuiltinAuditError {
@@ -100,6 +123,24 @@ impl fmt::Display for BuiltinAuditError {
                 f,
                 "builtin `{name}` is registered more than once — every registry \
                  entry must have a unique name."
+            ),
+            Self::CapabilityEffectMismatch {
+                name,
+                declared,
+                required,
+            } => write!(
+                f,
+                "builtin `{name}` declares effects `{declared}` but its host \
+                 capabilities require at least `{required}`"
+            ),
+            Self::SuspendingWithoutTask { name } => write!(
+                f,
+                "builtin `{name}` is suspending but does not declare the `task` effect"
+            ),
+            Self::ProveIrHasHostEffect { name, effects } => write!(
+                f,
+                "builtin `{name}` is callable from ProveIR but declares forbidden \
+                 effects `{effects}`"
             ),
         }
     }

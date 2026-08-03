@@ -1,4 +1,5 @@
 use crate::symbol::{Arity, Availability};
+use crate::{CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect};
 
 use super::*;
 
@@ -17,6 +18,15 @@ fn entry(name: &'static str, availability: Availability, vm: bool, prove: bool) 
         } else {
             None
         },
+        effects: if availability == Availability::ProveIr {
+            EffectSet::CIRCUIT
+        } else {
+            EffectSet::empty()
+        },
+        capabilities: CapabilitySet::empty(),
+        behavior: NativeBehavior::Immediate,
+        cancellation: CancellationPolicy::None,
+        resource: ResourceEffect::None,
     }
 }
 
@@ -128,6 +138,68 @@ fn realistic_mixed_registry_audits_ok() {
 }
 
 #[test]
+fn markdown_reference_is_derived_from_canonical_metadata() {
+    let reference = BuiltinRegistry::default().markdown_reference();
+
+    assert!(reference.starts_with("# Native callable registry\n"));
+    assert!(reference.contains(
+        "| `cancel_check` | `0` | `host` | `task` | `none` | `immediate` | `cooperative` | `-` |"
+    ));
+    assert!(reference.contains(
+        "| `range_check` | `2` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |"
+    ));
+}
+
+#[test]
+fn capability_without_matching_effect_is_rejected() {
+    let mut native = entry("read_file", Availability::Vm, true, false);
+    native.capabilities = CapabilitySet::FILE_READ;
+    let mut reg = BuiltinRegistry::new();
+    reg.push(native);
+
+    assert_eq!(
+        reg.audit(),
+        Err(BuiltinAuditError::CapabilityEffectMismatch {
+            name: "read_file",
+            declared: EffectSet::empty(),
+            required: EffectSet::IO_FILE,
+        })
+    );
+}
+
+#[test]
+fn suspending_native_without_task_effect_is_rejected() {
+    let mut native = entry("socket_read", Availability::Vm, true, false);
+    native.effects = EffectSet::IO_NETWORK;
+    native.behavior = NativeBehavior::Suspending;
+    let mut reg = BuiltinRegistry::new();
+    reg.push(native);
+
+    assert_eq!(
+        reg.audit(),
+        Err(BuiltinAuditError::SuspendingWithoutTask {
+            name: "socket_read"
+        })
+    );
+}
+
+#[test]
+fn prove_ir_builtin_with_host_effect_is_rejected() {
+    let mut native = entry("bad_witness", Availability::Both, true, true);
+    native.effects = EffectSet::CIRCUIT | EffectSet::IO_FILE;
+    let mut reg = BuiltinRegistry::new();
+    reg.push(native);
+
+    assert_eq!(
+        reg.audit(),
+        Err(BuiltinAuditError::ProveIrHasHostEffect {
+            name: "bad_witness",
+            effects: EffectSet::CIRCUIT | EffectSet::IO_FILE,
+        })
+    );
+}
+
+#[test]
 #[should_panic(expected = "duplicate builtin name")]
 fn duplicate_name_panics_on_push() {
     let mut reg = BuiltinRegistry::new();
@@ -159,12 +231,12 @@ fn default_registry_audits_ok() {
 }
 
 #[test]
-fn default_registry_has_21_entries() {
+fn default_registry_has_22_entries() {
     let reg = BuiltinRegistry::default();
     assert_eq!(
         reg.len(),
-        21,
-        "expected 21 production builtins, got {}",
+        22,
+        "expected 22 production builtins, got {}",
         reg.len()
     );
 }
@@ -187,10 +259,10 @@ fn default_registry_availability_counts() {
         .iter()
         .filter(|e| e.availability == Availability::Both)
         .count();
-    assert_eq!(vm_only, 11, "expected 11 Vm-only builtins");
+    assert_eq!(vm_only, 12, "expected 12 Vm-only builtins");
     assert_eq!(prove_only, 6, "expected 6 ProveIr-only builtins");
     assert_eq!(both, 4, "expected 4 Both builtins");
-    assert_eq!(vm_only + prove_only + both, 21);
+    assert_eq!(vm_only + prove_only + both, 22);
 }
 
 #[test]
@@ -240,8 +312,8 @@ fn default_registry_vm_handles_are_unique() {
             );
         }
     }
-    // 4 Both + 11 Vm-only = 15 unique vm handles.
-    assert_eq!(seen.len(), 15);
+    // 4 Both + 12 Vm-only = 16 unique vm handles.
+    assert_eq!(seen.len(), 16);
 }
 
 #[test]
@@ -259,4 +331,65 @@ fn default_registry_prove_handles_are_unique() {
     }
     // 3 Both + 7 ProveIr-only = 10 unique prove handles.
     assert_eq!(seen.len(), 10);
+}
+
+#[test]
+fn default_registry_declares_builtin_effects_and_authority() {
+    let reg = BuiltinRegistry::default();
+
+    let print = reg.lookup("print").expect("print must be registered");
+    assert_eq!(print.effects, EffectSet::IO_CONSOLE);
+    assert_eq!(print.capabilities, CapabilitySet::CONSOLE_WRITE);
+    assert_eq!(print.behavior, NativeBehavior::Blocking);
+
+    let time = reg.lookup("time").expect("time must be registered");
+    assert_eq!(time.effects, EffectSet::IO_CLOCK);
+    assert_eq!(time.capabilities, CapabilitySet::CLOCK);
+    assert_eq!(time.behavior, NativeBehavior::Immediate);
+
+    let verify = reg
+        .lookup("verify_proof")
+        .expect("verify_proof must be registered");
+    assert_eq!(verify.effects, EffectSet::VERIFY);
+    assert!(verify.capabilities.is_empty());
+
+    let poseidon = reg.lookup("poseidon").expect("poseidon must be registered");
+    assert!(poseidon.effects.is_empty());
+    assert!(poseidon.capabilities.is_empty());
+
+    let range_check = reg
+        .lookup("range_check")
+        .expect("range_check must be registered");
+    assert_eq!(range_check.effects, EffectSet::CIRCUIT);
+    assert!(range_check.capabilities.is_empty());
+
+    let cancel_check = reg
+        .lookup("cancel_check")
+        .expect("cancel_check must be registered");
+    assert_eq!(cancel_check.effects, EffectSet::TASK);
+    assert!(cancel_check.capabilities.is_empty());
+    assert_eq!(cancel_check.behavior, NativeBehavior::Immediate);
+    assert_eq!(cancel_check.cancellation, CancellationPolicy::Cooperative);
+}
+
+#[test]
+fn registry_extends_external_vm_metadata_with_stable_handles() {
+    let extras = [NativeMeta {
+        name: "read_chunk",
+        arity: 2,
+        effects: EffectSet::TASK | EffectSet::IO_FILE,
+        capabilities: CapabilitySet::FILE_READ,
+        behavior: NativeBehavior::Suspending,
+        cancellation: CancellationPolicy::BeforeStart,
+        resource: ResourceEffect::None,
+    }];
+    let registry = BuiltinRegistry::with_extra_natives(&extras);
+    let entry = registry.lookup("read_chunk").unwrap();
+
+    assert_eq!(entry.availability, Availability::Vm);
+    assert_eq!(entry.arity, Arity::Fixed(2));
+    assert_eq!(entry.vm_fn, Some(VmFnHandle(16)));
+    assert_eq!(entry.effects, extras[0].effects);
+    assert_eq!(registry.vm_native_count(), 17);
+    registry.audit().unwrap();
 }

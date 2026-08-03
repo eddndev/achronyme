@@ -122,6 +122,35 @@ fn runtime_method_chain_emitted_inside_prove_block() {
 }
 
 #[test]
+fn prove_builtin_methods_are_not_runtime_method_chains() {
+    let mut src = MockSource::default();
+    src.add(
+        "main",
+        "fn outer() {\n\
+           prove() {\n\
+             let vals = [1, 2, 3]\n\
+             let x = 2\n\
+             vals.len()\n\
+             x.to_field()\n\
+             x.abs()\n\
+             x.min(3)\n\
+             x.max(1)\n\
+             x.pow(2)\n\
+           }\n\
+         }",
+    );
+    let graph = ModuleGraph::build("main", &mut src).expect("build");
+    let table = build_full_table(&graph);
+    let resolved = annotate_program(&graph, &table);
+
+    assert!(
+        resolved.diagnostics.is_empty(),
+        "prove builtin methods should not trigger RuntimeMethodChain, got {:?}",
+        resolved.diagnostics
+    );
+}
+
+#[test]
 fn namespace_dot_call_is_not_method_chain() {
     // `l.helper()` where `l` is a namespace alias — valid in
     // prove mode, no diagnostic.
