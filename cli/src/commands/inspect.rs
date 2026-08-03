@@ -10,11 +10,13 @@ use memory::FieldElement;
 use zkc::r1cs_backend::R1CSCompiler;
 
 use super::ErrorFormat;
-
 /// Embedded inspector frontend — served as the index page.
 const INSPECTOR_HTML: &str = include_str!("../inspector.html");
 
+mod manifest;
 mod prove_block;
+
+pub use manifest::inspect_manifest;
 
 #[allow(clippy::too_many_arguments)]
 pub fn inspect_command(

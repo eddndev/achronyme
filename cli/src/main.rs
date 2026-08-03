@@ -1,8 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use cli::commands::ErrorFormat;
-use cli::config::{self, CliOverrides};
-use memory::field::PrimeId;
+use cli::config;
 
 /// The compile pipeline allocates and frees millions of small IR nodes
 /// and env strings; the system allocator's heap is left fragmented, and
@@ -17,8 +16,10 @@ use memory::field::PrimeId;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod args;
+mod bootstrap;
 
 use args::{Cli, Commands};
+use bootstrap::{build_overrides, command_start_dir, validate_prime_backend};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -88,6 +89,21 @@ fn main() -> Result<()> {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
             validate_prime_backend(prime_id, &cfg.prove_backend)?;
+            let runtime_security = cli::commands::runtime::RuntimeSecurity {
+                allow_read: cfg.allow_read.clone(),
+                allow_write: cfg.allow_write.clone(),
+                allow_connect: cfg.allow_connect.clone(),
+                allow_listen: cfg.allow_listen.clone(),
+                max_tasks: cfg.max_tasks,
+                max_resources: cfg.max_resources,
+                max_task_scopes: cfg.max_task_scopes,
+                max_pending_native_requests: cfg.max_pending_native_requests,
+                max_retained_task_results: cfg.max_retained_task_results,
+                max_channels: cfg.max_channels,
+                max_channel_operations: cfg.max_channel_operations,
+                blocking_workers: cfg.blocking_workers,
+                blocking_queue_capacity: cfg.blocking_queue_capacity,
+            };
             cli::commands::run::run_file_with_engine(
                 path,
                 cfg.stress_gc,
@@ -101,6 +117,7 @@ fn main() -> Result<()> {
                 ef,
                 &cfg.circom_lib_dirs,
                 *engine,
+                &runtime_security,
             )
         }
 
@@ -157,11 +174,36 @@ fn main() -> Result<()> {
             port,
             bind,
             no_open,
+            manifest,
             ..
         } => {
             let path = cfg.entry.as_deref().ok_or_else(|| {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
+            if *manifest {
+                let runtime_security = cli::commands::runtime::RuntimeSecurity {
+                    allow_read: cfg.allow_read.clone(),
+                    allow_write: cfg.allow_write.clone(),
+                    allow_connect: cfg.allow_connect.clone(),
+                    allow_listen: cfg.allow_listen.clone(),
+                    max_tasks: cfg.max_tasks,
+                    max_resources: cfg.max_resources,
+                    max_task_scopes: cfg.max_task_scopes,
+                    max_pending_native_requests: cfg.max_pending_native_requests,
+                    max_retained_task_results: cfg.max_retained_task_results,
+                    max_channels: cfg.max_channels,
+                    max_channel_operations: cfg.max_channel_operations,
+                    blocking_workers: cfg.blocking_workers,
+                    blocking_queue_capacity: cfg.blocking_queue_capacity,
+                };
+                return cli::commands::inspect::inspect_manifest(
+                    path,
+                    prime_id,
+                    &cfg.circom_lib_dirs,
+                    &runtime_security,
+                    ef,
+                );
+            }
             cli::commands::inspect::inspect_command(
                 path,
                 inputs.as_deref(),
@@ -242,185 +284,5 @@ fn main() -> Result<()> {
                 ef,
             )
         }
-    }
-}
-
-/// Determine the starting directory for toml walk-up search.
-fn command_start_dir(cmd: &Commands) -> std::path::PathBuf {
-    let path_arg = match cmd {
-        Commands::Run { path, .. }
-        | Commands::Disassemble { path }
-        | Commands::Compile { path, .. }
-        | Commands::Aot { path, .. }
-        | Commands::Inspect { path, .. }
-        | Commands::Circuit { path, .. }
-        | Commands::Circom { path, .. } => path.as_deref(),
-        Commands::Init { .. } => None,
-    };
-
-    if let Some(p) = path_arg {
-        let p = std::path::Path::new(p);
-        if let Some(parent) = p.parent() {
-            if !parent.as_os_str().is_empty() {
-                return parent.to_path_buf();
-            }
-        }
-    }
-
-    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-}
-
-/// Extract CLI overrides from parsed arguments.
-fn build_overrides(cli: &Cli) -> CliOverrides {
-    match &cli.command {
-        Commands::Run {
-            path,
-            stress_gc,
-            prove_backend,
-            max_heap,
-            gc_stats,
-            circuit_stats,
-            ..
-        } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: None,
-            prove_backend: prove_backend.clone(),
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: max_heap.clone(),
-            stress_gc: *stress_gc,
-            gc_stats: *gc_stats,
-            circuit_stats: *circuit_stats,
-        },
-
-        Commands::Disassemble { path } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        },
-
-        Commands::Compile { path, .. } | Commands::Aot { path, .. } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        },
-
-        Commands::Circuit {
-            path,
-            r1cs,
-            wtns,
-            backend,
-            no_optimize,
-            solidity,
-            plonkish_json,
-            circuit_stats,
-            ..
-        } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: backend.clone(),
-            prove_backend: None,
-            optimize: no_optimize.map(|no| !no),
-            r1cs_path: r1cs.clone(),
-            wtns_path: wtns.clone(),
-            solidity_path: solidity.clone(),
-            plonkish_json_path: plonkish_json.clone(),
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: *circuit_stats,
-        },
-
-        Commands::Inspect { path, .. } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        },
-
-        Commands::Circom {
-            path,
-            backend,
-            no_optimize,
-            r1cs,
-            wtns,
-            solidity,
-            plonkish_json,
-            circuit_stats,
-            ..
-        } => CliOverrides {
-            path: path.clone(),
-            error_format: cli.error_format.clone(),
-            prime: cli.prime.clone(),
-            backend: backend.clone(),
-            prove_backend: None,
-            optimize: no_optimize.map(|no| !no),
-            r1cs_path: r1cs.clone(),
-            wtns_path: wtns.clone(),
-            solidity_path: solidity.clone(),
-            plonkish_json_path: plonkish_json.clone(),
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: *circuit_stats,
-        },
-
-        Commands::Init { .. } => unreachable!(),
-    }
-}
-
-/// Validate that the (prime, backend) combination is supported.
-///
-/// Goldilocks+r1cs is allowed for constraint generation and witness, but
-/// proof generation will fail at runtime (no pairing-friendly prover).
-fn validate_prime_backend(prime_id: PrimeId, backend: &str) -> Result<()> {
-    match (prime_id, backend) {
-        (PrimeId::Bn254, "r1cs") => Ok(()),      // groth16-bn254
-        (PrimeId::Bn254, "plonkish") => Ok(()),  // plonk-bn254
-        (PrimeId::Bls12_381, "r1cs") => Ok(()),  // groth16-bls12-381
-        (PrimeId::Goldilocks, "r1cs") => Ok(()), // constraints only (no prover)
-        _ => Err(anyhow::anyhow!(
-            "unsupported combination: prime `{}` with backend `{backend}`\n  \
-             Supported: bn254+r1cs, bn254+plonkish, bls12-381+r1cs, goldilocks+r1cs",
-            prime_id.name()
-        )),
     }
 }

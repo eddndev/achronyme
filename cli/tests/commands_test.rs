@@ -178,6 +178,60 @@ fn run_compiled_binary() {
 }
 
 #[test]
+fn run_preflights_file_authority_and_accepts_an_explicit_root_grant() {
+    use cli::commands::engine::ExecutionEngine;
+    use cli::commands::runtime::RuntimeSecurity;
+
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("input.txt");
+    std::fs::write(&input, "granted").unwrap();
+    let source = format!("return await read_file({:?})", input.to_string_lossy());
+    let src = write_temp_source(&source);
+
+    let denied = cli::commands::run::run_file_with_engine(
+        src.path().to_str().unwrap(),
+        false,
+        None,
+        "r1cs",
+        PrimeId::Bn254,
+        None,
+        None,
+        false,
+        false,
+        EF,
+        &[],
+        ExecutionEngine::Interpreter,
+        &RuntimeSecurity::default(),
+    )
+    .unwrap_err();
+    assert!(
+        denied.to_string().contains("file.read"),
+        "unexpected preflight error: {denied}"
+    );
+
+    let allowed = RuntimeSecurity {
+        allow_read: vec![directory.path().to_path_buf()],
+        ..RuntimeSecurity::default()
+    };
+    cli::commands::run::run_file_with_engine(
+        src.path().to_str().unwrap(),
+        false,
+        None,
+        "r1cs",
+        PrimeId::Bn254,
+        None,
+        None,
+        false,
+        false,
+        EF,
+        &[],
+        ExecutionEngine::Interpreter,
+        &allowed,
+    )
+    .unwrap();
+}
+
+#[test]
 fn compiled_binary_preserves_runtime_error_location() {
     let src = write_temp_source("let a = 10\nlet b = 0\nlet c = a / b");
     let out = tempfile::NamedTempFile::with_suffix(".achb").unwrap();
@@ -226,6 +280,57 @@ fn disassemble_invalid_source_returns_error() {
     let src = write_temp_source("let = ???");
     let result = cli::commands::disassemble::disassemble_file(src.path().to_str().unwrap(), EF);
     assert!(result.is_err());
+}
+
+#[test]
+fn inspect_manifest_reports_effects_requests_grants_and_limits_as_json() {
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("input.txt");
+    std::fs::write(&input, "hello").unwrap();
+    let source = format!("return await read_file({:?})", input.to_string_lossy());
+    let src = write_temp_source(&source);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ach"))
+        .arg("--no-config")
+        .arg("--error-format")
+        .arg("json")
+        .arg("--allow-read")
+        .arg(directory.path())
+        .arg("--max-tasks")
+        .arg("12")
+        .arg("--max-pending-native-requests")
+        .arg("5")
+        .arg("--max-retained-task-results")
+        .arg("6")
+        .arg("--max-channels")
+        .arg("3")
+        .arg("--blocking-workers")
+        .arg("2")
+        .arg("--blocking-queue-capacity")
+        .arg("7")
+        .arg("inspect")
+        .arg(src.path())
+        .arg("--manifest")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let manifest: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(manifest["effects"], "task,io.file");
+    assert_eq!(manifest["requested_host_capabilities"], "file.read");
+    assert!(manifest["granted_host_capabilities"]
+        .as_str()
+        .unwrap()
+        .contains("file.read"));
+    assert_eq!(manifest["limits"]["tasks"], 12);
+    assert_eq!(manifest["limits"]["pending_native_requests"], 5);
+    assert_eq!(manifest["limits"]["retained_task_results"], 6);
+    assert_eq!(manifest["limits"]["channels"], 3);
+    assert_eq!(manifest["limits"]["blocking_workers"], 2);
+    assert_eq!(manifest["limits"]["blocking_queue_capacity"], 7);
 }
 
 // ======================================================================

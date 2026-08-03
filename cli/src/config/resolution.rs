@@ -4,6 +4,7 @@ use super::{AchronymeToml, ProjectConfig};
 
 /// CLI values extracted for config resolution.
 /// All fields are `Option` — `None` means "not explicitly set by the user".
+#[derive(Default)]
 pub struct CliOverrides {
     pub path: Option<String>,
     pub error_format: Option<String>,
@@ -19,6 +20,19 @@ pub struct CliOverrides {
     pub stress_gc: bool,
     pub gc_stats: bool,
     pub circuit_stats: bool,
+    pub allow_read: Vec<String>,
+    pub allow_write: Vec<String>,
+    pub allow_connect: Vec<String>,
+    pub allow_listen: Vec<String>,
+    pub max_tasks: Option<usize>,
+    pub max_resources: Option<usize>,
+    pub max_task_scopes: Option<usize>,
+    pub max_pending_native_requests: Option<usize>,
+    pub max_retained_task_results: Option<usize>,
+    pub max_channels: Option<usize>,
+    pub max_channel_operations: Option<usize>,
+    pub blocking_workers: Option<usize>,
+    pub blocking_queue_capacity: Option<usize>,
 }
 
 /// Merge CLI overrides + TOML + defaults into a `ProjectConfig`.
@@ -147,6 +161,68 @@ pub fn resolve_config(
 
     let circuit_stats = cli.circuit_stats;
 
+    let resolve_grant_paths = |cli_paths: &[String], toml_paths: Option<&Vec<String>>| {
+        let selected = if cli_paths.is_empty() {
+            toml_paths.map(Vec::as_slice).unwrap_or_default()
+        } else {
+            cli_paths
+        };
+        selected
+            .iter()
+            .map(|path| {
+                let path = PathBuf::from(path);
+                if path.is_absolute() {
+                    path
+                } else if let Some(root) = project_root {
+                    root.join(path)
+                } else {
+                    path
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let vm = toml.and_then(|value| value.vm.as_ref());
+    let allow_read = resolve_grant_paths(&cli.allow_read, vm.and_then(|vm| vm.allow_read.as_ref()));
+    let allow_write =
+        resolve_grant_paths(&cli.allow_write, vm.and_then(|vm| vm.allow_write.as_ref()));
+    let allow_connect = if cli.allow_connect.is_empty() {
+        vm.and_then(|vm| vm.allow_connect.clone())
+            .unwrap_or_default()
+    } else {
+        cli.allow_connect.clone()
+    };
+    let allow_listen = if cli.allow_listen.is_empty() {
+        vm.and_then(|vm| vm.allow_listen.clone())
+            .unwrap_or_default()
+    } else {
+        cli.allow_listen.clone()
+    };
+    let max_tasks = cli.max_tasks.or_else(|| vm.and_then(|vm| vm.max_tasks));
+    let max_resources = cli
+        .max_resources
+        .or_else(|| vm.and_then(|vm| vm.max_resources));
+    let max_task_scopes = cli
+        .max_task_scopes
+        .or_else(|| vm.and_then(|vm| vm.max_task_scopes));
+    let max_pending_native_requests = cli
+        .max_pending_native_requests
+        .or_else(|| vm.and_then(|vm| vm.max_pending_native_requests));
+    let max_retained_task_results = cli
+        .max_retained_task_results
+        .or_else(|| vm.and_then(|vm| vm.max_retained_task_results));
+    let max_channels = cli
+        .max_channels
+        .or_else(|| vm.and_then(|vm| vm.max_channels));
+    let max_channel_operations = cli
+        .max_channel_operations
+        .or_else(|| vm.and_then(|vm| vm.max_channel_operations));
+    let blocking_workers = cli
+        .blocking_workers
+        .or_else(|| vm.and_then(|vm| vm.blocking_workers));
+    let blocking_queue_capacity = cli
+        .blocking_queue_capacity
+        .or_else(|| vm.and_then(|vm| vm.blocking_queue_capacity));
+
     // Circom libs: TOML circom.libs (resolved relative to project root)
     let circom_lib_dirs: Vec<PathBuf> = toml
         .and_then(|t| t.circom.as_ref()?.libs.as_ref())
@@ -184,265 +260,21 @@ pub fn resolve_config(
         stress_gc,
         gc_stats,
         circuit_stats,
+        allow_read,
+        allow_write,
+        allow_connect,
+        allow_listen,
+        max_tasks,
+        max_resources,
+        max_task_scopes,
+        max_pending_native_requests,
+        max_retained_task_results,
+        max_channels,
+        max_channel_operations,
+        blocking_workers,
+        blocking_queue_capacity,
         circom_lib_dirs,
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{load_toml, TOML_FILENAME};
-    use std::fs;
-
-    #[test]
-    fn resolve_cli_overrides_toml() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n[build]\nbackend = \"plonkish\"\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: Some("r1cs".to_string()),
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        assert_eq!(config.backend, "r1cs"); // CLI wins
-    }
-
-    #[test]
-    fn resolve_defaults_no_toml() {
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, None, None);
-        assert_eq!(config.prime, "bn254"); // default
-        assert_eq!(config.backend, "r1cs");
-        assert!(config.optimize);
-        assert_eq!(config.error_format, "human");
-        assert_eq!(config.r1cs_path, "circuit.r1cs");
-        assert_eq!(config.wtns_path, "witness.wtns");
-    }
-
-    #[test]
-    fn resolve_prime_from_toml() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n[circuit]\nprime = \"goldilocks\"\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        assert_eq!(config.prime, "goldilocks");
-    }
-
-    #[test]
-    fn resolve_prime_cli_overrides_toml() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n[circuit]\nprime = \"goldilocks\"\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: Some("bls12-381".to_string()),
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        assert_eq!(config.prime, "bls12-381"); // CLI wins
-    }
-
-    #[test]
-    fn resolve_entry_from_toml() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"t\"\nversion = \"0.1.0\"\nentry = \"src/main.ach\"\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        let expected = tmp
-            .path()
-            .join("src/main.ach")
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(config.entry.unwrap(), expected);
-    }
-
-    #[test]
-    fn resolve_circom_libs_from_toml() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n[circom]\nlibs = [\"vendor/circomlib/circuits\"]\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        assert_eq!(config.circom_lib_dirs.len(), 1);
-        assert_eq!(
-            config.circom_lib_dirs[0],
-            tmp.path().join("vendor/circomlib/circuits")
-        );
-    }
-
-    #[test]
-    fn resolve_circom_libs_empty_without_section() {
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, None, None);
-        assert!(config.circom_lib_dirs.is_empty());
-    }
-
-    #[test]
-    fn resolve_name_template_in_binary_path() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join(TOML_FILENAME);
-        fs::write(
-            &path,
-            "[project]\nname = \"foo\"\nversion = \"0.1.0\"\n\n[build.output]\nbinary = \"build/{name}.achb\"\n",
-        )
-        .unwrap();
-        let toml = load_toml(&path).unwrap();
-
-        let cli = CliOverrides {
-            path: None,
-            error_format: None,
-            prime: None,
-            backend: None,
-            prove_backend: None,
-            optimize: None,
-            r1cs_path: None,
-            wtns_path: None,
-            solidity_path: None,
-            plonkish_json_path: None,
-            max_heap: None,
-            stress_gc: false,
-            gc_stats: false,
-            circuit_stats: false,
-        };
-
-        let config = resolve_config(&cli, Some(&toml), Some(tmp.path()));
-        assert_eq!(config.binary_path.unwrap(), "build/foo.achb");
-    }
-}
+include!("resolution/tests.rs");

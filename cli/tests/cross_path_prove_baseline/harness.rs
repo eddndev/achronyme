@@ -112,6 +112,11 @@ pub(crate) fn run_example_capture(
         .map_err(|e| format!("compile error: {e:?}"))?;
 
     let mut vm = VM::new();
+    // The baseline corpus prints results after proof capture. This test is an
+    // embedder, so grant only the virtual host operation it intentionally
+    // exposes instead of relying on ambient VM authority.
+    vm.host_policy
+        .grant(akron::specs::CapabilitySet::CONSOLE_WRITE);
     register_std_modules(&mut vm).map_err(|e| format!("register_std_modules: {e:?}"))?;
 
     let handler = Rc::new(CapturingProveHandler::default());

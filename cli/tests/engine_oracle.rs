@@ -5,6 +5,16 @@ use std::process::{Command, Output, Stdio};
 use cli::commands::ErrorFormat;
 use memory::field::PrimeId;
 
+#[path = "engine_oracle/concurrency.rs"]
+mod concurrency;
+
+#[derive(Clone, Copy, Default)]
+struct OracleGrants<'a> {
+    file_root: Option<&'a Path>,
+    connect: Option<std::net::SocketAddr>,
+    listen: Option<std::net::SocketAddr>,
+}
+
 fn workspace_path(relative: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -12,9 +22,23 @@ fn workspace_path(relative: &str) -> PathBuf {
         .join(relative)
 }
 
-fn run_program(path: &Path, stdin: &str, engine: Option<&str>) -> Output {
+fn run_program(path: &Path, stdin: &str, engine: Option<&str>, grants: OracleGrants<'_>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ach"));
-    command.arg("--no-config").arg("run").arg(path);
+    command.arg("--no-config");
+    if let Some(root) = grants.file_root {
+        command
+            .arg("--allow-read")
+            .arg(root)
+            .arg("--allow-write")
+            .arg(root);
+    }
+    if let Some(address) = grants.connect {
+        command.arg("--allow-connect").arg(address.to_string());
+    }
+    if let Some(address) = grants.listen {
+        command.arg("--allow-listen").arg(address.to_string());
+    }
+    command.arg("run").arg(path);
     if let Some(engine) = engine {
         command.arg("--engine").arg(engine);
     }
@@ -34,8 +58,21 @@ fn run_program(path: &Path, stdin: &str, engine: Option<&str>) -> Output {
 }
 
 #[cfg(feature = "llvm")]
-fn run_native(path: &Path, stdin: &str) -> Output {
-    let mut child = Command::new(path)
+fn run_native(path: &Path, stdin: &str, grants: OracleGrants<'_>) -> Output {
+    let mut command = Command::new(path);
+    if let Some(root) = grants.file_root {
+        let grant = std::env::join_paths([root]).expect("encode AOT file grant");
+        command
+            .env("AKRON_ALLOW_READ", &grant)
+            .env("AKRON_ALLOW_WRITE", &grant);
+    }
+    if let Some(address) = grants.connect {
+        command.env("AKRON_ALLOW_CONNECT", address.to_string());
+    }
+    if let Some(address) = grants.listen {
+        command.env("AKRON_ALLOW_LISTEN", address.to_string());
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -51,6 +88,37 @@ fn run_native(path: &Path, stdin: &str) -> Output {
 }
 
 fn assert_source_bytecode_parity(source: &Path, stdin: &str) -> (Output, Output) {
+    assert_source_bytecode_parity_inner(source, stdin, OracleGrants::default())
+}
+
+fn assert_source_bytecode_parity_with_file_grants(
+    source: &Path,
+    stdin: &str,
+    root: &Path,
+) -> (Output, Output) {
+    assert_source_bytecode_parity_inner(
+        source,
+        stdin,
+        OracleGrants {
+            file_root: Some(root),
+            ..OracleGrants::default()
+        },
+    )
+}
+
+fn assert_source_bytecode_parity_with_grants(
+    source: &Path,
+    stdin: &str,
+    grants: OracleGrants<'_>,
+) -> (Output, Output) {
+    assert_source_bytecode_parity_inner(source, stdin, grants)
+}
+
+fn assert_source_bytecode_parity_inner(
+    source: &Path,
+    stdin: &str,
+    grants: OracleGrants<'_>,
+) -> (Output, Output) {
     let directory = tempfile::tempdir().unwrap();
     let binary = directory.path().join("program.achb");
     cli::commands::compile::compile_file(
@@ -61,16 +129,16 @@ fn assert_source_bytecode_parity(source: &Path, stdin: &str) -> (Output, Output)
     )
     .expect("compile oracle source");
 
-    let source_output = run_program(source, stdin, None);
-    let bytecode_output = run_program(&binary, stdin, None);
+    let source_output = run_program(source, stdin, Some("interpreter"), grants);
+    let bytecode_output = run_program(&binary, stdin, Some("interpreter"), grants);
     #[cfg(feature = "llvm")]
     let mut alternatives = vec![("bytecode interpreter", &bytecode_output)];
     #[cfg(not(feature = "llvm"))]
     let alternatives = vec![("bytecode interpreter", &bytecode_output)];
     #[cfg(feature = "llvm")]
     let (jit_source_output, jit_bytecode_output) = (
-        run_program(source, stdin, Some("jit")),
-        run_program(&binary, stdin, Some("jit")),
+        run_program(source, stdin, Some("jit"), grants),
+        run_program(&binary, stdin, Some("jit"), grants),
     );
     #[cfg(feature = "llvm")]
     alternatives.extend([
@@ -100,7 +168,7 @@ fn assert_source_bytecode_parity(source: &Path, stdin: &str) -> (Output, Output)
             "{}",
             String::from_utf8_lossy(&build.stderr)
         );
-        run_native(&executable, stdin)
+        run_native(&executable, stdin, grants)
     };
     #[cfg(feature = "llvm")]
     alternatives.push(("AOT executable", &aot_output));
@@ -180,11 +248,27 @@ fn oracle_real_file_io() {
     .unwrap();
     let stdin = format!("{}\n", destination.display());
 
-    let (output, _) = assert_source_bytecode_parity(&source, &stdin);
+    let (output, _) =
+        assert_source_bytecode_parity_with_file_grants(&source, &stdin, directory.path());
     assert!(output.status.success());
     assert_eq!(
         std::fs::read_to_string(destination).unwrap(),
         "akron-llvm-io"
+    );
+}
+
+#[test]
+fn oracle_file_capability_denial_is_identical_across_engines() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("denied-io.ach");
+    std::fs::write(&source, "read_file(\"denied.txt\")\n").unwrap();
+
+    let (output, _) = assert_source_bytecode_parity(&source, "");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Host capability preflight failed"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 

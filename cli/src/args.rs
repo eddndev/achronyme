@@ -17,6 +17,58 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_config: bool,
 
+    /// Grant read-only access to a directory (repeatable)
+    #[arg(long = "allow-read", value_name = "DIR", global = true)]
+    pub allow_read: Vec<String>,
+
+    /// Grant write access to a directory (repeatable)
+    #[arg(long = "allow-write", value_name = "DIR", global = true)]
+    pub allow_write: Vec<String>,
+
+    /// Grant outbound TCP access to one numeric IP:port (repeatable)
+    #[arg(long = "allow-connect", value_name = "IP:PORT", global = true)]
+    pub allow_connect: Vec<String>,
+
+    /// Grant TCP listen access to one numeric IP:port (repeatable)
+    #[arg(long = "allow-listen", value_name = "IP:PORT", global = true)]
+    pub allow_listen: Vec<String>,
+
+    /// Maximum number of live child tasks
+    #[arg(long, global = true)]
+    pub max_tasks: Option<usize>,
+
+    /// Maximum number of simultaneously open owned resources
+    #[arg(long, global = true)]
+    pub max_resources: Option<usize>,
+
+    /// Maximum nesting depth of concurrent task scopes
+    #[arg(long, global = true)]
+    pub max_task_scopes: Option<usize>,
+
+    /// Maximum number of in-flight asynchronous native requests
+    #[arg(long, global = true)]
+    pub max_pending_native_requests: Option<usize>,
+
+    /// Maximum number of completed task results retained for awaiting handles
+    #[arg(long, global = true)]
+    pub max_retained_task_results: Option<usize>,
+
+    /// Maximum pending bounded-channel operations
+    #[arg(long, global = true)]
+    pub max_channel_operations: Option<usize>,
+
+    /// Maximum number of simultaneously open bounded channels
+    #[arg(long, global = true)]
+    pub max_channels: Option<usize>,
+
+    /// Number of workers in the bounded blocking I/O pool
+    #[arg(long, global = true)]
+    pub blocking_workers: Option<usize>,
+
+    /// Capacity of the bounded blocking I/O request queue
+    #[arg(long, global = true)]
+    pub blocking_queue_capacity: Option<usize>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -111,6 +163,9 @@ pub enum Commands {
         /// Don't auto-open the browser
         #[arg(long)]
         no_open: bool,
+        /// Print the program effect/capability manifest and exit
+        #[arg(long)]
+        manifest: bool,
     },
     /// Compile a .circom file and optionally generate a proof
     Circom {
