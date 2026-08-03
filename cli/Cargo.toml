@@ -50,6 +50,7 @@ ir-forge = { path = "../ir-forge" }
 circom = { path = "../circom" }
 achronyme-parser = { path = "../achronyme-parser" }
 achronyme-std = { path = "../std" }
+resolve = { path = "../resolve" }
 
 [dev-dependencies]
 tempfile = "3"

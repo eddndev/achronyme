@@ -1,0 +1,20 @@
+fn slow() {
+    await sleep(25)
+    "slow"
+}
+
+fn fast() {
+    await sleep(1)
+    "fast"
+}
+
+let outcome = concurrent {
+    let slow_task = spawn slow()
+    let fast_task = spawn fast()
+    await [slow_task, fast_task] as race
+}
+
+assert(outcome["index"] == 1)
+assert(outcome["ok"] == true)
+assert(outcome["value"] == "fast")
+print("timer-race-ok")

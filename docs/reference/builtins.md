@@ -1,0 +1,56 @@
+# Native callable registry
+
+This table is generated from the canonical `BuiltinRegistry`. Do not edit it by hand.
+
+| Name | Arity | Context | Effects | Capabilities | Behavior | Cancellation | Resource |
+| --- | ---: | --- | --- | --- | --- | --- | --- |
+| `print` | `variadic` | `host` | `io.console` | `console.write` | `blocking` | `none` | `-` |
+| `typeof` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `time` | `0` | `host` | `io.clock` | `clock` | `immediate` | `none` | `-` |
+| `proof_json` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `proof_public` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `proof_vkey` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `verify_proof` | `1` | `host` | `verify` | `none` | `immediate` | `none` | `-` |
+| `gc_stats` | `0` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `bigint256` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `bigint512` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `from_bits` | `2` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `cancel_check` | `0` | `host` | `task` | `none` | `immediate` | `cooperative` | `-` |
+| `poseidon` | `2` | `host+prove/circuit` | `pure` | `none` | `immediate` | `none` | `-` |
+| `poseidon_many` | `variadic` | `host+prove/circuit` | `pure` | `none` | `immediate` | `none` | `-` |
+| `assert` | `1` | `host+prove/circuit` | `pure` | `none` | `immediate` | `none` | `-` |
+| `mux` | `3` | `host+prove/circuit` | `pure` | `none` | `immediate` | `none` | `-` |
+| `range_check` | `2` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `merkle_verify` | `4` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `len` | `1` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `assert_eq` | `2..=3` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `int_div` | `3` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `int_mod` | `3` | `prove/circuit` | `circuit` | `none` | `immediate` | `none` | `-` |
+| `parse_int` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `join` | `2` | `host` | `pure` | `none` | `immediate` | `none` | `-` |
+| `channel` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `creates:channel` |
+| `yield_now` | `0` | `host` | `task` | `none` | `suspending` | `before-start` | `-` |
+| `sleep` | `1` | `host` | `task,io.clock` | `clock` | `suspending` | `cooperative` | `-` |
+| `timeout_after` | `1` | `host` | `task,io.clock` | `clock` | `suspending` | `cooperative` | `-` |
+| `channel_send` | `2` | `host` | `task` | `none` | `suspending` | `cooperative` | `-` |
+| `channel_receive` | `1` | `host` | `task` | `none` | `suspending` | `cooperative` | `-` |
+| `channel_close` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `consumes:channel` |
+| `permit_pool` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `creates:channel` |
+| `bounded_server` | `1` | `host` | `pure` | `none` | `immediate` | `none` | `creates:channel` |
+| `permit_acquire` | `1` | `host` | `task` | `none` | `suspending` | `cooperative` | `-` |
+| `permit_release` | `1` | `host` | `task` | `none` | `suspending` | `cooperative` | `-` |
+| `read_line` | `0` | `host` | `io.console` | `console.read` | `blocking` | `none` | `-` |
+| `read_file` | `1` | `host` | `io.file` | `file.read` | `blocking` | `none` | `-` |
+| `write_file` | `2` | `host` | `io.file` | `file.write` | `blocking` | `none` | `-` |
+| `open_file` | `1` | `host` | `task,io.file` | `file.read` | `suspending` | `before-start` | `creates:file` |
+| `create_file` | `1` | `host` | `task,io.file` | `file.write` | `suspending` | `before-start` | `creates:file` |
+| `file_read` | `2` | `host` | `task,io.file` | `none` | `suspending` | `before-start` | `borrows:file` |
+| `file_write` | `2` | `host` | `task,io.file` | `none` | `suspending` | `before-start` | `borrows:file` |
+| `file_close` | `1` | `host` | `task,io.file` | `none` | `suspending` | `before-start` | `consumes:file` |
+| `tcp_connect` | `1` | `host` | `task,io.network` | `network.connect` | `suspending` | `cooperative` | `creates:connection` |
+| `tcp_listen` | `1` | `host` | `task,io.network` | `network.listen` | `suspending` | `cooperative` | `creates:listener` |
+| `tcp_accept` | `1` | `host` | `task,io.network` | `none` | `suspending` | `cooperative` | `creates:connection+borrows:listener` |
+| `tcp_read` | `2` | `host` | `task,io.network` | `none` | `suspending` | `cooperative` | `borrows:connection` |
+| `tcp_write` | `2` | `host` | `task,io.network` | `none` | `suspending` | `cooperative` | `borrows:connection` |
+| `tcp_close` | `1` | `host` | `task,io.network` | `none` | `suspending` | `cooperative` | `consumes:connection` |
+| `tcp_listener_close` | `1` | `host` | `task,io.network` | `none` | `suspending` | `cooperative` | `consumes:listener` |

@@ -1,0 +1,14 @@
+let path = read_line()
+
+let writer = await create_file(path)
+let written = await file_write(writer, "achronyme")
+assert(written == 9)
+await file_close(writer)
+
+let reader = await open_file(path)
+let bytes = await file_read(reader, 64)
+assert(bytes != nil)
+await file_close(reader)
+
+assert(read_file(path) == "achronyme")
+print("owned-file-ok")
