@@ -10,7 +10,7 @@ use super::cache::{CacheIdentity, CacheMetadata, CachedObject, JitCacheConfig, O
 use super::ffi::{LlJitRef, LlvmApi, ObjectCapture, TargetIdentity};
 use super::{module, JitCacheStats, JitCompileTimings, JitEngine, JitError};
 
-const LOWERING_REVISION: u32 = 2;
+const LOWERING_REVISION: u32 = 3;
 const CACHE_PIPELINE_ID: &str = "default<O2>;orc-lljit-object-transform-v1";
 
 impl JitEngine {
@@ -52,7 +52,7 @@ impl JitEngine {
         program.validate().map_err(|error| {
             JitError::Lowering(LoweringError::InvalidProgram(error.to_string()))
         })?;
-        let runtime_requirement = options.runtime_requirement();
+        let runtime_requirement = options.runtime_requirement_for(program);
         let mut timings = JitCompileTimings::default();
         let (llvm, library_open, symbol_bind) = LlvmApi::load_with_timings()?;
         timings.llvm_library_open = library_open;
@@ -171,7 +171,7 @@ fn cache_identity(
     target: &TargetIdentity,
     options: LlvmTierOptions,
 ) -> Option<CacheIdentity> {
-    let runtime = options.runtime_requirement();
+    let runtime = options.runtime_requirement_for(program);
     let mut canonical = Vec::new();
     program.write_executable(&mut canonical).ok()?;
     Some(CacheIdentity {

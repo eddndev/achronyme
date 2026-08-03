@@ -98,6 +98,27 @@ fn explicit_jit_uses_visible_interpreter_bailout_for_unsupported_opcode() {
 }
 
 #[test]
+fn jit_bailout_preserves_structured_task_semantics() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = write_source(
+        &directory,
+        "tasks.ach",
+        "fn answer() { 42 }\nreturn concurrent { let child = spawn answer(); await child }\n",
+    );
+
+    let output = run(&source, "jit");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "Exit Status: 42\n");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("LLVM JIT bailout:"), "{stderr}");
+}
+
+#[test]
 fn auto_engine_reports_fallback_and_runs_interpreter() {
     let directory = tempfile::tempdir().unwrap();
     let source = write_source(&directory, "power.ach", "print(2 ^ 3)\n");

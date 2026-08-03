@@ -236,6 +236,36 @@ fn prove_and_circom_opcodes_lower_to_visible_bailouts() {
 }
 
 #[test]
+fn structured_task_operations_bail_out_before_any_compiled_interleaving() {
+    let child = Function {
+        name: "answer".into(),
+        arity: 0,
+        max_slots: 1,
+        chunk: vec![encode_abc(OpCode::Return.as_u8(), 0, 0, 0)],
+        constants: Vec::new(),
+        upvalue_info: Vec::new(),
+        line_info: vec![1],
+    };
+    let mut program = scalar_program(
+        vec![
+            encode_abc(OpCode::ScopeEnter.as_u8(), 0, 0, 0),
+            encode_abx(OpCode::Closure.as_u8(), 0, 0),
+            encode_abc(OpCode::Spawn.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::Await.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::ScopeExit.as_u8(), 0, 0, 0),
+            encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
+        ],
+        Vec::new(),
+    );
+    program.functions.push(child);
+    program.capabilities = program.derived_capabilities();
+
+    let module = lower_program(&program).unwrap();
+    assert_eq!(module.native_instruction_count, 1);
+    assert_eq!(module.ir.matches("call i32 %bailout_fn").count(), 7);
+}
+
+#[test]
 fn unknown_opcode_is_rejected_before_llvm_emission() {
     let program = scalar_program(vec![encode_abc(4, 0, 0, 0)], Vec::new());
     let error = lower_program(&program).unwrap_err();

@@ -117,7 +117,13 @@ impl AotCompiler {
 }
 
 fn validate_host_capabilities(program: &CompiledProgram) -> Result<(), AotError> {
-    let supported = ProgramCapabilities::NATIVE_CALLS.bits() | ProgramCapabilities::FILE_IO.bits();
+    let supported = ProgramCapabilities::NATIVE_CALLS.bits()
+        | ProgramCapabilities::FILE_IO.bits()
+        | ProgramCapabilities::TASKS.bits()
+        | ProgramCapabilities::NETWORK_IO.bits()
+        | ProgramCapabilities::CONSOLE_IO.bits()
+        | ProgramCapabilities::CLOCK.bits()
+        | ProgramCapabilities::RANDOMNESS.bits();
     let unsupported = program.capabilities.bits() & !supported;
     if unsupported == 0 {
         return Ok(());
@@ -128,6 +134,7 @@ fn validate_host_capabilities(program: &CompiledProgram) -> Result<(), AotError>
         (ProgramCapabilities::PROVE, "PROVE"),
         (ProgramCapabilities::VERIFY, "VERIFY"),
         (ProgramCapabilities::CIRCOM, "CIRCOM"),
+        (ProgramCapabilities::UNKNOWN_HOST, "UNKNOWN_HOST"),
     ] {
         if unsupported & capability.bits() != 0 {
             names.push(name);
@@ -154,7 +161,7 @@ fn executable_ir(
     lowered_ir: &str,
     options: LlvmTierOptions,
 ) -> Result<String, AotError> {
-    let runtime = options.runtime_requirement();
+    let runtime = options.runtime_requirement_for(program);
     let mut image = Vec::new();
     program
         .write_executable(&mut image)

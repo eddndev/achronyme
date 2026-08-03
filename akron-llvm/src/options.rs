@@ -1,8 +1,10 @@
 #[cfg(any(feature = "llvm", feature = "aot", test))]
 use akron::compiled::{
     RuntimeCapabilities, RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_V4_SIZE,
-    RUNTIME_ABI_V5_SIZE,
+    RUNTIME_ABI_V5_SIZE, RUNTIME_ABI_V6_SIZE,
 };
+#[cfg(any(feature = "llvm", feature = "aot", test))]
+use akron::{CompiledProgram, ProgramCapabilities};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LlvmTierOptions {
@@ -47,6 +49,17 @@ impl LlvmTierOptions {
             capabilities: RuntimeCapabilities::from_bits(bits),
         }
     }
+
+    #[cfg(any(feature = "llvm", feature = "aot", test))]
+    pub(crate) fn runtime_requirement_for(self, program: &CompiledProgram) -> RuntimeRequirement {
+        let mut requirement = self.runtime_requirement();
+        if program.capabilities.contains(ProgramCapabilities::TASKS) {
+            requirement.version = 6;
+            requirement.size = RUNTIME_ABI_V6_SIZE;
+            requirement.capabilities |= RuntimeCapabilities::STRUCTURED_TASKS;
+        }
+        requirement
+    }
 }
 
 impl Default for LlvmTierOptions {
@@ -69,10 +82,15 @@ pub(crate) struct RuntimeRequirement {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use akron::compiled::{
         RuntimeCapabilities, RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_V4_SIZE,
-        RUNTIME_ABI_V5_SIZE,
+        RUNTIME_ABI_V5_SIZE, RUNTIME_ABI_V6_SIZE,
     };
+    use akron::{CompiledProgram, ProgramCapabilities};
+    use memory::field::PrimeId;
+    use memory::Function;
 
     use super::LlvmTierOptions;
 
@@ -126,5 +144,34 @@ mod tests {
         assert_eq!(tier2.version, 5);
         assert_eq!(tier2.size, RUNTIME_ABI_V5_SIZE);
         assert_eq!(tier2.capabilities, RuntimeCapabilities::LLVM_TIER2);
+    }
+
+    #[test]
+    fn task_programs_require_the_append_only_v6_runtime_surface() {
+        let mut program = CompiledProgram::new(
+            PrimeId::Bn254,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Function {
+                name: "main".to_string(),
+                arity: 0,
+                max_slots: 1,
+                chunk: Vec::new(),
+                constants: Vec::new(),
+                upvalue_info: Vec::new(),
+                line_info: Vec::new(),
+            },
+            HashMap::new(),
+        );
+        program.capabilities |= ProgramCapabilities::TASKS;
+
+        let requirement = LlvmTierOptions::default().runtime_requirement_for(&program);
+        assert_eq!(requirement.version, 6);
+        assert_eq!(requirement.size, RUNTIME_ABI_V6_SIZE);
+        assert_eq!(requirement.capabilities, RuntimeCapabilities::LLVM_TASKS);
     }
 }
