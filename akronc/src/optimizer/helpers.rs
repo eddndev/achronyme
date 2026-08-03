@@ -45,6 +45,10 @@ pub(super) fn dest_reg(word: u32) -> Option<u8> {
             | OpCode::CloseUpvalue
             | OpCode::Return
             | OpCode::SetIndex
+            | OpCode::ScopeEnter
+            | OpCode::ScopeExit
+            | OpCode::CancelCheck
+            | OpCode::TaskForget
             | OpCode::Nop,
         ) => None,
         Some(_) => Some(decode_a(word)),

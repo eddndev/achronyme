@@ -14,6 +14,8 @@ pub struct FunctionCompiler {
     pub constants: Vec<Value>,
     pub upvalues: Vec<UpvalueInfo>,
     pub loop_stack: Vec<LoopContext>,
+    /// Number of lexical `concurrent {}` scopes surrounding the current node.
+    pub concurrent_depth: u16,
 
     // Register allocator state
     pub reg_top: u8,
@@ -37,6 +39,7 @@ impl FunctionCompiler {
             constants: Vec::new(),
             upvalues: Vec::new(),
             loop_stack: Vec::new(),
+            concurrent_depth: 0,
             reg_top: arity, // Reserve R0..R(arity-1) for arguments
             max_slots: arity as u16,
             line_info: Vec::new(),

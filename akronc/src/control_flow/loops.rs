@@ -10,8 +10,10 @@ use memory::Value;
 
 pub(super) fn enter_loop(compiler: &mut Compiler, start_label: usize) -> Result<(), CompilerError> {
     let depth = compiler.current()?.scope_depth;
+    let concurrent_depth = compiler.current_ref()?.concurrent_depth;
     compiler.current()?.loop_stack.push(LoopContext {
         scope_depth: depth,
+        concurrent_depth,
         start_label,
         break_jumps: Vec::new(),
     });

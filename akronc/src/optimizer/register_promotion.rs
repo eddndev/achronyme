@@ -8,7 +8,17 @@ use std::collections::{BTreeMap, HashMap};
 pub(super) fn can_call(op: u8) -> bool {
     matches!(
         OpCode::from_u8(op),
-        Some(OpCode::Call | OpCode::MethodCall | OpCode::Prove)
+        Some(
+            OpCode::Call
+                | OpCode::MethodCall
+                | OpCode::Prove
+                | OpCode::Spawn
+                | OpCode::Await
+                | OpCode::AwaitOutcome
+                | OpCode::TaskForget
+                | OpCode::AwaitRace
+                | OpCode::ScopeExit,
+        )
     )
 }
 

@@ -36,7 +36,10 @@ use crate::interner::{
 use crate::module_loader::ModuleLoader;
 use achronyme_parser::ast::{ExprId, Span, Stmt};
 use achronyme_parser::Diagnostic;
-use resolve::{Availability, ModuleId, ResolvedProgram, SymbolId, SymbolTable};
+use akron::specs::NativeMeta;
+use resolve::{
+    Availability, BuiltinRegistry, EffectSet, ModuleId, ResolvedProgram, SymbolId, SymbolTable,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -51,10 +54,15 @@ pub struct Compiler {
     // Global Symbol Table (Name -> Entry with index + metadata)
     pub global_symbols: HashMap<String, crate::types::GlobalEntry>,
     pub next_global_idx: u16,
-    /// Number of builtin native slots (from `BuiltinRegistry`). User
-    /// globals start at this index. Replaces the old `USER_GLOBAL_START`
-    /// constant — derived from the registry at construction time.
+    /// Number of all registered native slots. User globals start at this
+    /// index, which is derived from the registry at construction time.
     pub native_count: u16,
+    /// Metadata for native globals registered after the core builtins.
+    pub extra_native_metadata: Vec<NativeMeta>,
+    /// Canonical registry shared by globals, resolution, and artifacts.
+    pub native_registry: BuiltinRegistry,
+    /// Union of effects inferred from the resolved source graph.
+    pub inferred_effects: EffectSet,
 
     // String Interner (shared across all functions)
     pub interner: StringInterner,

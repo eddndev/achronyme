@@ -101,6 +101,12 @@ impl ControlFlowCompiler for Compiler {
 
             if is_last {
                 match stmt {
+                    Stmt::Expr(expr @ Expr::Spawn { .. }) => {
+                        let task = self.compile_expr(expr)?;
+                        self.emit_abc(OpCode::TaskForget, task, 0, 0)?;
+                        self.free_reg(task)?;
+                        self.emit_abx(OpCode::LoadNil, target_reg, 0)?;
+                    }
                     Stmt::Expr(expr) => {
                         self.compile_expr_into(expr, target_reg)?;
                     }
@@ -183,6 +189,9 @@ impl ControlFlowCompiler for Compiler {
             ))?;
 
         let target_depth = loop_ctx.scope_depth;
+        let target_concurrent_depth = loop_ctx.concurrent_depth;
+
+        self.emit_concurrent_scope_cleanup(target_concurrent_depth)?;
 
         let mut close_threshold = None;
         for (i, local) in self.current()?.locals.iter().enumerate().rev() {
@@ -221,6 +230,9 @@ impl ControlFlowCompiler for Compiler {
 
         let target_depth = loop_ctx.scope_depth;
         let start_label = loop_ctx.start_label;
+        let target_concurrent_depth = loop_ctx.concurrent_depth;
+
+        self.emit_concurrent_scope_cleanup(target_concurrent_depth)?;
 
         let mut close_threshold = None;
         for (i, local) in self.current()?.locals.iter().enumerate().rev() {

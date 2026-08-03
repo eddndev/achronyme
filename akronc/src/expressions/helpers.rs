@@ -225,6 +225,10 @@ impl Compiler {
         callee: &Expr,
         args: &[&Expr],
     ) -> Result<u8, CompilerError> {
+        if let Some(result) = self.try_compile_cancel_check_call(callee, args)? {
+            return Ok(result);
+        }
+
         // Circom template atomic curry in VM mode:
         //   Template(template_args)(signal_inputs)  ->  CallCircomTemplate
         //   P.Template(template_args)(signal_inputs) ->  CallCircomTemplate

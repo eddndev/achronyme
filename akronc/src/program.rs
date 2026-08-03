@@ -89,7 +89,7 @@ impl Compiler {
             .map(|(name, entry)| (entry.index, name.clone()))
             .collect();
 
-        let program = CompiledProgram::new(
+        let mut program = CompiledProgram::new(
             self.prime_id,
             self.interner.strings.clone(),
             self.field_interner.fields.clone(),
@@ -108,6 +108,8 @@ impl Compiler {
             },
             debug_symbols,
         );
+        program.register_native_registry(&self.native_registry);
+        program.record_inferred_effects(self.inferred_effects);
         program.validate().map_err(|error| {
             CompilerError::InternalError(format!(
                 "compiler produced an invalid CompiledProgram: {error}"
@@ -120,6 +122,9 @@ impl Compiler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use akron::specs::{CapabilitySet, EffectSet};
+    use akron::ProgramCapabilities;
+    use std::io::Cursor;
     use std::io::Write;
 
     #[test]
@@ -151,5 +156,51 @@ mod tests {
         for function in &program.functions {
             assert_eq!(function.chunk.len(), function.line_info.len());
         }
+    }
+
+    #[test]
+    fn compile_program_validates_structured_task_bytecode_and_capabilities() {
+        let source = "fn answer() { 42 }\n\
+                      let result = concurrent { let task = spawn answer(); await task }";
+        let mut compiler = Compiler::new();
+        let program = compiler
+            .compile_program(source, &CompileOptions::default())
+            .unwrap();
+
+        program.validate().unwrap();
+        assert!(program
+            .capabilities
+            .contains(akron::ProgramCapabilities::TASKS));
+        assert_eq!(program.bytecode_version, akron::BYTECODE_VERSION);
+        assert_eq!(program.format_version, akron::EXECUTABLE_FORMAT_VERSION);
+    }
+
+    #[test]
+    fn unresolved_dynamic_call_persists_unknown_host_authority() {
+        let source = "fn invoke(f) { f() }\ninvoke(time)";
+        let mut compiler = Compiler::new();
+        let program = compiler
+            .compile_program(source, &CompileOptions::default())
+            .unwrap();
+
+        assert!(program
+            .requested_effects()
+            .contains(EffectSet::UNKNOWN_HOST));
+        assert!(program
+            .requested_host_capabilities()
+            .contains(CapabilitySet::UNKNOWN_HOST));
+        assert!(program
+            .capabilities
+            .contains(ProgramCapabilities::UNKNOWN_HOST));
+
+        let mut bytes = Vec::new();
+        program.write_executable(&mut bytes).unwrap();
+        let decoded = akron::CompiledProgram::read_executable(&mut Cursor::new(bytes)).unwrap();
+        assert!(decoded
+            .requested_effects()
+            .contains(EffectSet::UNKNOWN_HOST));
+        assert!(decoded
+            .requested_host_capabilities()
+            .contains(CapabilitySet::UNKNOWN_HOST));
     }
 }

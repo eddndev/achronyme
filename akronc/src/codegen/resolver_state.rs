@@ -17,8 +17,8 @@ use std::sync::Arc;
 use achronyme_parser::ast::{Program, Stmt};
 use ir::resolver_adapter::ModuleLoaderSource;
 use resolve::{
-    build_availability_map, build_dispatch_maps, build_resolver_state, ModuleId, ResolvedProgram,
-    SymbolTable,
+    build_availability_map, build_dispatch_maps, build_resolver_state_with_registry,
+    BuiltinRegistry, ModuleId, ResolvedProgram, SymbolTable,
 };
 
 use super::Compiler;
@@ -117,7 +117,10 @@ impl Compiler {
             program.clone(),
             exported_names,
         );
-        let Ok(state) = build_resolver_state("<resolve-in-memory-root>", &mut source) else {
+        let registry = self.resolver_builtin_registry();
+        let Ok(state) =
+            build_resolver_state_with_registry("<resolve-in-memory-root>", &mut source, registry)
+        else {
             return;
         };
 
@@ -131,6 +134,7 @@ impl Compiler {
         // Derive outer functions from the graph so prove blocks can
         // use them instead of the incremental fn_decl_asts.
         let outer_functions = resolve::build_outer_functions(&state, &dispatch_by_symbol);
+        let inferred_effects = state.effects.all_effects();
 
         let root_module = state.root();
         self.resolved_program = Some(state.resolved);
@@ -140,6 +144,11 @@ impl Compiler {
         self.resolver_module_by_key = Some(Arc::new(module_by_key));
         self.resolver_availability_map = Some(availability_map);
         self.resolver_outer_functions = Some(outer_functions);
+        self.inferred_effects = inferred_effects;
+    }
+
+    fn resolver_builtin_registry(&self) -> BuiltinRegistry {
+        self.native_registry.clone()
     }
 }
 

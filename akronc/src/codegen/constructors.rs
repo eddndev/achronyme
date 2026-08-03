@@ -37,9 +37,8 @@ impl Compiler {
     /// the same modules in the same order via `VM::register_module()`.
     pub fn with_extra_natives(extra: &[NativeMeta]) -> Self {
         use crate::types::GlobalEntry;
-        let registry = resolve::BuiltinRegistry::default();
+        let registry = resolve::BuiltinRegistry::with_extra_natives(extra);
         let vm_entries = registry.vm_entries_by_handle();
-        let native_count = vm_entries.len();
 
         let mut global_symbols = HashMap::new();
 
@@ -56,25 +55,7 @@ impl Compiler {
             );
         }
 
-        for (i, meta) in extra.iter().enumerate() {
-            let index = native_count + i;
-            assert!(
-                !global_symbols.contains_key(meta.name),
-                "Native name collision: '{}' already defined as builtin",
-                meta.name,
-            );
-            global_symbols.insert(
-                meta.name.to_string(),
-                GlobalEntry {
-                    index: index as u16,
-                    type_ann: None,
-                    is_mutable: false,
-                    param_names: None,
-                },
-            );
-        }
-
-        let next_global_idx = (native_count + extra.len()) as u16;
+        let next_global_idx = vm_entries.len() as u16;
 
         // Start with a "main" function compiler (arity=0 for top-level script)
         let main_compiler = FunctionCompiler::new("main".to_string(), 0);
@@ -90,7 +71,10 @@ impl Compiler {
             prototypes: Vec::new(),
             global_symbols,
             next_global_idx,
-            native_count: native_count as u16,
+            native_count: vm_entries.len() as u16,
+            extra_native_metadata: extra.to_vec(),
+            native_registry: registry,
+            inferred_effects: resolve::EffectSet::empty(),
             interner: StringInterner::new(),
             field_interner: FieldInterner::new(),
             bigint_interner: BigIntInterner::new(),

@@ -31,6 +31,7 @@ pub struct UpvalueInfo {
 #[derive(Debug, Clone)]
 pub struct LoopContext {
     pub scope_depth: u32,
+    pub concurrent_depth: u16,
     pub start_label: usize,
     pub break_jumps: Vec<usize>,
 }

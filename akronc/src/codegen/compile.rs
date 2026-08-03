@@ -14,6 +14,7 @@ use akron::opcode::OpCode;
 use super::Compiler;
 use crate::error::CompilerError;
 use crate::statements::{stmt_span, StatementCompiler};
+use resolve::ResolveError;
 
 impl Compiler {
     pub fn compile(&mut self, source: &str) -> Result<Vec<u32>, CompilerError> {
@@ -39,6 +40,24 @@ impl Compiler {
         // hiccup.
         if self.resolved_program.is_none() {
             self.try_auto_build_resolver_state(&program);
+        }
+
+        // Effect and prove-shape diagnostics are correctness checks, not
+        // optional resolver hints. Stop before bytecode emission so an
+        // effectful call can never slip through the legacy dispatch path.
+        if let Some(error) = self
+            .resolved_program
+            .as_ref()
+            .and_then(|resolved| resolved.diagnostics.first())
+        {
+            return Err(resolve_diagnostic(error));
+        }
+
+        let concurrency =
+            crate::concurrency_analysis::analyze(&program, &self.extra_native_metadata);
+        self.warnings.extend(concurrency.warnings);
+        if let Some(error) = concurrency.error {
+            return Err(CompilerError::DiagnosticError(error));
         }
 
         let mut terminated = false;
@@ -85,6 +104,38 @@ impl Compiler {
 
         Ok(self.current()?.bytecode.clone())
     }
+}
+
+fn resolve_diagnostic(error: &ResolveError) -> CompilerError {
+    let (span, code, note) = match error {
+        ResolveError::ProveBlockUnsupportedShape { span, reason, .. } => {
+            (span, "E020", Some((*reason).to_string()))
+        }
+        ResolveError::MissingAwait {
+            span, effect_path, ..
+        } => (
+            span,
+            "E021",
+            (!effect_path.is_empty()).then(|| format!("effect path: {}", effect_path.join(" -> "))),
+        ),
+        ResolveError::RestrictedEffect {
+            span, effect_path, ..
+        } => (
+            span,
+            "E022",
+            (!effect_path.is_empty()).then(|| format!("effect path: {}", effect_path.join(" -> "))),
+        ),
+        _ => {
+            return CompilerError::InternalError(format!(
+                "unexpected resolver diagnostic after graph construction: {error}"
+            ));
+        }
+    };
+    let mut diagnostic = Diagnostic::error(error.to_string(), span.into()).with_code(code);
+    if let Some(note) = note {
+        diagnostic = diagnostic.with_note(note);
+    }
+    CompilerError::DiagnosticError(Box::new(diagnostic))
 }
 
 /// Returns true if a statement is a control-flow terminator (return, break, continue).
