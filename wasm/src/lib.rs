@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
 use akron::error::RuntimeError;
-use akron::native::NativeObj;
-use akron::{CallFrame, ValueOps, VM};
-use akronc::Compiler;
-use memory::{Closure, Function, Value};
+use akron::specs::CapabilitySet;
+use akron::{HostPolicy, ValueOps, VM};
+use akronc::{CompileOptions, Compiler};
+use memory::Value;
 
 // Thread-local buffer for capturing print() output.
 thread_local! {
@@ -81,90 +81,32 @@ pub fn run(source: &str) -> RunResult {
 }
 
 fn run_inner(source: &str) -> Result<(), String> {
-    // 1. Compile
-    let mut compiler = Compiler::new();
-    let bytecode = compiler.compile(source).map_err(|e| format!("{e}"))?;
+    let native_table = achronyme_std::std_native_table();
+    let mut compiler = Compiler::with_extra_natives(&native_table);
+    let program = compiler
+        .compile_program(source, &CompileOptions::default())
+        .map_err(|error| error.to_string())?;
 
-    // 2. Create VM
     let mut vm = VM::new();
+    vm.host_policy = HostPolicy::untrusted();
+    // Browser output is an explicit virtual capability. Filesystem, network,
+    // clock, randomness, and console input remain unavailable.
+    vm.host_policy.grant(CapabilitySet::CONSOLE_WRITE);
+    for module in achronyme_std::std_modules() {
+        vm.register_module(&*module)
+            .map_err(|error| error.to_string())?;
+    }
+    vm.host_policy
+        .require_program(program.requested_host_capabilities())
+        .map_err(|error| format!("Host capability preflight failed: {error}"))?;
 
-    // 3. Replace the print native (index 0) with our captured version
     if !vm.natives.is_empty() {
-        vm.natives[0] = NativeObj {
-            name: "print".to_string(),
-            func: captured_print,
-            arity: -1,
-        };
+        let mut print = vm.natives[0].clone();
+        print.func = captured_print;
+        vm.natives[0] = print;
     }
-
-    // 4. Transfer artifacts from compiler to VM
-    vm.import_strings(compiler.interner.strings);
-    vm.heap.import_bytes(compiler.bytes_interner.blobs);
-
-    let field_map = vm
-        .heap
-        .import_fields(compiler.field_interner.fields)
-        .map_err(|e| format!("field import: {e}"))?;
-    let bigint_map = vm
-        .heap
-        .import_bigints(compiler.bigint_interner.bigints)
-        .map_err(|e| format!("bigint import: {e}"))?;
-
-    // Remap handles in prototypes
-    for proto in &mut compiler.prototypes {
-        remap_field_handles(&mut proto.constants, &field_map);
-        remap_bigint_handles(&mut proto.constants, &bigint_map);
-    }
-
-    // 5. Allocate prototypes on heap
-    for proto in &compiler.prototypes {
-        let handle = vm
-            .heap
-            .alloc_function(proto.clone())
-            .map_err(|e| format!("alloc prototype: {e}"))?;
-        vm.prototypes.push(handle);
-    }
-
-    // 6. Create main function
-    let main_func = compiler
-        .compilers
-        .last()
-        .ok_or_else(|| "no main function".to_string())?;
-
-    let mut main_constants = main_func.constants.clone();
-    remap_field_handles(&mut main_constants, &field_map);
-    remap_bigint_handles(&mut main_constants, &bigint_map);
-
-    let func = Function {
-        name: "main".to_string(),
-        arity: 0,
-        chunk: bytecode,
-        constants: main_constants,
-        max_slots: main_func.max_slots,
-        upvalue_info: vec![],
-        line_info: main_func.line_info.clone(),
-    };
-
-    let func_idx = vm
-        .heap
-        .alloc_function(func)
-        .map_err(|e| format!("alloc main: {e}"))?;
-    let closure_idx = vm
-        .heap
-        .alloc_closure(Closure {
-            function: func_idx,
-            upvalues: vec![],
-        })
-        .map_err(|e| format!("alloc closure: {e}"))?;
-
-    vm.frames.push(CallFrame {
-        closure: closure_idx,
-        ip: 0,
-        base: 0,
-        dest_reg: 0,
-    });
-
-    // 7. Execute
+    vm.load_program(program)
+        .map_err(|error| error.to_string())?;
     vm.interpret().map_err(|e| {
         if let Some((func_name, line)) = &vm.last_error_location {
             format!("[line {line}] in {func_name}: {e}")
@@ -172,6 +114,47 @@ fn run_inner(source: &str) -> Result<(), String> {
             format!("Runtime error: {e}")
         }
     })
+}
+
+/// Explicit support contract for the browser runtime.
+///
+/// Pure structured tasks, bounded channels, and cooperative yield run inside
+/// the single-lane VM. Host I/O remains unavailable until an embedding API
+/// supplies both a target adapter and explicit authority.
+#[wasm_bindgen]
+pub fn runtime_support() -> String {
+    serde_json::json!({
+        "ambient_authority": false,
+        "virtual_console_output": {
+            "status": "supported",
+            "adapter": "captured browser output"
+        },
+        "structured_tasks": {
+            "status": "supported",
+            "adapter": "single-lane cooperative VM scheduler"
+        },
+        "channels": {
+            "status": "supported",
+            "adapter": "bounded in-memory VM channels"
+        },
+        "yield_now": {
+            "status": "supported",
+            "adapter": "cooperative VM ready queue"
+        },
+        "timers": {
+            "status": "unsupported",
+            "reason": "no explicit WASM clock adapter"
+        },
+        "files": {
+            "status": "unsupported",
+            "reason": "no explicit WASM file adapter"
+        },
+        "network": {
+            "status": "unsupported",
+            "reason": "no explicit WASM network adapter"
+        }
+    })
+    .to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +187,54 @@ pub fn completions() -> String {
     let mut items = ach_lsp_core::completion::keyword_completions();
     items.extend(ach_lsp_core::completion::snippet_completions());
     serde_json::to_string(&items).unwrap_or_else(|_| "[]".into())
+}
+
+/// Canonical language metadata for editors and browser tooling.
+#[wasm_bindgen]
+pub fn language_metadata() -> String {
+    let keywords = achronyme_parser::token::KEYWORDS
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let effects = akron::specs::EFFECT_CATALOG
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let capabilities = akron::specs::CAPABILITY_CATALOG
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let builtins = resolve::BuiltinRegistry::default()
+        .entries()
+        .iter()
+        .map(|entry| {
+            serde_json::json!({
+                "name": entry.name,
+                "arity": entry.arity.describe(),
+                "availability": entry.availability.to_string(),
+                "effects": entry.effects.to_string(),
+                "capabilities": entry.capabilities.to_string(),
+                "behavior": match entry.behavior {
+                    resolve::NativeBehavior::Immediate => "immediate",
+                    resolve::NativeBehavior::Blocking => "blocking",
+                    resolve::NativeBehavior::Suspending => "suspending",
+                },
+                "cancellation": match entry.cancellation {
+                    resolve::CancellationPolicy::None => "none",
+                    resolve::CancellationPolicy::BeforeStart => "before-start",
+                    resolve::CancellationPolicy::Cooperative => "cooperative",
+                },
+                "resource": entry.resource.to_bytes(),
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "keywords": keywords,
+        "effects": effects,
+        "capabilities": capabilities,
+        "builtins": builtins,
+    })
+    .to_string()
 }
 
 /// Get all `.circom` completion items. Returns JSON array of CompletionItem[].
@@ -268,26 +299,80 @@ pub fn document_symbols(source: &str) -> String {
     serde_json::to_string(&syms).unwrap_or_else(|_| "[]".into())
 }
 
-// --- Handle remapping (mirrors cli/src/commands/run.rs) ---
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn remap_field_handles(constants: &mut [Value], field_map: &[u32]) {
-    for val in constants.iter_mut() {
-        if val.is_field() {
-            let old_handle = val.as_handle().expect("Field value must have handle");
-            if let Some(&new_handle) = field_map.get(old_handle as usize) {
-                *val = Value::field(new_handle);
-            }
+    #[test]
+    fn language_metadata_includes_concurrency_and_effect_catalogs() {
+        let metadata: serde_json::Value = serde_json::from_str(&language_metadata()).unwrap();
+        assert!(metadata["keywords"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("concurrent")));
+        assert!(metadata["effects"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("task")));
+        assert!(metadata["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("network.listen")));
+    }
+
+    #[test]
+    fn wasm_runtime_support_matrix_is_explicit() {
+        let support: serde_json::Value = serde_json::from_str(&runtime_support()).unwrap();
+        assert_eq!(support["ambient_authority"], false);
+        assert_eq!(support["structured_tasks"]["status"], "supported");
+        assert_eq!(support["channels"]["status"], "supported");
+        assert_eq!(support["timers"]["status"], "unsupported");
+        assert_eq!(support["files"]["status"], "unsupported");
+        assert_eq!(support["network"]["status"], "unsupported");
+    }
+
+    #[test]
+    fn wasm_runner_supports_pure_tasks_channels_and_yield() {
+        let result = run(
+            r#"
+                fn producer(messages) {
+                    await yield_now()
+                    await channel_send(messages, "wasm")
+                }
+                let messages = channel(1)
+                let value = concurrent {
+                    spawn producer(messages)
+                    await channel_receive(messages)
+                }
+                print(value)
+            "#,
+        );
+        assert!(result.success(), "{}", result.error());
+        assert_eq!(result.output(), "wasm");
+    }
+
+    #[test]
+    fn wasm_runner_rejects_unadapted_host_io_before_execution() {
+        for (source, capability) in [
+            ("await sleep(1)", "clock"),
+            ("await open_file(\"data.txt\")", "file.read"),
+            ("await tcp_connect(\"127.0.0.1:9\")", "network.connect"),
+        ] {
+            let result = run(source);
+            assert!(!result.success(), "{source}");
+            assert!(
+                result.error().contains("Host capability preflight failed"),
+                "{}",
+                result.error()
+            );
+            assert!(result.error().contains(capability), "{}", result.error());
         }
     }
-}
 
-fn remap_bigint_handles(constants: &mut [Value], bigint_map: &[u32]) {
-    for val in constants.iter_mut() {
-        if val.is_bigint() {
-            let old_handle = val.as_handle().expect("BigInt value must have handle");
-            if let Some(&new_handle) = bigint_map.get(old_handle as usize) {
-                *val = Value::bigint(new_handle);
-            }
-        }
+    #[test]
+    fn wasm_runner_preflights_ambient_clock_authority() {
+        let result = run("return time()");
+        assert!(!result.success());
+        assert!(result.error().contains("clock"), "{}", result.error());
     }
 }
