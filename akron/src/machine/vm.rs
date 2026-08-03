@@ -1,16 +1,24 @@
 use crate::error::RuntimeError;
 use crate::globals::GlobalEntry;
+use crate::host::HostPolicy;
 use crate::native::NativeObj;
+use crate::resource::ResourceTable;
 use memory::field::PrimeId;
 use memory::{Heap, Value};
 use std::collections::HashMap;
 
+use super::blocking_pool::BlockingPool;
+use super::channel_hub::ChannelHub;
 use super::circom::CircomWitnessHandler;
 use super::frame::CallFrame;
 use super::interpreter::InterpreterOps;
+use super::limits::RuntimeLimits;
 use super::native::NativeRegistry;
+use super::network_reactor::NetworkReactor;
 use super::prototype::PrototypeRegistry;
 use super::prove::{ProveHandler, VerifyHandler};
+use super::task::TaskScheduler;
+use super::timer_reactor::TimerReactor;
 use super::upvalue::UpvalueOps;
 
 /// The Virtual Machine struct
@@ -36,6 +44,9 @@ pub struct VM {
     /// Execution stops with `RuntimeError::InstructionBudgetExhausted` when
     /// it reaches zero. `u64::MAX` means unlimited (no budget).
     pub instruction_budget: u64,
+
+    /// Explicit, inspectable bounds for task and resource growth.
+    pub runtime_limits: RuntimeLimits,
 
     // Passive Debug Symbols (Sidecar)
     pub debug_symbols: Option<HashMap<u16, String>>,
@@ -72,6 +83,32 @@ pub struct VM {
 
     /// Prime field loaded from bytecode header (v0x0B+). Defaults to BN254.
     pub prime_id: PrimeId,
+
+    /// Deterministic, single-lane structured task scheduler.
+    pub(crate) task_scheduler: TaskScheduler,
+
+    /// Explicit authority granted by the embedding host.
+    pub host_policy: HostPolicy,
+
+    /// Fixed-size worker pool used only by explicitly registered blocking
+    /// native adapters.
+    pub(crate) blocking_pool: BlockingPool,
+
+    /// Bounded, single-lane channel queues and waiters.
+    pub(crate) channel_hub: ChannelHub,
+
+    /// VM-owned opaque host resources. Handles are monotonic and never reused.
+    pub(crate) resources: ResourceTable,
+
+    /// One readiness reactor per VM; network tasks never require one OS thread
+    /// apiece.
+    pub(crate) network_reactor: NetworkReactor,
+
+    /// One bounded timer service per VM, shared by every sleep and deadline.
+    pub(crate) timer_reactor: TimerReactor,
+
+    /// Prevents suspension from crossing a non-resumable Rust native frame.
+    pub(crate) native_call_depth: usize,
 }
 
 pub const STACK_MAX: usize = 65_536;
@@ -100,6 +137,7 @@ impl VM {
             open_upvalues: None,
             stress_mode: false,
             instruction_budget: u64::MAX,
+            runtime_limits: RuntimeLimits::default(),
             debug_symbols: None,
             prove_handler: None,
             verify_handler: None,
@@ -109,6 +147,14 @@ impl VM {
             native_roots: Vec::new(),
             prototype_registry: PrototypeRegistry::new(),
             prime_id: PrimeId::Bn254,
+            task_scheduler: TaskScheduler::default(),
+            host_policy: HostPolicy::default(),
+            blocking_pool: BlockingPool::new(),
+            channel_hub: ChannelHub::default(),
+            resources: ResourceTable::default(),
+            network_reactor: NetworkReactor::new(),
+            timer_reactor: TimerReactor::new(),
+            native_call_depth: 0,
         };
 
         // Bootstrap native functions and prototype methods
@@ -163,7 +209,7 @@ impl VM {
     ) -> Result<(), RuntimeError> {
         use crate::machine::native::NativeRegistry;
         for def in module.natives() {
-            self.define_native(def.name, def.func, def.arity)?;
+            self.define_native(&def)?;
         }
         Ok(())
     }
@@ -185,21 +231,7 @@ impl VM {
             let handle = callee
                 .as_handle()
                 .ok_or_else(|| RuntimeError::type_mismatch("Expected native handle"))?;
-            let (func, arity) = {
-                let n = self
-                    .natives
-                    .get(handle as usize)
-                    .ok_or(RuntimeError::FunctionNotFound)?;
-                (n.func, n.arity)
-            };
-            if arity != -1 && arity as usize != args.len() {
-                return Err(RuntimeError::arity_mismatch(format!(
-                    "Expected {} args, got {}",
-                    arity,
-                    args.len()
-                )));
-            }
-            return func(self, args);
+            return self.invoke_native(handle, args);
         }
 
         if !callee.is_closure() {
@@ -265,8 +297,11 @@ impl VM {
             .push(CallFrame::new(closure_handle, new_base, dest_reg));
 
         match self.run_until_frame_depth(saved_depth) {
+            Ok(()) if saved_depth == 0 => Ok(self.last_result),
             Ok(()) => Ok(self.stack[dest_reg]),
+            Err(RuntimeError::TaskSuspended) => Err(RuntimeError::TaskSuspended),
             Err(e) => {
+                self.capture_error_location();
                 // Clean up any frames left by a failed closure (e.g. error mid-execution
                 // of a closure that called other closures).
                 self.frames.truncate(saved_depth);
@@ -302,6 +337,10 @@ impl VM {
         self.open_upvalues = None;
         self.last_result = Value::nil();
         self.last_error_location = None;
+        self.task_scheduler.reset();
+        self.native_call_depth = 0;
+        self.close_all_resources();
+        self.channel_hub = ChannelHub::default();
 
         // 3. Zero stack in debug builds to prevent stale values leaking
         #[cfg(debug_assertions)]
@@ -310,76 +349,33 @@ impl VM {
 
     /// Capture the current execution location for error reporting.
     pub(crate) fn capture_error_location(&mut self) {
-        if let Some(frame) = self.frames.last() {
-            let ip = if frame.ip > 0 { frame.ip - 1 } else { 0 };
-            if let Some(closure) = self.heap.get_closure(frame.closure) {
-                if let Some(func) = self.heap.get_function(closure.function) {
-                    let line = func.line_info.get(ip).copied().unwrap_or(0);
-                    if line > 0 {
-                        self.last_error_location = Some((func.name.clone(), line));
-                    }
-                }
-            }
+        if let Some(location) = self.current_source_location().filter(|(_, line)| *line > 0) {
+            self.last_error_location = Some(location);
         }
+    }
+
+    pub(crate) fn current_source_location(&self) -> Option<(String, u32)> {
+        let frame = self.frames.last()?;
+        let ip = frame.ip.saturating_sub(1);
+        let closure = self.heap.get_closure(frame.closure)?;
+        let function = self.heap.get_function(closure.function)?;
+        let line = function.line_info.get(ip).copied().unwrap_or(0);
+        Some((function.name.clone(), line))
     }
 
     /// Main interpretation loop
     pub fn interpret(&mut self) -> Result<(), RuntimeError> {
         match self.interpret_inner() {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.close_resources_owned_by(None);
+                Ok(())
+            }
             Err(e) => {
                 self.capture_error_location();
+                self.abort_all_task_scopes();
+                self.close_resources_owned_by(None);
                 Err(e)
             }
         }
-    }
-
-    /// Sidecar Loader: Parses debug symbols from raw bytes
-    pub fn load_debug_section(&mut self, bytes: &[u8]) {
-        if bytes.len() < 4 {
-            return; // Not enough bytes for Header + Count
-        }
-
-        let mut cursor = 0;
-
-        // 1. Check Magic (0xDB 0x67)
-        if bytes[cursor] != 0xDB || bytes[cursor + 1] != 0x67 {
-            return; // Invalid or missing section
-        }
-        cursor += 2;
-
-        // 2. Read Count
-        let count = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]);
-        cursor += 2;
-
-        let mut map = HashMap::new();
-
-        for _ in 0..count {
-            if cursor + 4 > bytes.len() {
-                break; // Truncated
-            }
-
-            // Global Index
-            let global_idx = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]);
-            cursor += 2;
-
-            // Name Length
-            let name_len = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]) as usize;
-            cursor += 2;
-
-            if cursor + name_len > bytes.len() {
-                break; // Truncated name
-            }
-
-            // Name Bytes
-            let name_bytes = &bytes[cursor..cursor + name_len];
-            cursor += name_len;
-
-            if let Ok(name) = std::str::from_utf8(name_bytes) {
-                map.insert(global_idx, name.to_string());
-            }
-        }
-
-        self.debug_symbols = Some(map);
     }
 }

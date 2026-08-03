@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 
+use byteorder::{LittleEndian, WriteBytesExt};
 use memory::field::PrimeId;
 use memory::{Function, Value};
 
 use crate::opcode::instruction::encode_abc;
 use crate::opcode::instruction::encode_abx;
 use crate::opcode::OpCode;
+use crate::specs::{
+    CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, NativeMeta, ResourceEffect,
+};
 use crate::VM;
 
-use super::{CompiledProgram, ProgramCapabilities};
+use super::{CompiledProgram, ProgramCapabilities, ProgramNativeMetadata};
 
 fn minimal_program() -> CompiledProgram {
     CompiledProgram::new(
@@ -32,18 +36,64 @@ fn minimal_program() -> CompiledProgram {
     )
 }
 
+fn first_extra_native_index() -> u16 {
+    resolve::BuiltinRegistry::default().vm_native_count() as u16
+}
+
 #[test]
 fn executable_roundtrip_preserves_program() {
     let program = minimal_program();
     let mut bytes = Vec::new();
     program.write_executable(&mut bytes).unwrap();
-    assert_eq!(&bytes[..4], b"ACH\x0C");
+    assert_eq!(&bytes[..4], b"ACH\x0D");
 
     let decoded = CompiledProgram::read_executable(&mut bytes.as_slice()).unwrap();
     assert_eq!(decoded.main.chunk, program.main.chunk);
     assert_eq!(decoded.main.line_info, vec![7]);
     assert_eq!(decoded.strings, vec!["hello"]);
     assert_eq!(decoded.debug_symbols.get(&14), Some(&"print".to_string()));
+    assert_eq!(decoded.native_metadata, program.native_metadata);
+}
+
+#[test]
+fn legacy_v12_canonical_executable_remains_readable() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"ACH\x0C");
+    bytes.write_u8(PrimeId::Bn254.to_byte()).unwrap();
+    bytes.write_u16::<LittleEndian>(1).unwrap();
+    bytes.write_u64::<LittleEndian>(0).unwrap();
+    bytes.write_u16::<LittleEndian>(1).unwrap();
+    bytes.write_u32::<LittleEndian>(1).unwrap();
+    bytes.write_u32::<LittleEndian>(5).unwrap();
+    bytes.extend_from_slice(b"hello");
+    for _ in 0..4 {
+        bytes.write_u32::<LittleEndian>(0).unwrap();
+    }
+    bytes.write_u32::<LittleEndian>(1).unwrap();
+    bytes.write_u8(crate::specs::SER_TAG_STRING).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(0).unwrap();
+    bytes.write_u32::<LittleEndian>(1).unwrap();
+    bytes
+        .write_u32::<LittleEndian>(encode_abc(OpCode::Return.as_u8(), 0, 0, 0))
+        .unwrap();
+    bytes.write_u32::<LittleEndian>(1).unwrap();
+    bytes.write_u32::<LittleEndian>(7).unwrap();
+    bytes.extend_from_slice(&[0xDB, 0x67]);
+    bytes.write_u16::<LittleEndian>(1).unwrap();
+    bytes.write_u16::<LittleEndian>(14).unwrap();
+    bytes.write_u16::<LittleEndian>(5).unwrap();
+    bytes.extend_from_slice(b"print");
+
+    let decoded = CompiledProgram::read_executable(&mut bytes.as_slice()).unwrap();
+    assert_eq!(decoded.format_version, 0x0C);
+    assert_eq!(decoded.bytecode_version, 1);
+    assert_eq!(decoded.main.line_info, vec![7]);
+    assert!(!decoded.native_metadata.is_empty());
+
+    let mut vm = VM::new();
+    vm.load_program(decoded).unwrap();
+    vm.interpret().unwrap();
 }
 
 #[test]
@@ -142,49 +192,8 @@ fn validation_allows_reachable_cycle_without_exit() {
     program.validate().unwrap();
 }
 
-#[test]
-fn capabilities_detect_verify_proof_global_usage() {
-    let registry = resolve::BuiltinRegistry::default();
-    let verify_index = registry
-        .lookup("verify_proof")
-        .and_then(|entry| entry.vm_fn)
-        .unwrap()
-        .as_u32() as u16;
-    let mut program = minimal_program();
-    program.main.chunk = vec![
-        encode_abx(OpCode::GetGlobal.as_u8(), 0, verify_index),
-        encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
-    ];
-    program.main.line_info = vec![1; 2];
-
-    assert!(program
-        .derived_capabilities()
-        .contains(ProgramCapabilities::VERIFY));
-}
-
-#[test]
-fn executable_roundtrip_preserves_verify_capability() {
-    let registry = resolve::BuiltinRegistry::default();
-    let verify_index = registry
-        .lookup("verify_proof")
-        .and_then(|entry| entry.vm_fn)
-        .unwrap()
-        .as_u32() as u16;
-    let mut program = minimal_program();
-    program.main.chunk = vec![
-        encode_abx(OpCode::GetGlobal.as_u8(), 0, verify_index),
-        encode_abc(OpCode::Return.as_u8(), 0, 1, 0),
-    ];
-    program.main.line_info = vec![1; 2];
-    program.capabilities = program.derived_capabilities();
-    let mut bytes = Vec::new();
-    program.write_executable(&mut bytes).unwrap();
-
-    let decoded = CompiledProgram::read_executable(&mut bytes.as_slice()).unwrap();
-
-    assert!(decoded.capabilities.contains(ProgramCapabilities::VERIFY));
-}
-
+#[path = "tests/concurrency.rs"]
+mod concurrency;
 #[test]
 fn vm_load_program_materializes_main() {
     let mut vm = VM::new();

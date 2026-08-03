@@ -77,6 +77,13 @@ impl GarbageCollector for super::vm::VM {
         // 5. Native roots (values held by higher-order natives during reentrant calls)
         roots.extend_from_slice(&self.native_roots);
 
+        // 6. Deferred/running structured tasks own their callees, arguments,
+        // and completed results until their lexical scope closes.
+        roots.extend(self.task_scheduler.roots());
+
+        // 7. Values queued in bounded channels or blocked sends remain live.
+        roots.extend(self.channel_hub.roots());
+
         roots
     }
 }

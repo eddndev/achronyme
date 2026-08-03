@@ -135,23 +135,8 @@ impl ControlFlowOps for super::vm::VM {
         let handle = func_val
             .as_handle()
             .ok_or_else(|| RuntimeError::type_mismatch("Expected native handle"))?;
-        let (func, arity) = {
-            let n = self
-                .natives
-                .get(handle as usize)
-                .ok_or(RuntimeError::FunctionNotFound)?;
-            (n.func, n.arity)
-        };
-
-        if arity != -1 && arity as usize != args_count {
-            return Err(RuntimeError::arity_mismatch(format!(
-                "Expected {} args, got {}",
-                arity, args_count
-            )));
-        }
-
         let args: Vec<Value> = self.stack[args_start..args_start + args_count].to_vec();
-        let res = func(self, &args)?;
+        let res = self.invoke_native(handle, &args)?;
         self.set_reg(base, result_reg, res)?;
 
         Ok(())

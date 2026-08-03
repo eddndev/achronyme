@@ -104,6 +104,24 @@ pub enum OpCode {
     /// For Loop Iterator: R[A].. = Next(R[A]) or Jump Bx
     ForIter = 66,
 
+    // ===== Structured concurrency =====
+    /// Enter a lexical task scope. Operands must be zero.
+    ScopeEnter = 70,
+    /// Join every child owned by the current task scope. Operands must be zero.
+    ScopeExit = 71,
+    /// Spawn call: R[A] = Task(R[B], R[B+1]..R[B+C]).
+    Spawn = 72,
+    /// Await task completion: R[A] = Await(R[B]). C must be zero.
+    Await = 73,
+    /// Observe cooperative cancellation for the current task.
+    CancelCheck = 74,
+    /// Await a task and return an explicit Outcome map instead of propagating failure.
+    AwaitOutcome = 75,
+    /// Drop the ability to await a child while retaining structured scope ownership.
+    TaskForget = 76,
+    /// Await the first terminal task in R[B..B+C], cancel the rest, write Outcome to R[A].
+    AwaitRace = 77,
+
     // ===== ZK =====
     /// Prove: compile + verify ZK circuit. R[A] = capture map, K[Bx] = source string.
     Prove = 160,
@@ -173,6 +191,14 @@ impl OpCode {
             61 => Some(OpCode::JumpIfFalse),
             65 => Some(OpCode::GetIter),
             66 => Some(OpCode::ForIter),
+            70 => Some(OpCode::ScopeEnter),
+            71 => Some(OpCode::ScopeExit),
+            72 => Some(OpCode::Spawn),
+            73 => Some(OpCode::Await),
+            74 => Some(OpCode::CancelCheck),
+            75 => Some(OpCode::AwaitOutcome),
+            76 => Some(OpCode::TaskForget),
+            77 => Some(OpCode::AwaitRace),
             98 => Some(OpCode::DefGlobalVar),
             99 => Some(OpCode::DefGlobalLet),
             100 => Some(OpCode::GetGlobal),
@@ -229,6 +255,14 @@ impl OpCode {
             OpCode::JumpIfFalse => "JUMP_IF_FALSE",
             OpCode::GetIter => "GET_ITER",
             OpCode::ForIter => "FOR_ITER",
+            OpCode::ScopeEnter => "SCOPE_ENTER",
+            OpCode::ScopeExit => "SCOPE_EXIT",
+            OpCode::Spawn => "SPAWN",
+            OpCode::Await => "AWAIT",
+            OpCode::CancelCheck => "CANCEL_CHECK",
+            OpCode::AwaitOutcome => "AWAIT_OUTCOME",
+            OpCode::TaskForget => "TASK_FORGET",
+            OpCode::AwaitRace => "AWAIT_RACE",
             OpCode::DefGlobalVar => "DEF_GLOBAL_VAR",
             OpCode::DefGlobalLet => "DEF_GLOBAL_LET",
             OpCode::GetGlobal => "GET_GLOBAL",
@@ -303,50 +337,4 @@ pub mod instruction {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use instruction::*;
-
-    #[test]
-    fn test_opcode_conversion() {
-        assert_eq!(OpCode::Add.as_u8(), 10);
-        assert_eq!(OpCode::from_u8(10), Some(OpCode::Add));
-        assert_eq!(OpCode::from_u8(255), Some(OpCode::Nop));
-        assert_eq!(OpCode::from_u8(205), None); // 205 is not assigned
-    }
-
-    #[test]
-    fn test_instruction_encoding() {
-        let inst = encode_abc(OpCode::Add.as_u8(), 1, 2, 3);
-        assert_eq!(decode_opcode(inst), OpCode::Add.as_u8());
-        assert_eq!(decode_a(inst), 1);
-        assert_eq!(decode_b(inst), 2);
-        assert_eq!(decode_c(inst), 3);
-    }
-
-    #[test]
-    fn test_instruction_encoding_abx() {
-        let inst = encode_abx(OpCode::LoadConst.as_u8(), 5, 1000);
-        assert_eq!(decode_opcode(inst), OpCode::LoadConst.as_u8());
-        assert_eq!(decode_a(inst), 5);
-        assert_eq!(decode_bx(inst), 1000);
-    }
-
-    #[test]
-    fn call_circom_template_opcode_roundtrips() {
-        assert_eq!(OpCode::CallCircomTemplate.as_u8(), 162);
-        assert_eq!(OpCode::from_u8(162), Some(OpCode::CallCircomTemplate));
-        assert_eq!(OpCode::CallCircomTemplate.name(), "CALL_CIRCOM_TEMPLATE");
-    }
-
-    #[test]
-    fn call_circom_template_encodes_as_abc() {
-        // Layout: A=dest, B=first_input_reg, C=input_count
-        let inst = encode_abc(OpCode::CallCircomTemplate.as_u8(), 3, 5, 2);
-        assert_eq!(decode_opcode(inst), OpCode::CallCircomTemplate.as_u8());
-        assert_eq!(decode_a(inst), 3);
-        assert_eq!(decode_b(inst), 5);
-        assert_eq!(decode_c(inst), 2);
-    }
-}
+include!("opcode/tests.rs");

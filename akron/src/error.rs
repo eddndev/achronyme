@@ -48,6 +48,12 @@ pub enum RuntimeError {
     VerifyHandlerNotConfigured,
     ArenaCapacityExceeded,
     CircomHandlerNotConfigured,
+    InvalidTaskHandle,
+    TaskOutOfScope,
+    TaskAlreadyAwaited,
+    TaskCancelled,
+    /// Internal scheduler control transfer; never exposed as a language error.
+    TaskSuspended,
 
     // ── Boxed variants (8-byte pointer, allocation on error only) ───
     TypeMismatch(Box<String>),
@@ -61,6 +67,9 @@ pub enum RuntimeError {
     IoError(Box<IoErrorInfo>),
     VerificationFailed(Box<String>),
     ResourceLimitExceeded(Box<String>),
+    ResourceError(Box<String>),
+    TaskFailed(Box<String>),
+    CapabilityDenied(Box<String>),
 }
 
 // ── Convenience constructors (avoid `Box::new(...)` at every call site) ──
@@ -123,6 +132,21 @@ impl RuntimeError {
     pub fn resource_limit_exceeded(msg: impl Into<String>) -> Self {
         Self::ResourceLimitExceeded(Box::new(msg.into()))
     }
+
+    #[inline]
+    pub fn resource_error(msg: impl Into<String>) -> Self {
+        Self::ResourceError(Box::new(msg.into()))
+    }
+
+    #[inline]
+    pub fn task_failed(msg: impl Into<String>) -> Self {
+        Self::TaskFailed(Box::new(msg.into()))
+    }
+
+    #[inline]
+    pub fn capability_denied(msg: impl Into<String>) -> Self {
+        Self::CapabilityDenied(Box::new(msg.into()))
+    }
 }
 
 impl fmt::Display for RuntimeError {
@@ -176,9 +200,19 @@ impl fmt::Display for RuntimeError {
             RuntimeError::ResourceLimitExceeded(msg) => {
                 write!(f, "resource limit exceeded: {msg}")
             }
+            RuntimeError::ResourceError(msg) => write!(f, "resource error: {msg}"),
             RuntimeError::ArenaCapacityExceeded => write!(f, "arena capacity exceeded u32::MAX"),
             RuntimeError::CircomHandlerNotConfigured => {
                 write!(f, "circom template handler not configured")
+            }
+            RuntimeError::InvalidTaskHandle => write!(f, "invalid task handle"),
+            RuntimeError::TaskOutOfScope => write!(f, "task handle escaped its owning scope"),
+            RuntimeError::TaskAlreadyAwaited => write!(f, "task has already been awaited"),
+            RuntimeError::TaskCancelled => write!(f, "task was cancelled"),
+            RuntimeError::TaskSuspended => write!(f, "task suspended"),
+            RuntimeError::TaskFailed(message) => write!(f, "task failed: {message}"),
+            RuntimeError::CapabilityDenied(message) => {
+                write!(f, "host capability denied: {message}")
             }
         }
     }

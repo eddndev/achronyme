@@ -1,7 +1,9 @@
 use crate::specs::{
     SER_TAG_BIGINT, SER_TAG_BYTES, SER_TAG_FIELD, SER_TAG_INT, SER_TAG_NIL, SER_TAG_STRING,
 };
-use crate::{CallFrame, CompiledProgram, EXECUTABLE_FORMAT_VERSION, VM};
+use crate::{
+    CallFrame, CompiledProgram, EXECUTABLE_FORMAT_VERSION, LEGACY_CANONICAL_FORMAT_VERSION, VM,
+};
 use byteorder::{LittleEndian, ReadBytesExt};
 use memory::field::PrimeId;
 use memory::{Closure, Function, Value};
@@ -90,6 +92,10 @@ impl VM {
         // backends. Versions 0x09..=0x0B retain their legacy compatibility
         // reader below.
         if version == EXECUTABLE_FORMAT_VERSION {
+            let program = CompiledProgram::read_v13_body(reader)?;
+            return self.load_program(program);
+        }
+        if version == LEGACY_CANONICAL_FORMAT_VERSION {
             let program = CompiledProgram::read_v12_body(reader)?;
             return self.load_program(program);
         }

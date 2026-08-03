@@ -8,6 +8,7 @@ use crate::compiled::{
     STATUS_RUNTIME_ERROR,
 };
 use crate::opcode::instruction::{encode_abc, encode_abx};
+use crate::specs::CapabilitySet;
 use crate::{CompiledProgram, OpCode, MAX_FRAMES, VM};
 
 fn function_program(main: Function, functions: Vec<Function>) -> CompiledProgram {
@@ -345,6 +346,7 @@ fn prepare_call_reports_native_completion_without_pushing_a_frame() {
         ],
     );
     let mut vm = VM::new();
+    vm.host_policy.grant(CapabilitySet::CONSOLE_WRITE);
     vm.load_program(function_program(main, Vec::new())).unwrap();
     vm.stack[0] = Value::native(0);
 

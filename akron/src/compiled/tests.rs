@@ -7,8 +7,9 @@ use crate::{RuntimeError, VM};
 
 use super::{
     runtime_api, RuntimeCapabilities, RuntimeContext, ERROR_DIVISION_BY_ZERO, RUNTIME_ABI_V1_SIZE,
-    RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_V4_SIZE, RUNTIME_ABI_VERSION,
-    STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_RUNTIME_ERROR,
+    RUNTIME_ABI_V2_SIZE, RUNTIME_ABI_V3_SIZE, RUNTIME_ABI_V4_SIZE, RUNTIME_ABI_V5_SIZE,
+    RUNTIME_ABI_V6_SIZE, RUNTIME_ABI_VERSION, STATUS_INVALID_ARGUMENT, STATUS_OK,
+    STATUS_RUNTIME_ERROR,
 };
 use crate::opcode::instruction::{encode_abc, encode_abx};
 use crate::{CompiledProgram, OpCode};
@@ -25,11 +26,14 @@ mod specializations;
 fn runtime_api_header_is_self_describing() {
     let api = runtime_api();
     assert_eq!(api.magic, *b"AKRTABI\0");
-    assert_eq!(api.abi_version, 5);
+    assert_eq!(api.abi_version, 6);
     assert_eq!(api.abi_version, RUNTIME_ABI_VERSION);
     assert_eq!(api.struct_size as usize, size_of::<super::RuntimeApi>());
     assert!(api.capabilities.contains(RuntimeCapabilities::CORE));
     assert!(api.capabilities.contains(RuntimeCapabilities::LLVM_TIER2));
+    assert!(api
+        .capabilities
+        .contains(RuntimeCapabilities::STRUCTURED_TASKS));
     assert!(api
         .validate(
             RUNTIME_ABI_VERSION,
@@ -115,10 +119,25 @@ fn runtime_api_header_is_self_describing() {
     assert!(api
         .validate(
             RUNTIME_ABI_VERSION,
-            size_of::<super::RuntimeApi>() as u32,
-            RuntimeCapabilities::LLVM_TIER2,
+            RUNTIME_ABI_V6_SIZE,
+            RuntimeCapabilities::LLVM_TASKS,
         )
         .is_ok());
+
+    let mut version_five = *api;
+    version_five.abi_version = 5;
+    version_five.struct_size = RUNTIME_ABI_V5_SIZE;
+    version_five.capabilities = RuntimeCapabilities::LLVM_TIER2;
+    assert!(version_five
+        .validate(5, RUNTIME_ABI_V5_SIZE, RuntimeCapabilities::LLVM_TIER2,)
+        .is_ok());
+    assert!(version_five
+        .validate(
+            RUNTIME_ABI_VERSION,
+            RUNTIME_ABI_V6_SIZE,
+            RuntimeCapabilities::LLVM_TASKS,
+        )
+        .is_err());
 }
 
 #[test]

@@ -1,13 +1,17 @@
 use std::fmt;
 
+mod owned;
+
+pub use owned::ValueResourceKind;
+use owned::{RESOURCE_KIND_MASK, RESOURCE_MARKER, TASK_MARKER};
+
 // --- Tagged u64 Constants ---
 // Bits 63..60 = tag  (4 bits, 16 possible types)
 // Bits 59..0  = payload (60 bits)
 
 const TAG_SHIFT: u32 = 60;
 const PAYLOAD_MASK: u64 = (1u64 << 60) - 1; // 0x0FFF_FFFF_FFFF_FFFF
-
-// Tags (reassigned for clean ordering)
+                                            // Tags (reassigned for clean ordering)
 pub const TAG_INT: u64 = 0; // i60 inline (most common -> tag 0 for speed)
 pub const TAG_NIL: u64 = 1;
 pub const TAG_FALSE: u64 = 2;
@@ -84,6 +88,12 @@ impl Value {
         let canonical = match tag {
             TAG_INT => true,
             TAG_NIL | TAG_FALSE | TAG_TRUE => payload == 0,
+            TAG_FUNCTION if payload & TASK_MARKER != 0 => {
+                payload & !(TASK_MARKER | u32::MAX as u64) == 0
+            }
+            TAG_FUNCTION if payload & RESOURCE_MARKER != 0 => {
+                payload & !(RESOURCE_MARKER | RESOURCE_KIND_MASK | u32::MAX as u64) == 0
+            }
             TAG_STRING..=TAG_CIRCOM_HANDLE => payload <= u32::MAX as u64,
             _ => false,
         };
@@ -206,7 +216,7 @@ impl Value {
 
     #[inline]
     pub fn is_obj(&self) -> bool {
-        self.tag() >= TAG_STRING
+        self.tag() >= TAG_STRING && !self.is_task() && !self.is_resource()
     }
 
     #[inline]
@@ -237,7 +247,7 @@ impl Value {
 
     #[inline]
     pub fn is_function(&self) -> bool {
-        self.tag() == TAG_FUNCTION
+        self.tag() == TAG_FUNCTION && !self.is_task() && !self.is_resource()
     }
 
     #[inline]
@@ -357,6 +367,11 @@ impl fmt::Debug for Value {
             write!(f, "List({})", self.as_handle().unwrap())
         } else if self.is_map() {
             write!(f, "Map({})", self.as_handle().unwrap())
+        } else if self.is_task() {
+            write!(f, "Task({})", self.as_task_handle().unwrap())
+        } else if self.is_resource() {
+            let (kind, handle) = self.as_resource_handle().unwrap();
+            write!(f, "Resource({kind:?}, {handle})")
         } else if self.is_function() {
             write!(f, "Function({})", self.as_handle().unwrap())
         } else if self.is_native() {

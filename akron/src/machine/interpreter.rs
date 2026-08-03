@@ -251,6 +251,11 @@ impl super::vm::VM {
                     self.handle_iterator(op, instruction, base, frame_idx, max_slots, chunk_len)?;
                 }
 
+                ScopeEnter | ScopeExit | Spawn | Await | AwaitOutcome | TaskForget | AwaitRace
+                | CancelCheck => {
+                    self.handle_task_instruction(op, instruction, base)?;
+                }
+
                 CallCircomTemplate => {
                     self.handle_call_circom_template(instruction, base)?;
                 }
@@ -317,6 +322,8 @@ impl super::vm::VM {
                 println!("{}", self.val_to_string(&value));
                 Ok(())
             }
+            ScopeEnter | ScopeExit | Spawn | Await | AwaitOutcome | TaskForget | AwaitRace
+            | CancelCheck => self.handle_task_instruction(opcode, instruction, base),
             _ => Err(RuntimeError::InvalidOpcode(opcode as u8)),
         }
     }

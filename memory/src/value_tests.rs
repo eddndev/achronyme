@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::value::{I60_MAX, I60_MIN};
-    use crate::Value;
+    use crate::{Value, ValueResourceKind};
 
     #[test]
     fn test_tagged_int_basics() {
@@ -160,5 +160,42 @@ mod tests {
         assert!(Value::from_abi_bits((1u64 << 60) | 1).is_none());
         assert!(Value::from_abi_bits((3u64 << 60) | 1).is_none());
         assert!(Value::from_abi_bits((4u64 << 60) | (1u64 << 32)).is_none());
+    }
+
+    #[test]
+    fn task_values_are_opaque_non_heap_handles() {
+        let task = Value::task(42);
+        assert!(task.is_task());
+        assert!(!task.is_function());
+        assert!(!task.is_obj());
+        assert_eq!(task.as_handle(), None);
+        assert_eq!(task.as_task_handle(), Some(42));
+        assert_eq!(Value::from_abi_bits(task.to_abi_bits()), Some(task));
+        assert_eq!(format!("{task:?}"), "Task(42)");
+    }
+
+    #[test]
+    fn resource_handles_are_opaque_and_keep_their_kind_in_the_abi() {
+        for kind in [
+            ValueResourceKind::File,
+            ValueResourceKind::Listener,
+            ValueResourceKind::Connection,
+            ValueResourceKind::Channel,
+        ] {
+            let value = Value::resource(kind, 42);
+            assert!(value.is_resource());
+            assert!(!value.is_obj());
+            assert!(!value.is_function());
+            assert_eq!(value.as_handle(), None);
+            assert_eq!(value.as_resource_handle(), Some((kind, 42)));
+            assert_eq!(Value::from_abi_bits(value.to_abi_bits()), Some(value));
+        }
+    }
+
+    #[test]
+    fn opaque_resource_marker_rejects_noncanonical_payload_bits() {
+        let value = Value::resource(ValueResourceKind::Connection, 7);
+        let noncanonical = value.to_abi_bits() | (1u64 << 55);
+        assert_eq!(Value::from_abi_bits(noncanonical), None);
     }
 }
