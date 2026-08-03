@@ -356,6 +356,52 @@ fn inspect_manifest_reports_effects_requests_grants_and_limits_as_json() {
     assert_eq!(manifest["limits"]["channels"], 3);
     assert_eq!(manifest["limits"]["blocking_workers"], 2);
     assert_eq!(manifest["limits"]["blocking_queue_capacity"], 7);
+    assert_eq!(manifest["proving"]["key_source"], "deny-insecure-setup");
+}
+
+#[test]
+fn inspect_manifest_makes_insecure_development_setup_visible() {
+    let src = write_temp_source("return 1");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ach"))
+        .args([
+            "--no-config",
+            "--error-format",
+            "json",
+            "--insecure-dev-setup",
+        ])
+        .arg("inspect")
+        .arg(src.path())
+        .arg("--manifest")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let manifest: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(manifest["proving"]["key_source"], "insecure-local");
+    assert_eq!(
+        manifest["proving"]["trusted_key_dir"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
+fn inspect_manifest_reports_the_selected_trusted_key_store() {
+    let src = write_temp_source("return 1");
+    let trusted_dir = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ach"))
+        .args(["--no-config", "--error-format", "json", "--trusted-key-dir"])
+        .arg(trusted_dir.path())
+        .arg("inspect")
+        .arg(src.path())
+        .arg("--manifest")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let manifest: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(manifest["proving"]["key_source"], "trusted-store");
+    assert_eq!(
+        manifest["proving"]["trusted_key_dir"],
+        trusted_dir.path().display().to_string()
+    );
 }
 
 // ======================================================================

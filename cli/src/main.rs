@@ -245,6 +245,7 @@ fn main() -> Result<()> {
                     prime_id,
                     &cfg.circom_lib_dirs,
                     &runtime_security,
+                    &cfg.proving_key_source,
                     ef,
                 );
             }

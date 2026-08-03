@@ -12,6 +12,7 @@ pub fn inspect_manifest(
     prime_id: memory::field::PrimeId,
     circom_lib_dirs: &[PathBuf],
     runtime_security: &RuntimeSecurity,
+    proving_key_source: &proving::groth16::ProvingKeySource,
     error_format: ErrorFormat,
 ) -> Result<()> {
     let program = if path.ends_with(".achb") {
@@ -35,7 +36,13 @@ pub fn inspect_manifest(
     };
     let policy = runtime_security.host_policy()?;
     let limits = runtime_security.runtime_limits()?;
-    let manifest = manifest_value(&program, policy.granted(), limits, runtime_security);
+    let manifest = manifest_value(
+        &program,
+        policy.granted(),
+        limits,
+        runtime_security,
+        proving_key_source,
+    );
     if error_format == ErrorFormat::Json {
         println!("{}", serde_json::to_string(&manifest)?);
     } else {
@@ -48,6 +55,12 @@ pub fn inspect_manifest(
             program.requested_host_capabilities()
         );
         println!("granted-host-capabilities: {}", policy.granted());
+        let (key_source, trusted_key_dir) = proving_key_source_display(proving_key_source);
+        println!("proving-key-source: {key_source}");
+        println!(
+            "trusted-key-dir: {}",
+            trusted_key_dir.as_deref().unwrap_or("none")
+        );
         println!(
             "allow-read: {}",
             display_paths(&runtime_security.allow_read)
@@ -85,7 +98,9 @@ fn manifest_value(
     granted: akron::specs::CapabilitySet,
     limits: akron::RuntimeLimits,
     security: &RuntimeSecurity,
+    proving_key_source: &proving::groth16::ProvingKeySource,
 ) -> serde_json::Value {
+    let (key_source, trusted_key_dir) = proving_key_source_display(proving_key_source);
     serde_json::json!({
         "format_version": program.format_version,
         "bytecode_version": program.bytecode_version,
@@ -93,6 +108,10 @@ fn manifest_value(
         "program_capabilities": program.capabilities.to_string(),
         "requested_host_capabilities": program.requested_host_capabilities().to_string(),
         "granted_host_capabilities": granted.to_string(),
+        "proving": {
+            "key_source": key_source,
+            "trusted_key_dir": trusted_key_dir,
+        },
         "grants": {
             "read_roots": security.allow_read.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
             "write_roots": security.allow_write.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
@@ -111,6 +130,18 @@ fn manifest_value(
             "blocking_queue_capacity": limits.blocking_queue_capacity,
         }
     })
+}
+
+fn proving_key_source_display(
+    source: &proving::groth16::ProvingKeySource,
+) -> (&'static str, Option<String>) {
+    match source {
+        proving::groth16::ProvingKeySource::DenyInsecureSetup => ("deny-insecure-setup", None),
+        proving::groth16::ProvingKeySource::InsecureLocal => ("insecure-local", None),
+        proving::groth16::ProvingKeySource::TrustedStore(path) => {
+            ("trusted-store", Some(path.display().to_string()))
+        }
+    }
 }
 
 fn display_paths(paths: &[PathBuf]) -> String {
