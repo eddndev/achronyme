@@ -12,6 +12,8 @@ const EXAMPLES: &[&str] = &[
     "timer_race.ach",
     "owned_file.ach",
     "tcp_echo.ach",
+    "task_outcome.ach",
+    "channel_pipeline.ach",
 ];
 
 fn example_path(name: &str) -> PathBuf {
@@ -81,6 +83,8 @@ fn safe_in_memory_examples_execute() {
         ("structured_tasks.ach", "structured-tasks-ok"),
         ("bounded_channel.ach", "bounded-channel-ok"),
         ("timer_race.ach", "timer-race-ok"),
+        ("task_outcome.ach", "task-outcome-ok"),
+        ("channel_pipeline.ach", "channel-pipeline-ok"),
     ] {
         assert_success(&run_example(name, "", &[]), marker);
     }

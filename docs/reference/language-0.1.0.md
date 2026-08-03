@@ -209,10 +209,12 @@ browser environment. `runtime_support()` exports this matrix as JSON.
 ## Tested examples
 
 - [Structured tasks](../../examples/concurrency/structured_tasks.ach)
+- [Recoverable task failure](../../examples/concurrency/task_outcome.ach)
 - [Bounded channel backpressure](../../examples/concurrency/bounded_channel.ach)
+- [Bounded producer/consumer pipeline](../../examples/concurrency/channel_pipeline.ach)
 - [Timer race](../../examples/concurrency/timer_race.ach)
 - [Owned file I/O](../../examples/concurrency/owned_file.ach)
 - [Owned TCP echo](../../examples/concurrency/tcp_echo.ach)
 
-All five examples compile and execute in the CLI integration suite. File and
+All seven examples compile and execute in the CLI integration suite. File and
 TCP examples run only inside temporary roots and exact loopback grants.
