@@ -224,6 +224,9 @@ pub enum Commands {
         /// Generate a cryptographic proof (requires --inputs)
         #[arg(long)]
         prove: bool,
+        /// Bound metadata retention for very large optimized R1CS exports
+        #[arg(long)]
+        low_memory: bool,
         /// Output .r1cs file path
         #[arg(long)]
         r1cs: Option<String>,
@@ -336,5 +339,24 @@ mod tests {
         ]);
 
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn circom_low_memory_export_is_explicit() {
+        let parsed = Cli::try_parse_from([
+            "ach",
+            "circom",
+            "circuit.circom",
+            "--low-memory",
+            "--r1cs",
+            "circuit.r1cs",
+            "--wtns",
+            "witness.wtns",
+        ])
+        .unwrap();
+        let Commands::Circom { low_memory, .. } = parsed.command else {
+            panic!("expected circom command");
+        };
+        assert!(low_memory);
     }
 }

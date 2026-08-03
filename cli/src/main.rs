@@ -264,6 +264,7 @@ fn main() -> Result<()> {
             inputs,
             input_file,
             prove,
+            low_memory,
             dump_ir,
             lib_dirs,
             ..
@@ -291,6 +292,7 @@ fn main() -> Result<()> {
                 &cfg.backend,
                 prime_id,
                 *prove,
+                *low_memory,
                 cfg.solidity_path.as_deref(),
                 cfg.plonkish_json_path.as_deref(),
                 *dump_ir,

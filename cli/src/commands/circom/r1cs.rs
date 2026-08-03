@@ -27,6 +27,7 @@ pub(super) fn run_r1cs_pipeline<F, H>(
     no_optimize: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
     want_reusable: bool,
+    release_optimized_program: bool,
     key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<Option<ReusableProver<F>>>
 where
@@ -98,7 +99,7 @@ where
     } else {
         None
     };
-    if prove && !no_optimize {
+    if release_optimized_program && !no_optimize {
         program = None;
     }
 

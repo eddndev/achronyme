@@ -46,6 +46,7 @@ pub fn circom_command(
     backend: &str,
     prime_id: PrimeId,
     prove: bool,
+    low_memory: bool,
     solidity_path: Option<&str>,
     plonkish_json_path: Option<&str>,
     dump_ir: bool,
@@ -63,6 +64,7 @@ pub fn circom_command(
         backend,
         prime_id,
         prove,
+        low_memory,
         solidity_path,
         plonkish_json_path,
         dump_ir,
@@ -84,6 +86,7 @@ pub fn circom_command_with_key_source(
     backend: &str,
     prime_id: PrimeId,
     prove: bool,
+    low_memory: bool,
     solidity_path: Option<&str>,
     plonkish_json_path: Option<&str>,
     dump_ir: bool,
@@ -117,6 +120,12 @@ pub fn circom_command_with_key_source(
         ));
     }
 
+    if low_memory && (backend != "r1cs" || no_optimize || dump_ir || circuit_stats) {
+        return Err(anyhow::anyhow!(
+            "--low-memory requires an optimized r1cs export without --dump-ir or --circuit-stats"
+        ));
+    }
+
     if inputs.is_some() && !input_files.is_empty() {
         return Err(anyhow::anyhow!(
             "--inputs and --input-file are mutually exclusive"
@@ -147,6 +156,7 @@ pub fn circom_command_with_key_source(
             backend,
             prime_id,
             prove,
+            low_memory,
             solidity_path,
             plonkish_json_path,
             dump_ir,
@@ -165,6 +175,7 @@ pub fn circom_command_with_key_source(
             backend,
             prime_id,
             prove,
+            low_memory,
             solidity_path,
             plonkish_json_path,
             dump_ir,
@@ -191,6 +202,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
     backend: &str,
     prime_id: PrimeId,
     prove: bool,
+    low_memory: bool,
     solidity_path: Option<&str>,
     plonkish_json_path: Option<&str>,
     dump_ir: bool,
@@ -283,18 +295,19 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
     };
 
     // Instantiate ProveIR → SSA IR with captures from main component args
-    // (Lysis path). Prove-bound runs drop the program right after
-    // constraint emission and read none of its metadata maps, so they
-    // take the lean instantiate — on large circuits the maps are the
-    // dominant share of the materialized program's heap. Flows that keep
-    // the program for diagnostics (dump, stats, verify-failure spans)
-    // stay on the full instantiate.
+    // (Lysis path). Prove-bound runs and explicit low-memory exports drop
+    // the program after optimized constraint emission and read none of its
+    // metadata maps, so they take the lean instantiate. On large circuits
+    // those maps are a dominant share of the materialized program's heap.
+    // Flows that keep the program for diagnostics (dump, stats, or
+    // verify-failure spans) stay on the full instantiate.
     let fe_captures: HashMap<String, FieldElement<F>> = capture_values
         .iter()
         .map(|(k, v)| (k.clone(), FieldElement::<F>::from_u64(*v)))
         .collect();
-    let lean_prove = backend == "r1cs" && prove && !no_optimize && !dump_ir && !circuit_stats;
-    let (mut program, fused_stats) = if lean_prove {
+    let lean_r1cs =
+        backend == "r1cs" && (prove || low_memory) && !no_optimize && !dump_ir && !circuit_stats;
+    let (mut program, fused_stats) = if lean_r1cs {
         // Fused pipeline: the pass pipeline runs against the
         // interner's emission events and the program materializes
         // once, already optimized — the unoptimized instruction Vec
@@ -461,6 +474,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
                 no_optimize,
                 &proven,
                 want_reusable,
+                lean_r1cs,
                 key_source,
             )?;
 
