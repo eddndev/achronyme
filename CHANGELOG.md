@@ -28,6 +28,13 @@ All notable changes to the Achronyme language and CLI are recorded here.
   owned file, and owned TCP behavior.
 - An explicit WASM support matrix: pure tasks, bounded channels, cooperative
   yield, and virtual output are supported without ambient host access.
+- A fail-closed proof setup policy with explicit development opt-in and an
+  inspectable effective key source.
+- Immutable, R1CS-digest-addressed BN254 Groth16 trusted-key stores packaged
+  from ceremony-derived snarkjs zkeys with canonical manifests and transcripts.
+- Detached Groth16 verification for BN254 and BLS12-381 proof artifacts.
+- Reproducible phase-1 verification, phase-2 contribution, bidirectional
+  snarkjs conformance, and bounded ECDSA release-gate harnesses.
 
 ### Changed
 
@@ -36,6 +43,9 @@ All notable changes to the Achronyme language and CLI are recorded here.
 - The append-only compiled runtime ABI is version 6 and includes structured
   task control entries.
 - File and network operations require explicit grants before execution.
+- Implicit local Groth16 and Plonkish parameter generation is denied. Local
+  setup now requires `--insecure-dev-setup`; production BN254 Groth16 proving
+  selects an exact ceremony-derived key with `--trusted-key-dir`.
 
 ### Compatibility
 
@@ -50,8 +60,11 @@ All notable changes to the Achronyme language and CLI are recorded here.
   embedders and WASM start untrusted.
 - Timers, files, network, console input, and randomness remain unsupported in
   WASM until an embedder supplies both an adapter and an explicit grant.
+- Production trusted-key import is supported for BN254 Groth16 only.
+  BLS12-381 Groth16 and Plonkish proof generation remain explicitly
+  development-only in 0.1.0.
 - See [the 0.1.0 migration guide](docs/migration/0.1.0.md) for source, grant,
-  artifact, AOT, and WASM changes.
+  artifact, proving-policy, AOT, and WASM changes.
 
 ## [0.0.1] - 2026-08-02
 
