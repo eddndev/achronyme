@@ -209,6 +209,33 @@ impl Parser {
         })
     }
 
+    pub(super) fn parse_concurrent(&mut self) -> Result<Expr, ParseError> {
+        let sp = self.span();
+        self.advance(); // eat `concurrent`
+        if !self.at(&TokenKind::LBrace) {
+            let found = self.peek();
+            return Err(ParseError::new(
+                format!(
+                    "expected `{{` after `concurrent`, found `{}`",
+                    tok_display(found)
+                ),
+                found.span.line_start,
+                found.span.col_start,
+            ));
+        }
+
+        self.concurrent_depth += 1;
+        let body_result = self.parse_block_inner();
+        self.concurrent_depth -= 1;
+        let body = body_result?;
+        let id = self.alloc_expr_id();
+        Ok(Expr::Concurrent {
+            id,
+            body,
+            span: self.span_to_prev(&sp),
+        })
+    }
+
     pub(super) fn parse_fn_expr(&mut self) -> Result<Expr, ParseError> {
         let sp = self.span();
         self.advance(); // eat `fn`

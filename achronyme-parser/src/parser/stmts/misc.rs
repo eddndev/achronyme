@@ -52,6 +52,9 @@ impl Parser {
                 | TokenKind::While
                 | TokenKind::For
                 | TokenKind::Forever
+                | TokenKind::Concurrent
+                | TokenKind::Spawn
+                | TokenKind::Await
                 | TokenKind::Fn
                 | TokenKind::Prove
         )
@@ -62,6 +65,18 @@ impl Parser {
         if tok.kind == TokenKind::Ident {
             self.advance();
             Ok(tok.lexeme)
+        } else if matches!(
+            tok.kind,
+            TokenKind::Concurrent | TokenKind::Spawn | TokenKind::Await
+        ) {
+            Err(ParseError::new(
+                format!(
+                    "reserved keyword `{}` cannot be used as an identifier; rename it for Achronyme 0.1.0",
+                    tok.lexeme
+                ),
+                tok.span.line_start,
+                tok.span.col_start,
+            ))
         } else {
             Err(ParseError::new(
                 format!("expected identifier, found `{}`", tok_display(&tok)),

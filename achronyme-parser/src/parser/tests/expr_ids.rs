@@ -94,6 +94,9 @@ fn walk_exprs(prog: &Program, mut visit: impl FnMut(&Expr)) {
                 walk_block(body, visit);
             }
             Expr::Forever { body, .. } => walk_block(body, visit),
+            Expr::Concurrent { body, .. } => walk_block(body, visit),
+            Expr::Spawn { call, .. } => walk_expr(call, visit),
+            Expr::Await { task, .. } => walk_expr(task, visit),
             Expr::Block { block, .. } => walk_block(block, visit),
             Expr::FnExpr { body, .. } | Expr::Prove { body, .. } => walk_block(body, visit),
             Expr::Array { elements, .. } => {

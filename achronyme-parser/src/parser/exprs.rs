@@ -7,6 +7,7 @@ use super::tables::{infix_bp, is_comparison, tok_display, token_to_binop};
 
 mod compound;
 mod postfix;
+mod prove;
 
 impl Parser {
     // ========================================================================
@@ -119,13 +120,70 @@ impl Parser {
                     span: self.span_to_prev(&sp),
                 })
             }
+            TokenKind::Await => {
+                let sp = self.span();
+                self.advance();
+                let task = self.parse_expr_bp(11)?;
+                let mode = if self.at(&TokenKind::As) {
+                    self.advance();
+                    let marker = self.advance().clone();
+                    if marker.kind != TokenKind::Ident
+                        || !matches!(marker.lexeme.as_str(), "outcome" | "race")
+                    {
+                        return Err(ParseError::new(
+                            "expected `outcome` or `race` after `as` in await expression",
+                            marker.span.line_start,
+                            marker.span.col_start,
+                        ));
+                    }
+                    if marker.lexeme == "race" {
+                        AwaitMode::Race
+                    } else {
+                        AwaitMode::Outcome
+                    }
+                } else {
+                    AwaitMode::Propagate
+                };
+                let id = self.alloc_expr_id();
+                Ok(Expr::Await {
+                    id,
+                    task: Box::new(task),
+                    mode,
+                    span: self.span_to_prev(&sp),
+                })
+            }
+            TokenKind::Spawn => {
+                let sp = self.span();
+                if self.concurrent_depth == 0 {
+                    return Err(ParseError::new(
+                        "`spawn` is only allowed inside a `concurrent` block",
+                        sp.line_start,
+                        sp.col_start,
+                    ));
+                }
+                self.advance();
+                let call = self.parse_expr_bp(11)?;
+                if !matches!(call, Expr::Call { .. }) {
+                    return Err(ParseError::new(
+                        "`spawn` operand must be a call expression",
+                        call.span().line_start,
+                        call.span().col_start,
+                    ));
+                }
+                let id = self.alloc_expr_id();
+                Ok(Expr::Spawn {
+                    id,
+                    call: Box::new(call),
+                    span: self.span_to_prev(&sp),
+                })
+            }
             _ => self.parse_atom(),
         }
     }
 
     fn parse_atom(&mut self) -> Result<Expr, ParseError> {
         let sp = self.span();
-        match self.peek_kind().clone() {
+        match *self.peek_kind() {
             TokenKind::Integer => {
                 let tok = self.advance().clone();
                 let id = self.alloc_expr_id();
@@ -254,6 +312,7 @@ impl Parser {
             TokenKind::While => self.parse_while(),
             TokenKind::For => self.parse_for(),
             TokenKind::Forever => self.parse_forever(),
+            TokenKind::Concurrent => self.parse_concurrent(),
             TokenKind::Fn => self.parse_fn_expr(),
             TokenKind::Prove => self.parse_prove(),
             _ => {
@@ -265,87 +324,5 @@ impl Parser {
                 ))
             }
         }
-    }
-
-    fn parse_prove(&mut self) -> Result<Expr, ParseError> {
-        let sp = self.span();
-        self.advance(); // eat `prove`
-
-        // Optional name: `prove eligibility(hash: Public) { ... }`
-        let name = if self.at(&TokenKind::Ident)
-            && (matches!(self.lookahead(1), TokenKind::LParen | TokenKind::LBrace))
-        {
-            Some(self.expect_ident()?)
-        } else {
-            None
-        };
-
-        let params = self.parse_prove_params()?;
-        let body = self.parse_block_inner()?;
-
-        let id = self.alloc_expr_id();
-        Ok(Expr::Prove {
-            id,
-            name,
-            body,
-            params,
-            span: self.span_to_prev(&sp),
-        })
-    }
-
-    /// Parse optional prove parameter list.
-    ///
-    /// New syntax: `(hash: Public, root: Public Field)` — typed params with visibility.
-    /// Old syntax: `(public: [x, y])` — deprecated, converted to typed params.
-    /// No parens: empty params (all old-style declarations or all-witness).
-    pub(super) fn parse_prove_params(&mut self) -> Result<Vec<TypedParam>, ParseError> {
-        use crate::ast::{TypedParam, Visibility};
-
-        if !self.at(&TokenKind::LParen) {
-            return Ok(Vec::new());
-        }
-        self.advance(); // eat `(`
-
-        // Syntax: `(hash: Public, root: Public Field)`
-        let mut params = Vec::new();
-        while !self.at(&TokenKind::RParen) {
-            let param_name = self.expect_ident()?;
-            self.expect(&TokenKind::Colon)?;
-            let type_ann = self.parse_type()?;
-
-            // Only Public visibility is allowed in prove params
-            // (witnesses are auto-captured from scope)
-            match type_ann.visibility {
-                Some(Visibility::Public) => {}
-                Some(Visibility::Witness) => {
-                    return Err(ParseError::new(
-                        format!(
-                            "prove parameter `{param_name}` cannot be `Witness` — \
-                             witnesses are auto-captured from outer scope"
-                        ),
-                        0,
-                        0,
-                    ));
-                }
-                None => {
-                    return Err(ParseError::new(
-                        format!("prove parameter `{param_name}` requires `Public` annotation"),
-                        0,
-                        0,
-                    ));
-                }
-            }
-
-            params.push(TypedParam {
-                name: param_name,
-                type_ann: Some(type_ann),
-            });
-
-            if self.at(&TokenKind::Comma) {
-                self.advance();
-            }
-        }
-        self.expect(&TokenKind::RParen)?;
-        Ok(params)
     }
 }
