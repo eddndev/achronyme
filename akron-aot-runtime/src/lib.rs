@@ -4,8 +4,10 @@ use std::time::Instant;
 use akron::compiled::{
     runtime_api, CompiledEntry, ExecutionStats, RuntimeCapabilities, RuntimeContext,
 };
-use akron::{CompiledProgram, ValueOps, VM};
+use akron::{CompiledProgram, HostPolicy, ValueOps, VM};
 use memory::Value;
+
+mod config;
 
 const MAX_PROGRAM_IMAGE: usize = 512 * 1024 * 1024;
 
@@ -98,11 +100,15 @@ fn run(
 
 fn configured_vm(program: CompiledProgram) -> Result<VM, String> {
     let mut vm = VM::new();
+    vm.host_policy = HostPolicy::standard_cli();
     for module in achronyme_std::std_modules() {
         vm.register_module(&*module)
             .map_err(|error| error.to_string())?;
     }
-    apply_environment(&mut vm)?;
+    config::apply_environment(&mut vm)?;
+    vm.host_policy
+        .require_program(program.requested_host_capabilities())
+        .map_err(|error| format!("Host capability preflight failed: {error}"))?;
     vm.load_program(program)
         .map_err(|error| format!("program loader error: {error}"))?;
     Ok(vm)
@@ -200,39 +206,16 @@ fn format_stats(stats: ExecutionStats) -> String {
     )
 }
 
-fn apply_environment(vm: &mut VM) -> Result<(), String> {
-    if let Ok(value) = std::env::var("AKRON_INSTRUCTION_BUDGET") {
-        vm.instruction_budget = value
-            .parse()
-            .map_err(|_| "AKRON_INSTRUCTION_BUDGET must be an unsigned integer".to_string())?;
-    }
-    if let Ok(value) = std::env::var("AKRON_MAX_HEAP") {
-        let limit = parse_size(&value)
-            .ok_or_else(|| "AKRON_MAX_HEAP must be bytes or use K, M, or G".to_string())?;
-        vm.heap.set_max_heap_bytes(limit);
-    }
-    if let Ok(value) = std::env::var("AKRON_STRESS_GC") {
-        vm.stress_mode = matches!(value.as_str(), "1" | "true" | "yes");
-    }
-    Ok(())
-}
-
-fn parse_size(value: &str) -> Option<usize> {
-    let value = value.trim();
-    let (number, multiplier) = match value.as_bytes().last()? {
-        b'K' | b'k' => (&value[..value.len() - 1], 1024usize),
-        b'M' | b'm' => (&value[..value.len() - 1], 1024 * 1024),
-        b'G' | b'g' => (&value[..value.len() - 1], 1024 * 1024 * 1024),
-        _ => (value, 1),
-    };
-    number.parse::<usize>().ok()?.checked_mul(multiplier)
-}
-
 fn format_runtime_error(vm: &VM, error: &akron::RuntimeError) -> String {
-    match &vm.last_error_location {
+    let mut message = match &vm.last_error_location {
         Some((function, line)) => format!("[line {line}] in {function}: {error}"),
         None => format!("Runtime error: {error}"),
+    };
+    if let Some(task) = vm.last_task_failure() {
+        message.push_str("\nTask failure: ");
+        message.push_str(&task.to_string());
     }
+    message
 }
 
 #[cfg(test)]
@@ -242,11 +225,12 @@ mod tests {
 
     use akron::compiled::{ExecutionStats, RuntimeApi, RuntimeStatus, STATUS_OK};
     use akron::opcode::instruction::{encode_abc, encode_abx};
+    use akron::specs::CapabilitySet;
     use akron::{CompiledProgram, OpCode, VM};
     use memory::field::PrimeId;
     use memory::{Function, UpvalueLocation, Value};
 
-    use super::{execute_loaded, format_stats};
+    use super::{configured_vm, execute_loaded, format_stats};
 
     fn captured_main_local_program() -> CompiledProgram {
         let add_offset = Function {
@@ -326,6 +310,16 @@ mod tests {
         assert!(trace.contains("known_call_fast_misses=5"));
         assert!(trace.contains("specialization_hits=6"));
         assert!(trace.contains("specialization_misses=7"));
+    }
+
+    #[test]
+    fn standalone_aot_host_selects_explicit_cli_compatibility_authority() {
+        let vm = configured_vm(captured_main_local_program()).unwrap();
+        let granted = vm.host_policy.granted();
+        assert!(granted.contains(CapabilitySet::CONSOLE_READ));
+        assert!(granted.contains(CapabilitySet::CONSOLE_WRITE));
+        assert!(granted.contains(CapabilitySet::CLOCK));
+        assert!(granted.contains(CapabilitySet::RANDOM));
     }
 
     #[test]
