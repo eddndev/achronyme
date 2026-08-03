@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use memory::{Bn254Fr, FieldElement};
 
 use super::artifact::{
-    open_regular_file, sha256_bytes, sha256_reader, validate_hex, CeremonyContributor,
-    CeremonyProvenance, CeremonyTranscript, TranscriptCircuit, TranscriptFinalKey,
-    TranscriptPhase1, TranscriptVerification, TrustedKeyManifest, MANIFEST_FILE, TRANSCRIPT_FILE,
-    TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION, ZKEY_FILE,
+    open_regular_file, sha256_bytes, sha256_reader, validate_contributor, validate_hex,
+    CeremonyContributor, CeremonyProvenance, CeremonyTranscript, TranscriptCircuit,
+    TranscriptFinalKey, TranscriptPhase1, TranscriptVerification, TrustedKeyManifest,
+    MANIFEST_FILE, TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION, ZKEY_FILE,
 };
 
 pub struct PackageTrustedKey<'a> {
@@ -134,14 +134,7 @@ fn validate_request(request: &PackageTrustedKey<'_>) -> Result<(), String> {
         return Err("at least one phase-2 contributor is required".to_string());
     }
     for contributor in request.contributors {
-        if contributor.id.trim().is_empty() {
-            return Err("ceremony contributor id cannot be empty".to_string());
-        }
-        validate_hex(
-            &contributor.contribution_hash,
-            128,
-            "phase-2 contribution hash",
-        )?;
+        validate_contributor(contributor)?;
     }
     Ok(())
 }

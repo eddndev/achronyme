@@ -61,9 +61,6 @@ fn parse_contributors(values: &[String]) -> Result<Vec<CeremonyContributor>> {
             let (id, contribution_hash) = value
                 .split_once('=')
                 .context("invalid --contributor value (expected ID=HASH)")?;
-            if id.trim().is_empty() {
-                anyhow::bail!("ceremony contributor id cannot be empty");
-            }
             Ok(CeremonyContributor {
                 id: id.to_string(),
                 contribution_hash: contribution_hash.to_string(),

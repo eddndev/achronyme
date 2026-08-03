@@ -260,16 +260,25 @@ fn validate_manifest(
         return Err("trusted-key manifest must record a phase-2 contributor".to_string());
     }
     for contributor in &manifest.ceremony.contributors {
-        if contributor.id.trim().is_empty() {
-            return Err("ceremony contributor id cannot be empty".to_string());
-        }
-        validate_hex(
-            &contributor.contribution_hash,
-            128,
-            "phase-2 contribution hash",
-        )?;
+        validate_contributor(contributor)?;
     }
     Ok(())
+}
+
+pub(super) fn validate_contributor(contributor: &CeremonyContributor) -> Result<(), String> {
+    if contributor.id.is_empty()
+        || contributor.id.len() > 128
+        || !contributor.id.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'-' | b'_' | b'.' | b'@')
+        })
+    {
+        return Err("ceremony contributor id must use 1-128 safe ASCII characters".to_string());
+    }
+    validate_hex(
+        &contributor.contribution_hash,
+        128,
+        "phase-2 contribution hash",
+    )
 }
 
 pub(super) fn open_regular_file(path: &Path, label: &str) -> Result<File, String> {
