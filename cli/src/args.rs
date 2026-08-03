@@ -114,6 +114,11 @@ pub enum Commands {
         #[arg(long, default_value = "text", value_parser = ["text", "json"])]
         format: String,
     },
+    /// Package a ceremony-derived trusted proving key
+    TrustedSetup {
+        #[command(subcommand)]
+        command: TrustedSetupCommand,
+    },
     /// Run a source file or binary
     Run {
         /// Path to the file (.ach or .achb). If omitted, uses [project].entry from achronyme.toml
@@ -278,6 +283,40 @@ pub enum Commands {
         /// Print circuit constraint stats breakdown
         #[arg(long)]
         circuit_stats: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TrustedSetupCommand {
+    /// Bind an externally verified Groth16 key to its exact R1CS and ceremony
+    Package {
+        /// Exact Achronyme-exported BN254 R1CS artifact
+        #[arg(long, value_name = "FILE")]
+        r1cs: String,
+        /// Final ceremony-derived snarkjs Groth16 zkey
+        #[arg(long, value_name = "FILE")]
+        zkey: String,
+        /// Verified phase-1 powers-of-tau artifact
+        #[arg(long, value_name = "FILE")]
+        phase1: String,
+        /// Trusted-key store root
+        #[arg(long, value_name = "DIR")]
+        store: String,
+        /// Ceremony tool and exact version, for example snarkjs@0.7.6
+        #[arg(long)]
+        tool: String,
+        /// Stable source URL for the phase-1 artifact
+        #[arg(long)]
+        phase1_source: String,
+        /// Published lowercase BLAKE2b-512 digest for phase 1
+        #[arg(long)]
+        phase1_blake2b512: String,
+        /// Phase-2 contributor as ID=128_HEX_HASH; repeat for every contribution
+        #[arg(long, value_name = "ID=HASH", required = true)]
+        contributor: Vec<String>,
+        /// Result format
+        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+        format: String,
     },
 }
 

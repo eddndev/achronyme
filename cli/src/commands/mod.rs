@@ -8,6 +8,7 @@ pub mod inspect;
 pub(crate) mod r1cs_proof;
 pub mod run;
 pub mod runtime;
+pub mod trusted_setup;
 pub mod verify;
 
 use akronc::{Compiler, CompilerError};

@@ -80,6 +80,7 @@ rand = { version = "0.8", optional = true }
 
 [dev-dependencies]
 base64 = "0.22"
+tempfile = "3"
 
 [[example]]
 name = "groth16_synthetic_timing"

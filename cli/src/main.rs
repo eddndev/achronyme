@@ -18,7 +18,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod args;
 mod bootstrap;
 
-use args::{Cli, Commands};
+use args::{Cli, Commands, TrustedSetupCommand};
 use bootstrap::{build_overrides, command_start_dir, validate_prime_backend};
 
 fn main() -> Result<()> {
@@ -44,6 +44,35 @@ fn main() -> Result<()> {
     } = &cli.command
     {
         return cli::commands::verify::verify_files(proof, public, vkey, curve, format);
+    }
+
+    // Trusted-key packaging is self-contained and never reads project config.
+    if let Commands::TrustedSetup {
+        command:
+            TrustedSetupCommand::Package {
+                r1cs,
+                zkey,
+                phase1,
+                store,
+                tool,
+                phase1_source,
+                phase1_blake2b512,
+                contributor,
+                format,
+            },
+    } = &cli.command
+    {
+        return cli::commands::trusted_setup::package(
+            r1cs,
+            zkey,
+            phase1,
+            store,
+            tool,
+            phase1_source,
+            phase1_blake2b512,
+            contributor,
+            format,
+        );
     }
 
     // ── Find and load achronyme.toml (unless --no-config) ──
@@ -89,7 +118,9 @@ fn main() -> Result<()> {
 
     // ── Dispatch ──
     match &cli.command {
-        Commands::Init { .. } | Commands::Verify { .. } => unreachable!(),
+        Commands::Init { .. } | Commands::Verify { .. } | Commands::TrustedSetup { .. } => {
+            unreachable!()
+        }
 
         Commands::Run {
             ptau,

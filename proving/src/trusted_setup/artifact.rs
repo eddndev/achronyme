@@ -12,6 +12,7 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 pub const ZKEY_FILE: &str = "proving_key.zkey";
 pub const TRANSCRIPT_FILE: &str = "transcript.json";
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_TRANSCRIPT_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -42,6 +43,55 @@ pub struct CeremonyProvenance {
 pub struct CeremonyContributor {
     pub id: String,
     pub contribution_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CeremonyTranscript {
+    pub format: String,
+    pub version: u32,
+    pub protocol: String,
+    pub curve: String,
+    pub circuit: TranscriptCircuit,
+    pub phase1: TranscriptPhase1,
+    pub final_key: TranscriptFinalKey,
+    pub tool: String,
+    pub contributors: Vec<CeremonyContributor>,
+    pub verification: TranscriptVerification,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranscriptCircuit {
+    pub file: String,
+    pub r1cs_sha256: String,
+    pub constraints: u64,
+    pub public_inputs: u64,
+    pub variables: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranscriptPhase1 {
+    pub file: String,
+    pub source: String,
+    pub sha256: String,
+    pub blake2b512: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranscriptFinalKey {
+    pub file: String,
+    pub zkey_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranscriptVerification {
+    pub phase1_hash: String,
+    pub phase1_transcript: String,
+    pub circuit_key_binding: String,
 }
 
 pub(super) struct TrustedArtifact {
@@ -84,10 +134,26 @@ pub(super) fn load(
 
     let transcript_path = artifact_dir.join(TRANSCRIPT_FILE);
     let mut transcript_file = open_regular_file(&transcript_path, "ceremony transcript")?;
-    let transcript_digest = sha256_reader(&mut transcript_file)?;
+    let transcript_len = transcript_file
+        .metadata()
+        .map_err(|error| format!("cannot inspect ceremony transcript: {error}"))?
+        .len();
+    if transcript_len > MAX_TRANSCRIPT_BYTES {
+        return Err(format!(
+            "ceremony transcript exceeds {MAX_TRANSCRIPT_BYTES} bytes"
+        ));
+    }
+    let mut transcript_bytes = Vec::with_capacity(transcript_len as usize);
+    transcript_file
+        .read_to_end(&mut transcript_bytes)
+        .map_err(|error| format!("cannot read ceremony transcript: {error}"))?;
+    let transcript_digest = sha256_bytes(&transcript_bytes);
     if transcript_digest != manifest.ceremony.transcript_sha256 {
         return Err("ceremony transcript SHA-256 does not match manifest".to_string());
     }
+    let transcript: CeremonyTranscript = serde_json::from_slice(&transcript_bytes)
+        .map_err(|error| format!("invalid ceremony transcript: {error}"))?;
+    validate_transcript(&transcript, &manifest)?;
 
     let zkey_path = artifact_dir.join(ZKEY_FILE);
     let mut zkey_file = open_regular_file(&zkey_path, "trusted proving key")?;
@@ -100,6 +166,63 @@ pub(super) fn load(
         manifest,
         zkey_file,
     })
+}
+
+fn validate_transcript(
+    transcript: &CeremonyTranscript,
+    manifest: &TrustedKeyManifest,
+) -> Result<(), String> {
+    if transcript.format != "achronyme-ceremony-transcript" || transcript.version != 1 {
+        return Err("unsupported ceremony transcript format or version".to_string());
+    }
+    if transcript.protocol != manifest.protocol || transcript.curve != manifest.curve {
+        return Err("ceremony transcript protocol or curve does not match manifest".to_string());
+    }
+    if transcript.circuit.file != "circuit.r1cs"
+        || transcript.circuit.r1cs_sha256 != manifest.r1cs_sha256
+        || transcript.circuit.constraints != manifest.constraints
+        || transcript.circuit.public_inputs != manifest.public_inputs
+        || transcript.circuit.variables != manifest.variables
+    {
+        return Err("ceremony transcript circuit does not match manifest".to_string());
+    }
+    if transcript.phase1.file != "phase1.ptau"
+        || transcript.phase1.sha256 != manifest.ceremony.phase1_sha256
+        || transcript.phase1.source.trim().is_empty()
+    {
+        return Err("ceremony transcript phase 1 does not match manifest".to_string());
+    }
+    validate_hex(
+        &transcript.phase1.blake2b512,
+        128,
+        "phase-1 published BLAKE2b-512",
+    )?;
+    if transcript.final_key.file != ZKEY_FILE
+        || transcript.final_key.zkey_sha256 != manifest.zkey_sha256
+    {
+        return Err("ceremony transcript final key does not match manifest".to_string());
+    }
+    if transcript.tool != manifest.ceremony.tool
+        || transcript.contributors.len() != manifest.ceremony.contributors.len()
+        || transcript
+            .contributors
+            .iter()
+            .zip(&manifest.ceremony.contributors)
+            .any(|(left, right)| {
+                left.id != right.id || left.contribution_hash != right.contribution_hash
+            })
+    {
+        return Err("ceremony transcript provenance does not match manifest".to_string());
+    }
+    let verification = &transcript.verification;
+    if verification.phase1_hash != "b2sum phase1.ptau"
+        || verification.phase1_transcript != "snarkjs powersoftau verify phase1.ptau"
+        || verification.circuit_key_binding
+            != "snarkjs zkey verify circuit.r1cs phase1.ptau proving_key.zkey"
+    {
+        return Err("ceremony transcript verification commands are not canonical".to_string());
+    }
+    Ok(())
 }
 
 fn validate_manifest(
@@ -149,7 +272,7 @@ fn validate_manifest(
     Ok(())
 }
 
-fn open_regular_file(path: &Path, label: &str) -> Result<File, String> {
+pub(super) fn open_regular_file(path: &Path, label: &str) -> Result<File, String> {
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|error| format!("cannot inspect {label} `{}`: {error}", path.display()))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -161,7 +284,7 @@ fn open_regular_file(path: &Path, label: &str) -> Result<File, String> {
     File::open(path).map_err(|error| format!("cannot open {label} `{}`: {error}", path.display()))
 }
 
-fn sha256_reader(reader: &mut File) -> Result<String, String> {
+pub(super) fn sha256_reader(reader: &mut File) -> Result<String, String> {
     reader
         .seek(SeekFrom::Start(0))
         .map_err(|error| format!("cannot seek artifact for hashing: {error}"))?;
@@ -191,7 +314,7 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
         .collect()
 }
 
-fn validate_hex(value: &str, length: usize, label: &str) -> Result<(), String> {
+pub(super) fn validate_hex(value: &str, length: usize, label: &str) -> Result<(), String> {
     if value.len() != length
         || !value
             .bytes()
