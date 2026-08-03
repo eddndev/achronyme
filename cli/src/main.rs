@@ -104,7 +104,7 @@ fn main() -> Result<()> {
                 blocking_workers: cfg.blocking_workers,
                 blocking_queue_capacity: cfg.blocking_queue_capacity,
             };
-            cli::commands::run::run_file_with_engine(
+            cli::commands::run::run_file_with_engine_and_key_source(
                 path,
                 cfg.stress_gc,
                 ptau.as_deref(),
@@ -118,6 +118,7 @@ fn main() -> Result<()> {
                 &cfg.circom_lib_dirs,
                 *engine,
                 &runtime_security,
+                &cfg.proving_key_source,
             )
         }
 
@@ -237,7 +238,7 @@ fn main() -> Result<()> {
                     merged_lib_dirs.push(s);
                 }
             }
-            cli::commands::circom::circom_command(
+            cli::commands::circom::circom_command_with_key_source(
                 path,
                 &cfg.r1cs_path,
                 &cfg.wtns_path,
@@ -253,6 +254,7 @@ fn main() -> Result<()> {
                 cfg.circuit_stats,
                 &merged_lib_dirs,
                 ef,
+                &cfg.proving_key_source,
             )
         }
 
@@ -267,7 +269,7 @@ fn main() -> Result<()> {
                 anyhow::anyhow!("no input file specified and no `entry` in achronyme.toml")
             })?;
             validate_prime_backend(prime_id, &cfg.backend)?;
-            cli::commands::circuit::circuit_command(
+            cli::commands::circuit::circuit_command_with_key_source(
                 path,
                 &cfg.r1cs_path,
                 &cfg.wtns_path,
@@ -282,6 +284,7 @@ fn main() -> Result<()> {
                 *dump_ir,
                 cfg.circuit_stats,
                 ef,
+                &cfg.proving_key_source,
             )
         }
     }

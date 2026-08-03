@@ -64,6 +64,47 @@ mod tests {
         assert_eq!(config.error_format, "human");
         assert_eq!(config.r1cs_path, "circuit.r1cs");
         assert_eq!(config.wtns_path, "witness.wtns");
+        assert_eq!(
+            config.proving_key_source,
+            proving::groth16::ProvingKeySource::DenyInsecureSetup
+        );
+    }
+
+    #[test]
+    fn resolve_insecure_development_setup_requires_cli_opt_in() {
+        let cli = CliOverrides {
+            insecure_dev_setup: true,
+            ..CliOverrides::default()
+        };
+
+        let config = resolve_config(&cli, None, None);
+        assert_eq!(
+            config.proving_key_source,
+            proving::groth16::ProvingKeySource::InsecureLocal
+        );
+    }
+
+    #[test]
+    fn resolve_trusted_key_store_relative_to_project_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(TOML_FILENAME);
+        fs::write(
+            &path,
+            concat!(
+                "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n",
+                "[proving]\ntrusted_key_dir = \"ceremony/keys\"\n"
+            ),
+        )
+        .unwrap();
+        let toml = load_toml(&path).unwrap();
+
+        let config = resolve_config(&CliOverrides::default(), Some(&toml), Some(tmp.path()));
+        assert_eq!(
+            config.proving_key_source,
+            proving::groth16::ProvingKeySource::TrustedStore(
+                tmp.path().join("ceremony/keys")
+            )
+        );
     }
 
     #[test]

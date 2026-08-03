@@ -55,6 +55,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: *stress_gc,
             gc_stats: *gc_stats,
             circuit_stats: *circuit_stats,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             allow_read: cli.allow_read.clone(),
             allow_write: cli.allow_write.clone(),
             allow_connect: cli.allow_connect.clone(),
@@ -85,6 +87,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: false,
             gc_stats: false,
             circuit_stats: false,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             ..CliOverrides::default()
         },
 
@@ -103,6 +107,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: false,
             gc_stats: false,
             circuit_stats: false,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             ..CliOverrides::default()
         },
 
@@ -131,6 +137,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: false,
             gc_stats: false,
             circuit_stats: *circuit_stats,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             ..CliOverrides::default()
         },
 
@@ -149,6 +157,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: false,
             gc_stats: false,
             circuit_stats: false,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             allow_read: cli.allow_read.clone(),
             allow_write: cli.allow_write.clone(),
             allow_connect: cli.allow_connect.clone(),
@@ -189,6 +199,8 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             stress_gc: false,
             gc_stats: false,
             circuit_stats: *circuit_stats,
+            insecure_dev_setup: cli.insecure_dev_setup,
+            trusted_key_dir: cli.trusted_key_dir.clone(),
             ..CliOverrides::default()
         },
 

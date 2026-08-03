@@ -186,9 +186,13 @@ fn circom_prove_e2e(
         .expect("R1CS verification failed");
 
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
-    let proof_result =
-        proving::groth16_bn254::generate_proof(&r1cs_compiler.cs, &witness, cache_dir.path())
-            .expect("Groth16 proof generation failed");
+    let proof_result = proving::groth16_bn254::generate_proof(
+        &r1cs_compiler.cs,
+        &witness,
+        cache_dir.path(),
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .expect("Groth16 proof generation failed");
 
     (
         r1cs_compiler.cs.num_constraints(),

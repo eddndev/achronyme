@@ -178,6 +178,31 @@ fn run_compiled_binary() {
 }
 
 #[test]
+fn cli_denies_implicit_local_proving_setup() {
+    let src = write_temp_source(include_str!("../../test/prove/basic_prove.ach"));
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ach"))
+        .args([
+            "--no-config",
+            "run",
+            src.path().to_str().unwrap(),
+            "--engine",
+            "interpreter",
+        ])
+        .output()
+        .expect("run ach");
+
+    assert!(
+        !output.status.success(),
+        "implicit setup unexpectedly succeeded"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("insecure local trusted setup is disabled"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
 fn run_preflights_file_authority_and_accepts_an_explicit_root_grant() {
     use cli::commands::engine::ExecutionEngine;
     use cli::commands::runtime::RuntimeSecurity;

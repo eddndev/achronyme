@@ -20,6 +20,7 @@ pub struct AchronymeToml {
     pub project: ProjectSection,
     pub build: Option<BuildSection>,
     pub vm: Option<VmSection>,
+    pub proving: Option<ProvingSection>,
     pub circuit: Option<CircuitSection>,
     pub circom: Option<CircomSection>,
 }
@@ -78,6 +79,13 @@ pub struct VmSection {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ProvingSection {
+    pub insecure_dev_setup: Option<bool>,
+    pub trusted_key_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CircuitSection {
     pub prime: Option<String>,
 }
@@ -112,6 +120,7 @@ pub struct ProjectConfig {
     pub stress_gc: bool,
     pub gc_stats: bool,
     pub circuit_stats: bool,
+    pub proving_key_source: proving::groth16::ProvingKeySource,
     pub allow_read: Vec<PathBuf>,
     pub allow_write: Vec<PathBuf>,
     pub allow_connect: Vec<String>,

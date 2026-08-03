@@ -134,8 +134,13 @@ fn main() {
         compiler.substitution_map = None;
         let cs = compiler.into_constraint_system();
         let start = Instant::now();
-        let result = proving::groth16_bn254::generate_proof(&cs, &witness, &cache_dir)
-            .unwrap_or_else(|e| panic!("groth16 proof: {e}"));
+        let result = proving::groth16_bn254::generate_proof(
+            &cs,
+            &witness,
+            &cache_dir,
+            &proving::groth16::ProvingKeySource::InsecureLocal,
+        )
+        .unwrap_or_else(|e| panic!("groth16 proof: {e}"));
         eprintln!("groth16_generate_proof_ms={:.3}", elapsed_ms(start));
         if let akron::machine::prove::ProveResult::Proof {
             proof_json,

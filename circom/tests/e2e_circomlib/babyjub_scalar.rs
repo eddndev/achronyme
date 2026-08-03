@@ -141,8 +141,13 @@ fn escalarmulany_groth16() {
 
     // Groth16 proof
     let cache_dir = std::env::temp_dir().join("achronyme_test_keys");
-    let result = proving::groth16_bn254::generate_proof(&r1cs.cs, &witness, &cache_dir)
-        .unwrap_or_else(|e| panic!("Groth16 proof generation failed: {e}"));
+    let result = proving::groth16_bn254::generate_proof(
+        &r1cs.cs,
+        &witness,
+        &cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .unwrap_or_else(|e| panic!("Groth16 proof generation failed: {e}"));
 
     match &result {
         akron::ProveResult::Proof {

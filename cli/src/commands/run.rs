@@ -23,7 +23,36 @@ pub fn run_file(
     error_format: ErrorFormat,
     circom_lib_dirs: &[std::path::PathBuf],
 ) -> Result<()> {
-    run_file_with_engine(
+    run_file_with_key_source(
+        path,
+        stress_gc,
+        ptau,
+        prove_backend,
+        prime_id,
+        max_heap,
+        gc_stats,
+        circuit_stats,
+        error_format,
+        circom_lib_dirs,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_file_with_key_source(
+    path: &str,
+    stress_gc: bool,
+    ptau: Option<&str>,
+    prove_backend: &str,
+    prime_id: memory::field::PrimeId,
+    max_heap: Option<&str>,
+    gc_stats: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[std::path::PathBuf],
+    key_source: &proving::groth16::ProvingKeySource,
+) -> Result<()> {
+    run_file_with_engine_and_key_source(
         path,
         stress_gc,
         ptau,
@@ -37,6 +66,7 @@ pub fn run_file(
         circom_lib_dirs,
         ExecutionEngine::default(),
         &RuntimeSecurity::default(),
+        key_source,
     )
 }
 
@@ -55,6 +85,41 @@ pub fn run_file_with_engine(
     circom_lib_dirs: &[std::path::PathBuf],
     engine: ExecutionEngine,
     runtime_security: &RuntimeSecurity,
+) -> Result<()> {
+    run_file_with_engine_and_key_source(
+        path,
+        stress_gc,
+        ptau,
+        prove_backend,
+        prime_id,
+        max_heap,
+        max_instructions,
+        gc_stats,
+        circuit_stats,
+        error_format,
+        circom_lib_dirs,
+        engine,
+        runtime_security,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_file_with_engine_and_key_source(
+    path: &str,
+    stress_gc: bool,
+    ptau: Option<&str>,
+    prove_backend: &str,
+    prime_id: memory::field::PrimeId,
+    max_heap: Option<&str>,
+    max_instructions: Option<u64>,
+    gc_stats: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[std::path::PathBuf],
+    engine: ExecutionEngine,
+    runtime_security: &RuntimeSecurity,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     if ptau.is_some() {
         eprintln!(
@@ -76,6 +141,7 @@ pub fn run_file_with_engine(
         max_heap,
         max_instructions,
         runtime_security,
+        key_source,
     })?;
 
     let result = if path.ends_with(".achb") {
@@ -118,6 +184,7 @@ struct VmConfiguration<'a> {
     max_heap: Option<&'a str>,
     max_instructions: Option<u64>,
     runtime_security: &'a RuntimeSecurity,
+    key_source: &'a proving::groth16::ProvingKeySource,
 }
 
 fn configured_vm(config: VmConfiguration<'_>) -> Result<(VM, Rc<DefaultProveHandler>)> {
@@ -141,6 +208,7 @@ fn configured_vm(config: VmConfiguration<'_>) -> Result<(VM, Rc<DefaultProveHand
         config.prime_id,
         config.error_format,
         config.circuit_stats,
+        config.key_source.clone(),
     ));
     vm.verify_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
     vm.prove_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));

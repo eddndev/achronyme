@@ -23,6 +23,7 @@ use crate::groth16;
 pub fn setup_keys(
     cs: &ConstraintSystem,
     cache_dir: &Path,
+    key_source: &groth16::ProvingKeySource,
 ) -> Result<
     (
         ark_groth16::ProvingKey<Bls12_381>,
@@ -30,15 +31,16 @@ pub fn setup_keys(
     ),
     String,
 > {
-    groth16::setup_keys::<_, Bls12_381>(cs, cache_dir, "bls12-381")
+    groth16::setup_keys::<_, Bls12_381>(cs, cache_dir, "bls12-381", key_source)
 }
 
 /// Run trusted setup and return only the verifying key (BLS12-381).
 pub fn setup_vk_only(
     cs: &ConstraintSystem,
     cache_dir: &Path,
+    key_source: &groth16::ProvingKeySource,
 ) -> Result<ark_groth16::VerifyingKey<Bls12_381>, String> {
-    groth16::setup_vk_only::<_, Bls12_381>(cs, cache_dir, "bls12-381")
+    groth16::setup_vk_only::<_, Bls12_381>(cs, cache_dir, "bls12-381", key_source)
 }
 
 /// Generate a BLS12-381 Groth16 proof with JSON output.
@@ -46,9 +48,15 @@ pub fn generate_proof(
     cs: &ConstraintSystem,
     witness: &[FieldElement],
     cache_dir: &Path,
+    key_source: &groth16::ProvingKeySource,
 ) -> Result<ProveResult, String> {
-    let (proof, vk, public_inputs) =
-        groth16::generate_proof_raw::<_, Bls12_381>(cs, witness, cache_dir, "bls12-381")?;
+    let (proof, vk, public_inputs) = groth16::generate_proof_raw::<_, Bls12_381>(
+        cs,
+        witness,
+        cache_dir,
+        "bls12-381",
+        key_source,
+    )?;
 
     let proof_json = serialize_proof_json(&proof);
     let public_json = serialize_public_json(&public_inputs);

@@ -34,6 +34,7 @@ pub(super) fn run_r1cs_repeat<F: FieldBackend + PoseidonParamsProvider>(
     r1cs_path: &str,
     wtns_path: &str,
     prove: bool,
+    key_source: &proving::groth16::ProvingKeySource,
     style: &Styler,
     verbose: bool,
 ) -> Result<()> {
@@ -74,7 +75,7 @@ pub(super) fn run_r1cs_repeat<F: FieldBackend + PoseidonParamsProvider>(
             ));
         }
         let cache_dir = crate::cache_dir();
-        let result = generate_bn254_proof(&prover.cs, &witness_vec, &cache_dir)
+        let result = generate_bn254_proof(&prover.cs, &witness_vec, &cache_dir, key_source)
             .map_err(|e| anyhow::anyhow!("proof generation failed for `{label}`: {e}"))?;
 
         if let akron::ProveResult::Proof {
@@ -123,6 +124,7 @@ fn generate_bn254_proof<F: FieldBackend>(
     cs: &constraints::r1cs::ConstraintSystem<F>,
     witness_vec: &[FieldElement<F>],
     cache_dir: &std::path::Path,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> std::result::Result<akron::ProveResult, String> {
     let cs_bn254 = unsafe {
         &*(cs as *const constraints::r1cs::ConstraintSystem<F>
@@ -134,7 +136,7 @@ fn generate_bn254_proof<F: FieldBackend>(
             witness_vec.len(),
         )
     };
-    proving::groth16_bn254::generate_proof(cs_bn254, wit_bn254, cache_dir)
+    proving::groth16_bn254::generate_proof(cs_bn254, wit_bn254, cache_dir, key_source)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -151,6 +153,7 @@ pub(super) fn run_r1cs_pipeline<F, H>(
     no_optimize: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
     want_reusable: bool,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<Option<ReusableProver<F>>>
 where
     F: FieldBackend + PoseidonParamsProvider,
@@ -359,7 +362,7 @@ where
                 ));
             }
             let cache_dir = crate::cache_dir();
-            let result = generate_bn254_proof(&cs, witness_vec, &cache_dir)
+            let result = generate_bn254_proof(&cs, witness_vec, &cache_dir, key_source)
                 .map_err(|e| anyhow::anyhow!("proof generation failed: {e}"))?;
 
             if let akron::ProveResult::Proof {
@@ -413,7 +416,7 @@ where
             &*(&cs as *const constraints::r1cs::ConstraintSystem<F>
                 as *const constraints::r1cs::ConstraintSystem<memory::Bn254Fr>)
         };
-        let vk = proving::groth16_bn254::setup_vk_only(cs_bn254, &cache_dir)
+        let vk = proving::groth16_bn254::setup_vk_only(cs_bn254, &cache_dir, key_source)
             .map_err(|e| anyhow::anyhow!("Groth16 setup failed: {e}"))?;
         let sol_source = proving::solidity::generate_solidity_verifier(&vk);
         fs::write(sol_path, &sol_source).with_context(|| format!("cannot write {sol_path}"))?;

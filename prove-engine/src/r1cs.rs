@@ -78,14 +78,20 @@ impl ProveEngine {
 
         // Dispatch to the correct Groth16 prover based on prime
         let result = match self.opts.prime_id {
-            PrimeId::Bn254 => {
-                proving::groth16_bn254::generate_proof(&cs, &witness, &self.opts.cache_dir)
-                    .map_err(ProveError::ProofGeneration)?
-            }
-            PrimeId::Bls12_381 => {
-                proving::groth16_bls12_381::generate_proof(&cs, &witness, &self.opts.cache_dir)
-                    .map_err(ProveError::ProofGeneration)?
-            }
+            PrimeId::Bn254 => proving::groth16_bn254::generate_proof(
+                &cs,
+                &witness,
+                &self.opts.cache_dir,
+                &self.opts.key_source,
+            )
+            .map_err(ProveError::ProofGeneration)?,
+            PrimeId::Bls12_381 => proving::groth16_bls12_381::generate_proof(
+                &cs,
+                &witness,
+                &self.opts.cache_dir,
+                &self.opts.key_source,
+            )
+            .map_err(ProveError::ProofGeneration)?,
             other => {
                 return Err(ProveError::ProofGeneration(format!(
                     "Groth16 proof generation not supported for prime `{}`",

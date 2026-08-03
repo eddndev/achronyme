@@ -4,7 +4,7 @@
 //! arkworks-compatible curve (BN254, BLS12-381, etc.). Curve-specific
 //! JSON serialization lives in dedicated modules (e.g., `groth16_bn254`).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 use ark_ec::pairing::Pairing;
@@ -27,18 +27,17 @@ use cache::{load_cached_keys, load_cached_vk, save_cached_keys, save_cached_vk};
 // Trusted-setup honesty
 // ============================================================================
 
-/// True when `ACH_ACK_INSECURE_SETUP` is set to a truthy value.
+/// Explicit source of Groth16 proving keys.
 ///
-/// Lets CI, the test suite, and the playground acknowledge the
-/// local-setup limitation and silence the one-time warning.
-fn ack_insecure_setup() -> bool {
-    std::env::var_os("ACH_ACK_INSECURE_SETUP")
-        .map(|v| {
-            let v = v.to_string_lossy();
-            let v = v.trim();
-            !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false"))
-        })
-        .unwrap_or(false)
+/// The default denies local setup. Callers must either opt into the
+/// development-only single-party setup or provide a trusted key store whose
+/// artifacts were produced by an external ceremony.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ProvingKeySource {
+    #[default]
+    DenyInsecureSetup,
+    InsecureLocal,
+    TrustedStore(PathBuf),
 }
 
 /// Emit a one-time, process-wide warning that the keys and proofs
@@ -56,27 +55,36 @@ fn ack_insecure_setup() -> bool {
 /// generated or loaded from a cache that an earlier local setup wrote
 /// (a cached prove is just as forgeable). The `Once` keeps it to a
 /// single line per process regardless of how many proofs run.
-/// Silenced by [`ack_insecure_setup`]. Covers the native Groth16 path
-/// only; the halo2-KZG (`plonkish`) backend has the same local setup
-/// and is not gated here.
 fn warn_insecure_local_setup_once() {
     static WARNED: Once = Once::new();
     WARNED.call_once(|| {
-        if ack_insecure_setup() {
-            return;
-        }
         eprintln!(
             "warning: Groth16 proving keys come from a LOCAL single-party trusted setup.\n\
              The setup randomness is sampled in-process and discarded, but anyone who runs\n\
              setup could retain it and forge proofs that still verify. Fine for development\n\
              and tests; NOT sound for production. For a production ceremony: export the\n\
-             circuit to .r1cs (`ach compile`), run a Powers-of-Tau + phase-2 ceremony\n\
+             circuit to .r1cs (`ach circuit`), run a Powers-of-Tau + phase-2 ceremony\n\
              (e.g. snarkjs) to produce a .zkey, prove with it, and verify on-chain with the\n\
-             generated Solidity verifier (`--solidity`). This covers the native Groth16 path\n\
-             only; the plonkish (halo2-KZG) backend has the same local setup.\n\
-             Set ACH_ACK_INSECURE_SETUP=1 to silence this warning."
+             generated Solidity verifier (`--solidity`)."
         );
     });
+}
+
+fn authorize_local_setup(source: &ProvingKeySource) -> Result<(), String> {
+    match source {
+        ProvingKeySource::DenyInsecureSetup => Err(
+            "insecure local trusted setup is disabled; provide a trusted key store or explicitly enable development setup"
+                .to_string(),
+        ),
+        ProvingKeySource::InsecureLocal => {
+            warn_insecure_local_setup_once();
+            Ok(())
+        }
+        ProvingKeySource::TrustedStore(path) => Err(format!(
+            "trusted key store `{}` cannot be used by the local setup path",
+            path.display()
+        )),
+    }
 }
 
 // ============================================================================
@@ -254,7 +262,9 @@ pub fn setup_keys<B: FieldBackend, E: Pairing>(
     cs: &ConstraintSystem<B>,
     cache_dir: &Path,
     curve_tag: &str,
+    key_source: &ProvingKeySource,
 ) -> Result<(ark_groth16::ProvingKey<E>, ark_groth16::VerifyingKey<E>), String> {
+    authorize_local_setup(key_source)?;
     let (compacted, _gather) = cs.compact_referenced();
     setup_keys_compacted(compacted, cache_dir, curve_tag)
 }
@@ -265,7 +275,6 @@ fn setup_keys_compacted<B: FieldBackend, E: Pairing>(
     cache_dir: &Path,
     curve_tag: &str,
 ) -> Result<(ark_groth16::ProvingKey<E>, ark_groth16::VerifyingKey<E>), String> {
-    warn_insecure_local_setup_once();
     let key = cache_key(&cs, curve_tag);
     let cache_subdir = cache_dir.join(&key);
 
@@ -289,8 +298,9 @@ pub fn setup_vk_only<B: FieldBackend, E: Pairing>(
     cs: &ConstraintSystem<B>,
     cache_dir: &Path,
     curve_tag: &str,
+    key_source: &ProvingKeySource,
 ) -> Result<ark_groth16::VerifyingKey<E>, String> {
-    warn_insecure_local_setup_once();
+    authorize_local_setup(key_source)?;
     let (compacted, _gather) = cs.compact_referenced();
     let key = cache_key(&compacted, curve_tag);
     let cache_subdir = cache_dir.join(&key);
@@ -324,6 +334,7 @@ pub fn generate_proof_raw<B: FieldBackend, E: Pairing>(
     witness: &[FieldElement<B>],
     cache_dir: &Path,
     curve_tag: &str,
+    key_source: &ProvingKeySource,
 ) -> Result<
     (
         ark_groth16::Proof<E>,
@@ -332,6 +343,7 @@ pub fn generate_proof_raw<B: FieldBackend, E: Pairing>(
     ),
     String,
 > {
+    authorize_local_setup(key_source)?;
     let (compacted, gather) = cs.compact_referenced();
     let gathered_witness: Vec<FieldElement<B>> = gather.iter().map(|&old| witness[old]).collect();
     drop(gather);
@@ -367,6 +379,50 @@ pub fn generate_proof_raw<B: FieldBackend, E: Pairing>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tiny_square_system() -> (ConstraintSystem<Bn254Fr>, Vec<FieldElement<Bn254Fr>>) {
+        use constraints::r1cs::LinearCombination;
+
+        let mut cs = ConstraintSystem::<Bn254Fr>::new();
+        let public = cs.alloc_input();
+        let witness_var = cs.alloc_witness();
+        cs.enforce(
+            LinearCombination::from_variable(witness_var),
+            LinearCombination::from_variable(witness_var),
+            LinearCombination::from_variable(public),
+        );
+        let witness = vec![
+            FieldElement::<Bn254Fr>::from_u64(1),
+            FieldElement::<Bn254Fr>::from_u64(49),
+            FieldElement::<Bn254Fr>::from_u64(7),
+        ];
+        (cs, witness)
+    }
+
+    #[test]
+    fn local_setup_is_denied_without_explicit_policy() {
+        use ark_bn254::Bn254;
+
+        let (cs, witness) = tiny_square_system();
+        let cache_dir = std::env::temp_dir().join(format!(
+            "ach-groth16-denied-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&cache_dir);
+
+        let err = generate_proof_raw::<Bn254Fr, Bn254>(
+            &cs,
+            &witness,
+            &cache_dir,
+            "bn254-test",
+            &ProvingKeySource::DenyInsecureSetup,
+        )
+        .expect_err("safe default must reject local setup");
+
+        assert!(err.contains("insecure local trusted setup is disabled"));
+        assert!(!cache_dir.exists(), "denial must not create key material");
+    }
 
     /// Verify that source_half_modulus computes floor(p/2) correctly for BN254.
     #[test]
@@ -466,23 +522,38 @@ mod tests {
             std::env::temp_dir().join(format!("ach-groth16-compact-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&cache_dir);
 
-        let (proof, vk, public_inputs) =
-            generate_proof_raw::<Bn254Fr, Bn254>(&cs, &witness, &cache_dir, "bn254-test")
-                .expect("proof over compacted system");
+        let (proof, vk, public_inputs) = generate_proof_raw::<Bn254Fr, Bn254>(
+            &cs,
+            &witness,
+            &cache_dir,
+            "bn254-test",
+            &ProvingKeySource::InsecureLocal,
+        )
+        .expect("proof over compacted system");
         assert_eq!(public_inputs.len(), 1);
 
         // The standalone vk path must agree with the proving path.
-        let vk_only = setup_vk_only::<Bn254Fr, Bn254>(&cs, &cache_dir, "bn254-test")
-            .expect("vk over compacted system");
+        let vk_only = setup_vk_only::<Bn254Fr, Bn254>(
+            &cs,
+            &cache_dir,
+            "bn254-test",
+            &ProvingKeySource::InsecureLocal,
+        )
+        .expect("vk over compacted system");
         let valid =
             Groth16::<Bn254>::verify(&vk_only, &public_inputs, &proof).expect("verification ran");
         assert!(valid, "proof must verify against setup_vk_only's key");
         assert_eq!(vk.gamma_abc_g1.len(), vk_only.gamma_abc_g1.len());
 
         // Warm path: a second prove hits the streamed key cache.
-        let (proof2, _, public_inputs2) =
-            generate_proof_raw::<Bn254Fr, Bn254>(&cs, &witness, &cache_dir, "bn254-test")
-                .expect("warm prove over cached compacted keys");
+        let (proof2, _, public_inputs2) = generate_proof_raw::<Bn254Fr, Bn254>(
+            &cs,
+            &witness,
+            &cache_dir,
+            "bn254-test",
+            &ProvingKeySource::InsecureLocal,
+        )
+        .expect("warm prove over cached compacted keys");
         let valid2 =
             Groth16::<Bn254>::verify(&vk_only, &public_inputs2, &proof2).expect("verification ran");
         assert!(valid2);

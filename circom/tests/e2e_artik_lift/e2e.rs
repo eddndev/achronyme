@@ -46,8 +46,13 @@ fn fn_witness_lift_array_param_e2e_groth16() {
     r1cs.cs.verify(&witness).expect("R1CS verify");
 
     let cache_dir = std::env::temp_dir().join("achronyme_test_keys");
-    let result = proving::groth16_bn254::generate_proof(&r1cs.cs, &witness, &cache_dir)
-        .unwrap_or_else(|e| panic!("Groth16 proof failed: {e}"));
+    let result = proving::groth16_bn254::generate_proof(
+        &r1cs.cs,
+        &witness,
+        &cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .unwrap_or_else(|e| panic!("Groth16 proof failed: {e}"));
 
     match &result {
         akron::ProveResult::Proof {
@@ -110,8 +115,13 @@ fn fn_witness_lift_array_literal_e2e_groth16() {
     r1cs.cs.verify(&witness).expect("R1CS verify");
 
     let cache_dir = std::env::temp_dir().join("achronyme_test_keys");
-    let result = proving::groth16_bn254::generate_proof(&r1cs.cs, &witness, &cache_dir)
-        .unwrap_or_else(|e| panic!("Groth16 proof failed: {e}"));
+    let result = proving::groth16_bn254::generate_proof(
+        &r1cs.cs,
+        &witness,
+        &cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .unwrap_or_else(|e| panic!("Groth16 proof failed: {e}"));
 
     match &result {
         akron::ProveResult::Proof {
@@ -176,8 +186,13 @@ fn fn_witness_lift_e2e_groth16_triangle_sum() {
     r1cs.cs.verify(&witness).expect("R1CS verify");
 
     let cache_dir = std::env::temp_dir().join("achronyme_test_keys");
-    let result = proving::groth16_bn254::generate_proof(&r1cs.cs, &witness, &cache_dir)
-        .unwrap_or_else(|e| panic!("Groth16 proof generation failed: {e}"));
+    let result = proving::groth16_bn254::generate_proof(
+        &r1cs.cs,
+        &witness,
+        &cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .unwrap_or_else(|e| panic!("Groth16 proof generation failed: {e}"));
 
     match &result {
         akron::ProveResult::Proof {

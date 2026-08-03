@@ -19,7 +19,14 @@ pub(super) fn run_plonkish_pipeline<F: FieldBackend + PoseidonParamsProvider + B
     style: &Styler,
     verbose: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
+    if prove && key_source != &proving::groth16::ProvingKeySource::InsecureLocal {
+        return Err(anyhow::anyhow!(
+            "plonkish proving currently requires explicit insecure development setup"
+        ));
+    }
+
     let mut compiler = PlonkishCompiler::<F>::new();
     compiler.set_proven_boolean(proven.clone());
 

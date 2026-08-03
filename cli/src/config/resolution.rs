@@ -20,6 +20,8 @@ pub struct CliOverrides {
     pub stress_gc: bool,
     pub gc_stats: bool,
     pub circuit_stats: bool,
+    pub insecure_dev_setup: bool,
+    pub trusted_key_dir: Option<String>,
     pub allow_read: Vec<String>,
     pub allow_write: Vec<String>,
     pub allow_connect: Vec<String>,
@@ -161,6 +163,32 @@ pub fn resolve_config(
 
     let circuit_stats = cli.circuit_stats;
 
+    let resolve_project_path = |raw: &str| {
+        let path = PathBuf::from(raw);
+        if path.is_absolute() {
+            path
+        } else if let Some(root) = project_root {
+            root.join(path)
+        } else {
+            path
+        }
+    };
+    let proving = toml.and_then(|value| value.proving.as_ref());
+    let proving_key_source = if let Some(path) = cli.trusted_key_dir.as_deref() {
+        proving::groth16::ProvingKeySource::TrustedStore(resolve_project_path(path))
+    } else if cli.insecure_dev_setup {
+        proving::groth16::ProvingKeySource::InsecureLocal
+    } else if let Some(path) = proving.and_then(|section| section.trusted_key_dir.as_deref()) {
+        proving::groth16::ProvingKeySource::TrustedStore(resolve_project_path(path))
+    } else if proving
+        .and_then(|section| section.insecure_dev_setup)
+        .unwrap_or(false)
+    {
+        proving::groth16::ProvingKeySource::InsecureLocal
+    } else {
+        proving::groth16::ProvingKeySource::DenyInsecureSetup
+    };
+
     let resolve_grant_paths = |cli_paths: &[String], toml_paths: Option<&Vec<String>>| {
         let selected = if cli_paths.is_empty() {
             toml_paths.map(Vec::as_slice).unwrap_or_default()
@@ -260,6 +288,7 @@ pub fn resolve_config(
         stress_gc,
         gc_stats,
         circuit_stats,
+        proving_key_source,
         allow_read,
         allow_write,
         allow_connect,

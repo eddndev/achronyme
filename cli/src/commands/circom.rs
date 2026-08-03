@@ -50,6 +50,45 @@ pub fn circom_command(
     lib_dirs: &[String],
     error_format: ErrorFormat,
 ) -> Result<()> {
+    circom_command_with_key_source(
+        path,
+        r1cs_path,
+        wtns_path,
+        inputs,
+        input_files,
+        no_optimize,
+        backend,
+        prime_id,
+        prove,
+        solidity_path,
+        plonkish_json_path,
+        dump_ir,
+        circuit_stats,
+        lib_dirs,
+        error_format,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn circom_command_with_key_source(
+    path: &str,
+    r1cs_path: &str,
+    wtns_path: &str,
+    inputs: Option<&str>,
+    input_files: &[String],
+    no_optimize: bool,
+    backend: &str,
+    prime_id: PrimeId,
+    prove: bool,
+    solidity_path: Option<&str>,
+    plonkish_json_path: Option<&str>,
+    dump_ir: bool,
+    circuit_stats: bool,
+    lib_dirs: &[String],
+    error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
+) -> Result<()> {
     // Validate flag combinations early
     if solidity_path.is_some() && backend != "r1cs" {
         return Err(anyhow::anyhow!(
@@ -111,6 +150,7 @@ pub fn circom_command(
             circuit_stats,
             lib_dirs,
             error_format,
+            key_source,
         ),
         PrimeId::Bls12_381 => circom_command_inner::<memory::Bls12_381Fr>(
             path,
@@ -128,6 +168,7 @@ pub fn circom_command(
             circuit_stats,
             lib_dirs,
             error_format,
+            key_source,
         ),
         other => Err(anyhow::anyhow!(
             "prime `{}` is not supported for Circom compilation (use bn254 or bls12-381)",
@@ -153,6 +194,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
     circuit_stats: bool,
     lib_dirs: &[String],
     error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     let mut resolved_inputs: Option<HashMap<String, FieldElement<F>>> = if let Some(raw) = inputs {
         Some(parse_inputs::<F>(raw)?)
@@ -416,6 +458,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                 no_optimize,
                 &proven,
                 want_reusable,
+                key_source,
             )?;
 
             // Extra input files reuse the compiled circuit: only the
@@ -449,6 +492,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                         r1cs_path,
                         wtns_path,
                         prove,
+                        key_source,
                         &style,
                         verbose,
                     )?;
@@ -468,6 +512,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                 &style,
                 verbose,
                 &proven,
+                key_source,
             )
         }
         _ => unreachable!(),

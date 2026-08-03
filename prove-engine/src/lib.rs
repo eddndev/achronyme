@@ -41,6 +41,8 @@ pub struct ProveOptions {
     pub prime_id: PrimeId,
     /// Collect [`ir::stats::CircuitStats`] (keeps the full instantiate path).
     pub circuit_stats: bool,
+    /// Explicit source of proving keys. The default policy denies local setup.
+    pub key_source: proving::groth16::ProvingKeySource,
 }
 
 /// A post-proof milestone: a proof was generated and verified.

@@ -23,6 +23,7 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
     verbose: bool,
     no_optimize: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     let mut compiler = R1CSCompiler::<F>::new();
     compiler.prime_id = prime_id;
@@ -221,8 +222,8 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
     if let Some(sol_path) = solidity_path {
         let cache_dir = crate::cache_dir();
 
-        let sol_source =
-            F::solidity_from_cs(&compiler.cs, &cache_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let sol_source = F::solidity_from_cs(&compiler.cs, &cache_dir, key_source)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         fs::write(sol_path, &sol_source).with_context(|| format!("cannot write {sol_path}"))?;
 

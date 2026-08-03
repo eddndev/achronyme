@@ -31,6 +31,43 @@ pub fn circuit_command(
     circuit_stats: bool,
     error_format: ErrorFormat,
 ) -> Result<()> {
+    circuit_command_with_key_source(
+        path,
+        r1cs_path,
+        wtns_path,
+        inputs,
+        input_file,
+        no_optimize,
+        backend,
+        prime_id,
+        prove,
+        solidity_path,
+        plonkish_json_path,
+        dump_ir,
+        circuit_stats,
+        error_format,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn circuit_command_with_key_source(
+    path: &str,
+    r1cs_path: &str,
+    wtns_path: &str,
+    inputs: Option<&str>,
+    input_file: Option<&str>,
+    no_optimize: bool,
+    backend: &str,
+    prime_id: PrimeId,
+    prove: bool,
+    solidity_path: Option<&str>,
+    plonkish_json_path: Option<&str>,
+    dump_ir: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
+) -> Result<()> {
     // 0. Validate flag combinations early (before expensive IR lowering)
     if solidity_path.is_some() && backend != "r1cs" {
         return Err(anyhow::anyhow!(
@@ -80,6 +117,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         PrimeId::Bls12_381 => circuit_command_inner::<memory::Bls12_381Fr>(
             path,
@@ -96,6 +134,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         PrimeId::Goldilocks => circuit_command_inner::<memory::GoldilocksFr>(
             path,
@@ -112,6 +151,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         other => Err(anyhow::anyhow!(
             "prime `{}` is not supported for circuit compilation",
@@ -136,6 +176,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
     dump_ir: bool,
     circuit_stats: bool,
     error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     // Resolve inputs from either --inputs or --input-file into a unified map.
     let resolved_inputs: Option<HashMap<String, FieldElement<F>>> = if let Some(raw) = inputs {
@@ -324,6 +365,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
             verbose,
             no_optimize,
             &proven,
+            key_source,
         ),
         "plonkish" => run_plonkish_pipeline(
             &program,
@@ -334,6 +376,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
             &style,
             verbose,
             &proven,
+            key_source,
         ),
         // Unreachable: backend validated at the top of this function
         _ => unreachable!(),

@@ -17,6 +17,19 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_config: bool,
 
+    /// Permit development-only single-party proving-key setup
+    #[arg(long, global = true, conflicts_with = "trusted_key_dir")]
+    pub insecure_dev_setup: bool,
+
+    /// Directory containing ceremony-derived proving-key artifacts
+    #[arg(
+        long,
+        value_name = "DIR",
+        global = true,
+        conflicts_with = "insecure_dev_setup"
+    )]
+    pub trusted_key_dir: Option<String>,
+
     /// Grant read-only access to a directory (repeatable)
     #[arg(long = "allow-read", value_name = "DIR", global = true)]
     pub allow_read: Vec<String>,
@@ -248,4 +261,23 @@ pub enum Commands {
         #[arg(long)]
         circuit_stats: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proving_key_flags_are_mutually_exclusive() {
+        let parsed = Cli::try_parse_from([
+            "ach",
+            "--insecure-dev-setup",
+            "--trusted-key-dir",
+            "keys",
+            "run",
+            "program.ach",
+        ]);
+
+        assert!(parsed.is_err());
+    }
 }
