@@ -158,10 +158,17 @@ fn json_to_g1(val: &serde_json::Value) -> Result<G1Affine, String> {
         use ark_ec::AffineRepr;
         return Ok(G1Affine::zero());
     }
+    if z_str != "1" {
+        return Err("G1 z must be 0 or 1".to_string());
+    }
 
     let x = decimal_to_fq(x_str)?;
     let y = decimal_to_fq(y_str)?;
-    Ok(G1Affine::new_unchecked(x, y))
+    let point = G1Affine::new_unchecked(x, y);
+    if !point.is_on_curve() || !point.is_in_correct_subgroup_assuming_on_curve() {
+        return Err("G1 point is not in the BLS12-381 prime-order subgroup".to_string());
+    }
+    Ok(point)
 }
 
 fn json_to_g2(val: &serde_json::Value) -> Result<G2Affine, String> {
@@ -174,13 +181,24 @@ fn json_to_g2(val: &serde_json::Value) -> Result<G2Affine, String> {
     let y_arr = arr[1].as_array().ok_or("G2 y must be array")?;
     let z_arr = arr[2].as_array().ok_or("G2 z must be array")?;
 
-    if z_arr.len() >= 2 {
-        let z0 = z_arr[0].as_str().unwrap_or("1");
-        let z1 = z_arr[1].as_str().unwrap_or("0");
-        if z0 == "0" && z1 == "0" {
-            use ark_ec::AffineRepr;
-            return Ok(G2Affine::zero());
-        }
+    if x_arr.len() != 2 {
+        return Err("G2 x must have 2 elements".to_string());
+    }
+    if y_arr.len() != 2 {
+        return Err("G2 y must have 2 elements".to_string());
+    }
+    if z_arr.len() != 2 {
+        return Err("G2 z must have 2 elements".to_string());
+    }
+
+    let z0 = z_arr[0].as_str().ok_or("G2 z.c0 must be string")?;
+    let z1 = z_arr[1].as_str().ok_or("G2 z.c1 must be string")?;
+    if z0 == "0" && z1 == "0" {
+        use ark_ec::AffineRepr;
+        return Ok(G2Affine::zero());
+    }
+    if z0 != "1" || z1 != "0" {
+        return Err("G2 z must be [\"0\",\"0\"] or [\"1\",\"0\"]".to_string());
     }
 
     let x_c0 = decimal_to_fq(x_arr[0].as_str().ok_or("x.c0 must be string")?)?;
@@ -190,13 +208,18 @@ fn json_to_g2(val: &serde_json::Value) -> Result<G2Affine, String> {
 
     let x = Fq2::new(x_c0, x_c1);
     let y = Fq2::new(y_c0, y_c1);
-    Ok(G2Affine::new_unchecked(x, y))
+    let point = G2Affine::new_unchecked(x, y);
+    if !point.is_on_curve() || !point.is_in_correct_subgroup_assuming_on_curve() {
+        return Err("G2 point is not in the BLS12-381 prime-order subgroup".to_string());
+    }
+    Ok(point)
 }
 
 /// Deserialize a proof JSON string into an ark Proof (BLS12-381).
 pub fn deserialize_proof_json(json_str: &str) -> Result<ark_groth16::Proof<Bls12_381>, String> {
     let obj: serde_json::Value =
         serde_json::from_str(json_str).map_err(|e| format!("invalid proof JSON: {e}"))?;
+    crate::json_artifact::validate_groth16_metadata(&obj, "proof", &["bls12-381"])?;
     let a = json_to_g1(&obj["pi_a"])?;
     let b = json_to_g2(&obj["pi_b"])?;
     let c = json_to_g1(&obj["pi_c"])?;
@@ -216,6 +239,7 @@ pub fn deserialize_vkey_json(
 ) -> Result<ark_groth16::VerifyingKey<Bls12_381>, String> {
     let obj: serde_json::Value =
         serde_json::from_str(json_str).map_err(|e| format!("invalid vkey JSON: {e}"))?;
+    crate::json_artifact::validate_groth16_metadata(&obj, "vkey", &["bls12-381"])?;
 
     let alpha_g1 = json_to_g1(&obj["vk_alpha_1"])?;
     let beta_g2 = json_to_g2(&obj["vk_beta_2"])?;
@@ -223,6 +247,10 @@ pub fn deserialize_vkey_json(
     let delta_g2 = json_to_g2(&obj["vk_delta_2"])?;
 
     let ic_arr = obj["IC"].as_array().ok_or("vkey IC must be an array")?;
+    let declared_public = crate::json_artifact::declared_public_inputs(&obj)?;
+    if ic_arr.len() != declared_public + 1 {
+        return Err("vkey nPublic does not match IC length".to_string());
+    }
     let mut gamma_abc_g1 = Vec::with_capacity(ic_arr.len());
     for ic in ic_arr {
         gamma_abc_g1.push(json_to_g1(ic)?);
@@ -248,6 +276,9 @@ pub fn verify_proof_from_json(
     let proof = deserialize_proof_json(proof_json)?;
     let public_inputs = deserialize_public_json(public_json)?;
     let vk = deserialize_vkey_json(vkey_json)?;
+    if vk.gamma_abc_g1.len() != public_inputs.len() + 1 {
+        return Err("verification key public-input count does not match public.json".to_string());
+    }
     Groth16::<Bls12_381>::verify(&vk, &public_inputs, &proof)
         .map_err(|e| format!("verification error: {e}"))
 }

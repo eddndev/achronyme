@@ -96,6 +96,24 @@ pub enum Commands {
         #[arg(long, default_value = "circuit")]
         template: String,
     },
+    /// Verify detached Groth16 proof artifacts
+    Verify {
+        /// Path to proof.json
+        #[arg(long, value_name = "FILE")]
+        proof: String,
+        /// Path to public.json
+        #[arg(long, value_name = "FILE")]
+        public: String,
+        /// Path to verification_key.json
+        #[arg(long, value_name = "FILE")]
+        vkey: String,
+        /// Proof curve; required to avoid format inference
+        #[arg(long, value_parser = ["bn254", "bls12-381"])]
+        curve: String,
+        /// Result format
+        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+        format: String,
+    },
     /// Run a source file or binary
     Run {
         /// Path to the file (.ach or .achb). If omitted, uses [project].entry from achronyme.toml

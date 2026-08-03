@@ -34,6 +34,18 @@ fn main() -> Result<()> {
         return cli::init::init_project(name, template, &cwd);
     }
 
+    // Detached verification is self-contained and never reads project config.
+    if let Commands::Verify {
+        proof,
+        public,
+        vkey,
+        curve,
+        format,
+    } = &cli.command
+    {
+        return cli::commands::verify::verify_files(proof, public, vkey, curve, format);
+    }
+
     // ── Find and load achronyme.toml (unless --no-config) ──
     let (toml, project_root) = if cli.no_config {
         (None, None)
@@ -77,7 +89,7 @@ fn main() -> Result<()> {
 
     // ── Dispatch ──
     match &cli.command {
-        Commands::Init { .. } => unreachable!(),
+        Commands::Init { .. } | Commands::Verify { .. } => unreachable!(),
 
         Commands::Run {
             ptau,

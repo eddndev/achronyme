@@ -7,6 +7,7 @@ pub mod engine;
 pub mod inspect;
 pub mod run;
 pub mod runtime;
+pub mod verify;
 
 use akronc::{Compiler, CompilerError};
 use diagnostics::{ColorMode, Diagnostic, DiagnosticRenderer};

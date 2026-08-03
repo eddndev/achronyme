@@ -14,7 +14,7 @@ pub(super) fn command_start_dir(cmd: &Commands) -> std::path::PathBuf {
         | Commands::Inspect { path, .. }
         | Commands::Circuit { path, .. }
         | Commands::Circom { path, .. } => path.as_deref(),
-        Commands::Init { .. } => None,
+        Commands::Init { .. } | Commands::Verify { .. } => None,
     };
 
     if let Some(p) = path_arg {
@@ -204,7 +204,7 @@ pub(super) fn build_overrides(cli: &Cli) -> CliOverrides {
             ..CliOverrides::default()
         },
 
-        Commands::Init { .. } => unreachable!(),
+        Commands::Init { .. } | Commands::Verify { .. } => unreachable!(),
     }
 }
 
