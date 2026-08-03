@@ -11,7 +11,7 @@ use ark_ec::pairing::Pairing;
 
 use akron::ProveResult;
 use constraints::r1cs::ConstraintSystem;
-use memory::FieldElement;
+use memory::{FieldBackend, FieldElement};
 
 use crate::groth16;
 
@@ -20,8 +20,8 @@ use crate::groth16;
 // ============================================================================
 
 /// Run trusted setup (or load cached keys) for BLS12-381 Groth16.
-pub fn setup_keys(
-    cs: &ConstraintSystem,
+pub fn setup_keys<B: FieldBackend>(
+    cs: &ConstraintSystem<B>,
     cache_dir: &Path,
     key_source: &groth16::ProvingKeySource,
 ) -> Result<
@@ -35,8 +35,8 @@ pub fn setup_keys(
 }
 
 /// Run trusted setup and return only the verifying key (BLS12-381).
-pub fn setup_vk_only(
-    cs: &ConstraintSystem,
+pub fn setup_vk_only<B: FieldBackend>(
+    cs: &ConstraintSystem<B>,
     cache_dir: &Path,
     key_source: &groth16::ProvingKeySource,
 ) -> Result<ark_groth16::VerifyingKey<Bls12_381>, String> {
@@ -44,9 +44,9 @@ pub fn setup_vk_only(
 }
 
 /// Generate a BLS12-381 Groth16 proof with JSON output.
-pub fn generate_proof(
-    cs: &ConstraintSystem,
-    witness: &[FieldElement],
+pub fn generate_proof<B: FieldBackend>(
+    cs: &ConstraintSystem<B>,
+    witness: &[FieldElement<B>],
     cache_dir: &Path,
     key_source: &groth16::ProvingKeySource,
 ) -> Result<ProveResult, String> {

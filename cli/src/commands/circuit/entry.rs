@@ -12,6 +12,7 @@ use super::bn254::Bn254Ops;
 use super::inputs::{parse_inputs, parse_inputs_toml};
 use super::plonkish::run_plonkish_pipeline;
 use super::r1cs::run_r1cs_pipeline;
+use crate::commands::r1cs_proof::Groth16Field;
 use crate::style::Styler;
 
 #[allow(clippy::too_many_arguments)]
@@ -99,6 +100,10 @@ pub fn circuit_command_with_key_source(
         ));
     }
 
+    if prove && inputs.is_none() && input_file.is_none() {
+        return Err(anyhow::anyhow!("--prove requires --inputs or --input-file"));
+    }
+
     // Dispatch on prime_id: one match at the CLI boundary, generics carry
     // the concrete field type through the rest of the pipeline.
     match prime_id {
@@ -161,7 +166,7 @@ pub fn circuit_command_with_key_source(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
+fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops + Groth16Field>(
     path: &str,
     r1cs_path: &str,
     wtns_path: &str,
@@ -360,6 +365,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
             wtns_path,
             resolved_inputs.as_ref(),
             prime_id,
+            prove,
             solidity_path,
             &style,
             verbose,

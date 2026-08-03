@@ -973,6 +973,7 @@ dependencies = [
  "akronc",
  "anyhow",
  "artik",
+ "base64",
  "byteorder",
  "circom",
  "clap",

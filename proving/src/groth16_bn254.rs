@@ -71,15 +71,34 @@ pub fn generate_proof(
         _ => groth16::generate_proof_raw::<_, Bn254>(cs, witness, cache_dir, "bn254", key_source)?,
     };
 
-    let proof_json = serialize_proof_json(&proof);
-    let public_json = serialize_public_json(&public_inputs);
-    let vkey_json = serialize_vkey_json(&vk, cs.num_pub_inputs());
+    Ok(serialize_proof_result(cs, &proof, &vk, &public_inputs))
+}
 
-    Ok(ProveResult::Proof {
+pub fn generate_proof_with_loaded_trusted_key(
+    cs: &ConstraintSystem,
+    witness: &[FieldElement],
+    loaded: &crate::trusted_setup::LoadedTrustedKey,
+) -> Result<ProveResult, String> {
+    let (proof, vk, public_inputs) =
+        crate::trusted_setup::generate_proof_with_key(cs, witness, loaded)?;
+    Ok(serialize_proof_result(cs, &proof, &vk, &public_inputs))
+}
+
+fn serialize_proof_result(
+    cs: &ConstraintSystem,
+    proof: &ark_groth16::Proof<Bn254>,
+    vk: &ark_groth16::VerifyingKey<Bn254>,
+    public_inputs: &[Fr],
+) -> ProveResult {
+    let proof_json = serialize_proof_json(proof);
+    let public_json = serialize_public_json(public_inputs);
+    let vkey_json = serialize_vkey_json(vk, cs.num_pub_inputs());
+
+    ProveResult::Proof {
         proof_json,
         public_json,
         vkey_json,
-    })
+    }
 }
 
 // ============================================================================

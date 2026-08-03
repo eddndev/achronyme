@@ -23,10 +23,13 @@ use crate::style::Styler;
 mod input;
 mod plonkish;
 mod r1cs;
+mod repeat;
 
+use crate::commands::r1cs_proof::Groth16Field;
 use input::{parse_inputs, parse_inputs_toml};
 use plonkish::run_plonkish_pipeline;
-use r1cs::{run_r1cs_pipeline, run_r1cs_repeat};
+use r1cs::run_r1cs_pipeline;
+use repeat::run_r1cs_repeat;
 
 // ---------------------------------------------------------------------------
 // Command entry point
@@ -178,7 +181,7 @@ pub fn circom_command_with_key_source(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
+fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>(
     path: &str,
     r1cs_path: &str,
     wtns_path: &str,

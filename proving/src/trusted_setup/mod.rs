@@ -45,6 +45,15 @@ pub fn generate_proof(
     witness: &[FieldElement],
     store: &Path,
 ) -> Result<TrustedProof, String> {
+    let loaded = load_trusted_key(cs, store)?;
+    generate_proof_with_key(cs, witness, &loaded)
+}
+
+pub fn generate_proof_with_key(
+    cs: &ConstraintSystem,
+    witness: &[FieldElement],
+    loaded: &LoadedTrustedKey,
+) -> Result<TrustedProof, String> {
     if witness.len() != cs.num_variables() {
         return Err(format!(
             "witness length {} does not match circuit variable count {}",
@@ -52,7 +61,6 @@ pub fn generate_proof(
             cs.num_variables()
         ));
     }
-    let loaded = load_trusted_key(cs, store)?;
     let vk = loaded.proving_key.vk.clone();
     let circuit = AchronymeCircuit {
         cs: cs.clone(),
