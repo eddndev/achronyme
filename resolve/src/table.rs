@@ -115,6 +115,31 @@ impl SymbolTable {
         id
     }
 
+    /// Insert a module symbol, allowing a root declaration to shadow a builtin.
+    ///
+    /// The builtin remains in flat storage so its registry metadata and native
+    /// handle stay auditable. Only bare-name lookup changes to the user symbol,
+    /// matching the compiler's global binding semantics. Any non-builtin
+    /// collision is still an internal resolver error.
+    pub(crate) fn insert_module_symbol(
+        &mut self,
+        qualified_name: impl Into<String>,
+        kind: CallableKind,
+    ) -> SymbolId {
+        let qualified_name = qualified_name.into();
+        let Some(existing) = self.by_qualified_name.get(&qualified_name).copied() else {
+            return self.insert(qualified_name, kind);
+        };
+        assert!(
+            matches!(self.try_get(existing), Some(CallableKind::Builtin { .. })),
+            "module symbol `{qualified_name}` collides with a non-builtin entry"
+        );
+        let id = SymbolId(self.symbols.len() as u32);
+        self.symbols.push(kind);
+        self.by_qualified_name.insert(qualified_name, id);
+        id
+    }
+
     /// Look up a symbol by its fully qualified name.
     pub fn lookup(&self, qualified_name: &str) -> Option<SymbolId> {
         self.by_qualified_name.get(qualified_name).copied()

@@ -159,3 +159,40 @@ fn stmt_index_skips_imports_but_counts_position() {
         other => panic!("expected UserFn, got {other:?}"),
     }
 }
+
+#[test]
+fn root_user_function_shadows_builtin_without_losing_builtin_metadata() {
+    let mut src = MockSource::default();
+    src.add("main", "fn join(values, separator) { separator }");
+    let graph = ModuleGraph::build("main", &mut src).expect("build");
+    let mut registry = BuiltinRegistry::default();
+    registry.push(crate::BuiltinEntry {
+        name: "join",
+        arity: crate::Arity::Fixed(2),
+        availability: crate::Availability::Vm,
+        vm_fn: Some(crate::builtins::VmFnHandle::PLACEHOLDER),
+        prove_ir_lower: None,
+        effects: crate::EffectSet::empty(),
+        capabilities: crate::CapabilitySet::empty(),
+        behavior: crate::NativeBehavior::Immediate,
+        cancellation: crate::CancellationPolicy::None,
+        resource: crate::ResourceEffect::None,
+    });
+    let mut table = SymbolTable::with_registry(registry).unwrap();
+    register_builtins(&mut table);
+
+    register_all(&mut table, &graph).expect("register user shadow");
+
+    let join = table.lookup("join").expect("user join registered");
+    assert!(matches!(table.get(join), CallableKind::UserFn { .. }));
+    assert!(table.iter().any(|(_, kind)| {
+        let CallableKind::Builtin { entry_index } = kind else {
+            return false;
+        };
+        table
+            .builtin_registry()
+            .get(*entry_index)
+            .is_some_and(|entry| entry.name == "join")
+    }));
+    table.audit().unwrap();
+}
