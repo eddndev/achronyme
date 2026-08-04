@@ -1,18 +1,23 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use proving::trusted_setup::{CeremonyContributor, PackageTrustedKey};
+use proving::trusted_setup::{CeremonyContributor, PackageFinalBeacon, PackageTrustedKey};
 
 #[allow(clippy::too_many_arguments)]
 pub fn package(
     r1cs: &str,
     zkey: &str,
+    contributed_zkey: &str,
     phase1: &str,
     store: &str,
     tool: &str,
     phase1_source: &str,
     phase1_blake2b512: &str,
     contributors: &[String],
+    beacon_source: &str,
+    beacon_randomness: &str,
+    beacon_iterations: u32,
+    beacon_contribution_hash: &str,
     format: &str,
 ) -> Result<()> {
     let contributors = parse_contributors(contributors)?;
@@ -25,6 +30,13 @@ pub fn package(
         phase1_source,
         phase1_blake2b512,
         contributors: &contributors,
+        final_beacon: PackageFinalBeacon {
+            contributed_zkey: Path::new(contributed_zkey),
+            source: beacon_source,
+            randomness: beacon_randomness,
+            iterations: beacon_iterations,
+            contribution_hash: beacon_contribution_hash,
+        },
     })
     .map_err(anyhow::Error::msg)?;
 
@@ -38,6 +50,7 @@ pub fn package(
                 "r1cs_sha256": packaged.manifest.r1cs_sha256,
                 "zkey_sha256": packaged.manifest.zkey_sha256,
                 "phase1_sha256": packaged.manifest.ceremony.phase1_sha256,
+                "final_beacon": packaged.manifest.ceremony.final_beacon,
             }))?
         ),
         "text" => {
@@ -47,6 +60,18 @@ pub fn package(
             println!(
                 "phase1 sha256: {}",
                 packaged.manifest.ceremony.phase1_sha256
+            );
+            println!(
+                "beacon source: {}",
+                packaged.manifest.ceremony.final_beacon.source
+            );
+            println!(
+                "contributed zkey sha256: {}",
+                packaged
+                    .manifest
+                    .ceremony
+                    .final_beacon
+                    .contributed_zkey_sha256
             );
         }
         _ => unreachable!("clap validates trusted-setup output formats"),

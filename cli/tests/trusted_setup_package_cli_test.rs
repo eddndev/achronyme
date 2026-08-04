@@ -7,12 +7,15 @@ use memory::PrimeId;
 use sha2::{Digest, Sha256};
 
 const CONTRIBUTION_HASH: &str = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_CONTRIBUTION_HASH: &str = "d4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_RANDOMNESS: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 const PHASE1_BLAKE2B512: &str = "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678";
 
 struct Fixture {
     _root: tempfile::TempDir,
     r1cs: PathBuf,
     zkey: PathBuf,
+    contributed_zkey: PathBuf,
     phase1: PathBuf,
     store: PathBuf,
 }
@@ -22,6 +25,7 @@ impl Fixture {
         let root = tempfile::tempdir().unwrap();
         let r1cs = root.path().join("circuit.r1cs");
         let zkey = root.path().join("final.zkey");
+        let contributed_zkey = root.path().join("contributed.zkey");
         let phase1 = root.path().join("phase1.ptau");
         let store = root.path().join("trusted-keys");
 
@@ -42,6 +46,9 @@ impl Fixture {
             .decode(encoded.split_whitespace().collect::<String>())
             .unwrap();
         std::fs::write(&zkey, zkey_bytes).unwrap();
+        let mut contributed_zkey_bytes = std::fs::read(&zkey).unwrap();
+        *contributed_zkey_bytes.last_mut().unwrap() ^= 1;
+        std::fs::write(&contributed_zkey, contributed_zkey_bytes).unwrap();
         std::fs::write(&phase1, b"test-only phase-1 fixture\n").unwrap();
         std::fs::write(root.path().join("achronyme.toml"), "invalid = [").unwrap();
 
@@ -49,6 +56,7 @@ impl Fixture {
             _root: root,
             r1cs,
             zkey,
+            contributed_zkey,
             phase1,
             store,
         }
@@ -64,6 +72,8 @@ impl Fixture {
                 self.r1cs.to_str().unwrap(),
                 "--zkey",
                 self.zkey.to_str().unwrap(),
+                "--contributed-zkey",
+                self.contributed_zkey.to_str().unwrap(),
                 "--phase1",
                 self.phase1.to_str().unwrap(),
                 "--store",
@@ -76,6 +86,14 @@ impl Fixture {
                 PHASE1_BLAKE2B512,
                 "--contributor",
                 contributor,
+                "--beacon-source",
+                "https://example.invalid/public-randomness/42",
+                "--beacon-randomness",
+                BEACON_RANDOMNESS,
+                "--beacon-iterations",
+                "10",
+                "--beacon-contribution-hash",
+                BEACON_CONTRIBUTION_HASH,
                 "--format",
                 "json",
             ])
@@ -102,7 +120,8 @@ fn packages_without_loading_project_configuration() {
     );
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["format"], "achronyme-trusted-key");
-    assert_eq!(value["version"], 1);
+    assert_eq!(value["version"], 2);
+    assert_eq!(value["final_beacon"]["randomness"], BEACON_RANDOMNESS);
     assert_eq!(
         value["r1cs_sha256"],
         sha256_hex(&std::fs::read(&fixture.r1cs).unwrap())

@@ -6,11 +6,33 @@ use std::path::{Path, PathBuf};
 use memory::{Bn254Fr, FieldElement};
 
 use super::artifact::{
-    open_regular_file, sha256_bytes, sha256_reader, validate_contributor, validate_hex,
-    CeremonyContributor, CeremonyProvenance, CeremonyTranscript, TranscriptCircuit,
-    TranscriptFinalKey, TranscriptPhase1, TranscriptVerification, TrustedKeyManifest,
-    MANIFEST_FILE, TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION, ZKEY_FILE,
+    open_regular_file, sha256_bytes, sha256_reader, validate_beacon, validate_contributor,
+    validate_hex, CeremonyBeacon, CeremonyContributor, CeremonyProvenance, CeremonyTranscript,
+    TranscriptCircuit, TranscriptFinalKey, TranscriptPhase1, TranscriptVerification,
+    TrustedKeyManifest, MANIFEST_FILE, TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION,
+    ZKEY_FILE,
 };
+
+#[derive(Clone, Copy)]
+pub struct PackageFinalBeacon<'a> {
+    pub contributed_zkey: &'a Path,
+    pub source: &'a str,
+    pub randomness: &'a str,
+    pub iterations: u32,
+    pub contribution_hash: &'a str,
+}
+
+impl PackageFinalBeacon<'_> {
+    fn metadata(self, contributed_zkey_sha256: String) -> CeremonyBeacon {
+        CeremonyBeacon {
+            source: self.source.to_string(),
+            randomness: self.randomness.to_string(),
+            iterations: self.iterations,
+            contribution_hash: self.contribution_hash.to_string(),
+            contributed_zkey_sha256,
+        }
+    }
+}
 
 pub struct PackageTrustedKey<'a> {
     pub r1cs: &'a Path,
@@ -21,6 +43,7 @@ pub struct PackageTrustedKey<'a> {
     pub phase1_source: &'a str,
     pub phase1_blake2b512: &'a str,
     pub contributors: &'a [CeremonyContributor],
+    pub final_beacon: PackageFinalBeacon<'a>,
 }
 
 #[derive(Debug)]
@@ -52,12 +75,25 @@ pub fn package_trusted_key(request: &PackageTrustedKey<'_>) -> Result<PackagedTr
     let zkey_sha256 = sha256_reader(&mut zkey_file)?;
     inspect_zkey(&mut zkey_file, metadata)?;
 
+    let mut contributed_zkey_file = open_regular_file(
+        request.final_beacon.contributed_zkey,
+        "contributed proving key",
+    )?;
+    let contributed_zkey_sha256 = sha256_reader(&mut contributed_zkey_file)?;
+    inspect_zkey(&mut contributed_zkey_file, metadata)?;
+    if contributed_zkey_sha256 == zkey_sha256 {
+        return Err("final beacon did not change the contributed zkey".to_string());
+    }
+    let final_beacon = request
+        .final_beacon
+        .metadata(contributed_zkey_sha256.clone());
+
     let mut phase1_file = open_regular_file(request.phase1, "phase-1 artifact")?;
     let phase1_sha256 = sha256_reader(&mut phase1_file)?;
 
     let transcript = CeremonyTranscript {
         format: "achronyme-ceremony-transcript".to_string(),
-        version: 1,
+        version: TRUSTED_KEY_VERSION,
         protocol: "groth16".to_string(),
         curve: "bn254".to_string(),
         circuit: TranscriptCircuit {
@@ -79,6 +115,7 @@ pub fn package_trusted_key(request: &PackageTrustedKey<'_>) -> Result<PackagedTr
         },
         tool: request.tool.to_string(),
         contributors: request.contributors.to_vec(),
+        final_beacon: final_beacon.clone(),
         verification: TranscriptVerification {
             phase1_hash: "b2sum phase1.ptau".to_string(),
             phase1_transcript: "snarkjs powersoftau verify phase1.ptau".to_string(),
@@ -102,6 +139,7 @@ pub fn package_trusted_key(request: &PackageTrustedKey<'_>) -> Result<PackagedTr
             phase1_sha256,
             transcript_sha256: sha256_bytes(&transcript_bytes),
             contributors: request.contributors.to_vec(),
+            final_beacon,
         },
     };
     let manifest_bytes = json_bytes(&manifest)?;
@@ -136,6 +174,7 @@ fn validate_request(request: &PackageTrustedKey<'_>) -> Result<(), String> {
     for contributor in request.contributors {
         validate_contributor(contributor)?;
     }
+    validate_beacon(&request.final_beacon.metadata("0".repeat(64)))?;
     Ok(())
 }
 

@@ -299,6 +299,9 @@ pub enum TrustedSetupCommand {
         /// Final ceremony-derived snarkjs Groth16 zkey
         #[arg(long, value_name = "FILE")]
         zkey: String,
+        /// Verified contributed zkey before applying the final public beacon
+        #[arg(long, value_name = "FILE")]
+        contributed_zkey: String,
         /// Verified phase-1 powers-of-tau artifact
         #[arg(long, value_name = "FILE")]
         phase1: String,
@@ -317,6 +320,18 @@ pub enum TrustedSetupCommand {
         /// Phase-2 contributor as ID=128_HEX_HASH; repeat for every contribution
         #[arg(long, value_name = "ID=HASH", required = true)]
         contributor: Vec<String>,
+        /// Stable HTTPS URL for the committed public beacon value
+        #[arg(long)]
+        beacon_source: String,
+        /// Lowercase 64-hex public beacon randomness
+        #[arg(long)]
+        beacon_randomness: String,
+        /// snarkjs beacon iteration exponent
+        #[arg(long)]
+        beacon_iterations: u32,
+        /// Verified 128-hex contribution hash created by the final beacon
+        #[arg(long)]
+        beacon_contribution_hash: String,
         /// Result format
         #[arg(long, default_value = "text", value_parser = ["text", "json"])]
         format: String,

@@ -6,12 +6,14 @@ use base64::Engine;
 use constraints::r1cs::{ConstraintSystem, LinearCombination};
 use memory::PrimeId;
 use proving::trusted_setup::{
-    package_trusted_key, CeremonyContributor, PackageTrustedKey, TRUSTED_KEY_FORMAT,
-    TRUSTED_KEY_VERSION,
+    package_trusted_key, CeremonyContributor, PackageFinalBeacon, PackageTrustedKey,
+    TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION,
 };
 use sha2::{Digest, Sha256};
 
 const CONTRIBUTION_HASH: &str = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_CONTRIBUTION_HASH: &str = "d4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_RANDOMNESS: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 const PHASE1_BLAKE2B512: &str = "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678";
 
 fn basic_arithmetic_system() -> ConstraintSystem {
@@ -39,6 +41,7 @@ struct Inputs {
     _root: tempfile::TempDir,
     r1cs: PathBuf,
     zkey: PathBuf,
+    contributed_zkey: PathBuf,
     phase1: PathBuf,
     store: PathBuf,
     contributors: Vec<CeremonyContributor>,
@@ -49,6 +52,7 @@ impl Inputs {
         let root = tempfile::tempdir().unwrap();
         let r1cs = root.path().join("circuit.r1cs");
         let zkey = root.path().join("final.zkey");
+        let contributed_zkey = root.path().join("contributed.zkey");
         let phase1 = root.path().join("powers.ptau");
         let store = root.path().join("trusted-keys");
         std::fs::write(
@@ -61,11 +65,16 @@ impl Inputs {
             .decode(encoded.split_whitespace().collect::<String>())
             .unwrap();
         std::fs::write(&zkey, zkey_bytes).unwrap();
+        let mut contributed_zkey_bytes = std::fs::read(&zkey).unwrap();
+        let last = contributed_zkey_bytes.last_mut().unwrap();
+        *last ^= 1;
+        std::fs::write(&contributed_zkey, contributed_zkey_bytes).unwrap();
         std::fs::write(&phase1, b"test-only phase-1 fixture\n").unwrap();
         Self {
             _root: root,
             r1cs,
             zkey,
+            contributed_zkey,
             phase1,
             store,
             contributors: vec![CeremonyContributor {
@@ -85,6 +94,13 @@ impl Inputs {
             phase1_source: "https://example.invalid/test-only.ptau",
             phase1_blake2b512: PHASE1_BLAKE2B512,
             contributors: &self.contributors,
+            final_beacon: PackageFinalBeacon {
+                contributed_zkey: &self.contributed_zkey,
+                source: "https://example.invalid/public-randomness/42",
+                randomness: BEACON_RANDOMNESS,
+                iterations: 10,
+                contribution_hash: BEACON_CONTRIBUTION_HASH,
+            },
         }
     }
 }
@@ -99,6 +115,7 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
 
     assert_eq!(packaged.manifest.format, TRUSTED_KEY_FORMAT);
     assert_eq!(packaged.manifest.version, TRUSTED_KEY_VERSION);
+    assert_eq!(TRUSTED_KEY_VERSION, 2);
     assert_eq!(packaged.manifest.r1cs_sha256, sha256_hex(&r1cs_bytes));
     assert_eq!(packaged.manifest.zkey_sha256, sha256_hex(&zkey_bytes));
     assert_eq!(packaged.manifest.constraints, 1);
@@ -118,6 +135,7 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
     )
     .unwrap();
     assert_eq!(transcript["format"], "achronyme-ceremony-transcript");
+    assert_eq!(transcript["version"], 2);
     assert_eq!(
         transcript["circuit"]["r1cs_sha256"],
         sha256_hex(&r1cs_bytes)
@@ -130,6 +148,11 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
     assert_eq!(
         transcript["contributors"][0]["contribution_hash"],
         CONTRIBUTION_HASH
+    );
+    assert_eq!(transcript["final_beacon"]["randomness"], BEACON_RANDOMNESS);
+    assert_eq!(
+        transcript["final_beacon"]["contributed_zkey_sha256"],
+        sha256_hex(&std::fs::read(&inputs.contributed_zkey).unwrap())
     );
 
     proving::trusted_setup::load_trusted_key(&basic_arithmetic_system(), &inputs.store)
@@ -157,6 +180,17 @@ fn packaging_rejects_invalid_contributor_metadata() {
 
     let error = package_trusted_key(&request).unwrap_err();
     assert!(error.contains("phase-2 contribution hash"), "{error}");
+    assert!(!inputs.store.exists());
+}
+
+#[test]
+fn packaging_rejects_invalid_final_beacon_metadata() {
+    let inputs = Inputs::new();
+    let mut request = inputs.request();
+    request.final_beacon.randomness = "predictable";
+
+    let error = package_trusted_key(&request).unwrap_err();
+    assert!(error.contains("beacon randomness"), "{error}");
     assert!(!inputs.store.exists());
 }
 

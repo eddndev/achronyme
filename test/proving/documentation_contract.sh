@@ -26,6 +26,11 @@ rg -Uq 'Achronyme binary[[:space:]]+SHA-256' "$boss"
 rg -Fq 'Proving setup policy' "$repo_root/docs/migration/0.1.0.md"
 rg -Fq 'record-export-evidence.sh' "$trusted"
 rg -Fq -- '--export-evidence' "$trusted"
+rg -Fq -- '--contributed-zkey' "$trusted"
+rg -Fq -- '--beacon-source' "$trusted"
+rg -Uiq 'public beacon\s+does not replace\s+an\s+independent' "$trusted"
+rg -Fq -- '--contributed-zkey' "$boss"
+rg -Fq -- '--beacon-source' "$boss"
 rg -Fq 'trusted-setup.md' "$repo_root/README.md"
 
 if rg -Fq 'Caching de `.zkey`' "$repo_root/STRATEGY.md"; then

@@ -143,17 +143,21 @@ contributor follows the interactive command in
 Do not transfer the witness or private inputs. Do not pass entropy through a
 command argument or record the session.
 
-Return `circuit_final.zkey`, the contributor ID or pseudonym, and the
+Return `circuit_0001.zkey`, the contributor ID or pseudonym, and the
 contribution hash.
 
-## Stage 4: final proof and cross-verification
+## Stage 4: final beacon, proof, and cross-verification
+
+Commit to a future publicly verifiable randomness round only after the
+independent contribution is fixed. Verify the round when it becomes available.
+The public beacon does not replace the independent secret contribution.
 
 ```text
 scripts/proving/finalize-phase2.sh \
   --r1cs /var/tmp/achronyme-0.1.0-proving/export/circuit.r1cs \
   --wtns /var/tmp/achronyme-0.1.0-proving/export/witness.wtns \
   --phase1 /var/tmp/achronyme-0.1.0-proving/phase1.ptau \
-  --zkey /var/tmp/achronyme-0.1.0-proving/circuit_final.zkey \
+  --contributed-zkey /var/tmp/achronyme-0.1.0-proving/circuit_0001.zkey \
   --export-evidence /var/tmp/achronyme-0.1.0-proving/bossfight-export.json \
   --source test/circomlib/ecdsa_verify_test.circom \
   --input-file test/proving/ecdsa_verify.inputs.toml \
@@ -162,7 +166,10 @@ scripts/proving/finalize-phase2.sh \
   --store /var/tmp/achronyme-0.1.0-trusted-keys \
   --ach-bin target/release/ach \
   --phase1-source "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau" \
-  --contributor "CONTRIBUTOR_ID=CONTRIBUTION_HASH"
+  --contributor "CONTRIBUTOR_ID=CONTRIBUTION_HASH" \
+  --beacon-source "https://PUBLIC_BEACON/rounds/COMMITTED_ROUND" \
+  --beacon-randomness "64_HEX_RANDOMNESS" \
+  --beacon-iterations 10
 ```
 
 This stage intentionally recompiles the circuit for the native trusted-key
@@ -183,6 +190,8 @@ Before the 0.1.0 release is approved, review all of these outputs:
   `finalize.metrics.jsonl`;
 - R1CS, witness, phase-1, final-zkey, transcript, and manifest hashes;
 - verified contributor IDs/hashes;
+- the committed public-beacon source, randomness, iteration count, and verified
+  beacon contribution hash;
 - successful snarkjs-to-Achronyme and Achronyme-to-snarkjs verification;
 - the exact tested Git commit, release binary version, and Achronyme binary
   SHA-256.

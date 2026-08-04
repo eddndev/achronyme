@@ -84,22 +84,27 @@ phase1_blake2b512=$(blake2b512_file "$phase1")
     --r1cs "$r1cs" --wtns "$wtns" --phase1 "$phase1" \
     --work-dir "$ceremony_dir" --phase1-blake2b512 "$phase1_blake2b512"
 
-final_zkey="$ceremony_dir/circuit_final.zkey"
-snarkjs zkey beacon \
-    "$ceremony_dir/circuit_0000.zkey" "$final_zkey" \
-    abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 \
-    10 -n="test independent beacon" >/dev/null
-snarkjs zkey verify "$r1cs" "$phase1" "$final_zkey" \
+contributed_zkey="$ceremony_dir/circuit_0001.zkey"
+snarkjs zkey contribute \
+    "$ceremony_dir/circuit_0000.zkey" "$contributed_zkey" \
+    --name="test independent contributor" \
+    -e="test-only deterministic entropy" >/dev/null
+snarkjs zkey verify "$r1cs" "$phase1" "$contributed_zkey" \
     >"$work_root/test-zkey-verify.log" 2>&1
 contribution=$(extract_zkey_contributions "$work_root/test-zkey-verify.log" | sed -n '1p')
 [[ "$contribution" == *"|"* ]] || die "test contribution hash was not parsed"
 contributor="${contribution/|/=}"
+beacon_source="https://example.invalid/public-randomness/42"
+beacon_randomness=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
 
 export_evidence="$recorded_export"
 finalizer="$evidence_checkout/scripts/proving/finalize-phase2.sh"
 
 declare -a finalize_args=(
-    --r1cs "$r1cs" --wtns "$wtns" --phase1 "$phase1" --zkey "$final_zkey"
+    --r1cs "$r1cs" --wtns "$wtns" --phase1 "$phase1"
+    --contributed-zkey "$contributed_zkey"
+    --beacon-source "$beacon_source" --beacon-randomness "$beacon_randomness"
+    --beacon-iterations 10
     --source "$source_file" --input-file "$input_file"
     --ach-bin "$ach_bin" --phase1-source "https://example.invalid/test-only.ptau"
     --phase1-blake2b512 "$phase1_blake2b512" --contributor "$contributor"
@@ -124,17 +129,25 @@ grep -Fq 'export evidence witness SHA-256 mismatch' "$work_root/tampered.err"
 evidence="$ceremony_dir/release-evidence.json"
 jq -e '
     .format == "achronyme-proving-release-evidence" and
-    .version == 1 and
+    .version == 2 and
     (.git_commit | test("^[0-9a-f]{40,64}$")) and
     (.achronyme_binary_sha256 | test("^[0-9a-f]{64}$")) and
     (.export_evidence.sha256 | test("^[0-9a-f]{64}$")) and
     .circuit.constraints == 1 and
-    (.metrics | length >= 10) and
+    .ceremony.final_beacon.source == "https://example.invalid/public-randomness/42" and
+    .ceremony.final_beacon.randomness == "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789" and
+    .ceremony.final_beacon.iterations == 10 and
+    (.ceremony.final_beacon.contribution_hash | test("^[0-9a-f]{128}$")) and
+    (.metrics | length >= 12) and
     (.verification | all(. == true))
 ' "$evidence" >/dev/null
 r1cs_sha256=$(sha256_file "$r1cs")
 require_regular_file "$store/$r1cs_sha256/manifest.json" "trusted-key manifest"
 require_regular_file "$store/$r1cs_sha256/transcript.json" "ceremony transcript"
 require_regular_file "$store/$r1cs_sha256/proving_key.zkey" "trusted proving key"
+jq -e '
+    .version == 2 and
+    .ceremony.final_beacon.source == "https://example.invalid/public-randomness/42"
+' "$store/$r1cs_sha256/manifest.json" >/dev/null
 
 printf 'trusted setup workflow test passed\n'

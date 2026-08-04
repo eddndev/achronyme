@@ -4,6 +4,10 @@ use base64::Engine;
 use sha2::{Digest, Sha256};
 
 const R1CS_SHA256: &str = "d641de2416205f323639887a159ce421142bea5d60972f41ea0777ba0a2a5082";
+const BEACON_CONTRIBUTION_HASH: &str = "d4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_RANDOMNESS: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+const CONTRIBUTED_ZKEY_SHA256: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -26,7 +30,7 @@ fn install_fixture_store(root: &std::path::Path) {
     let contribution_hash = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
     let transcript_value = serde_json::json!({
         "format": "achronyme-ceremony-transcript",
-        "version": 1,
+        "version": 2,
         "protocol": "groth16",
         "curve": "bn254",
         "circuit": {
@@ -51,6 +55,13 @@ fn install_fixture_store(root: &std::path::Path) {
             "id": "Achronyme test phase2",
             "contribution_hash": contribution_hash
         }],
+        "final_beacon": {
+            "source": "https://example.invalid/public-randomness/42",
+            "randomness": BEACON_RANDOMNESS,
+            "iterations": 10,
+            "contribution_hash": BEACON_CONTRIBUTION_HASH,
+            "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+        },
         "verification": {
             "phase1_hash": "b2sum phase1.ptau",
             "phase1_transcript": "snarkjs powersoftau verify phase1.ptau",
@@ -62,7 +73,7 @@ fn install_fixture_store(root: &std::path::Path) {
     std::fs::write(artifact_dir.join("transcript.json"), &transcript).unwrap();
     let manifest = serde_json::json!({
         "format": "achronyme-trusted-key",
-        "version": 1,
+        "version": 2,
         "protocol": "groth16",
         "curve": "bn254",
         "r1cs_sha256": R1CS_SHA256,
@@ -77,7 +88,14 @@ fn install_fixture_store(root: &std::path::Path) {
             "contributors": [{
                 "id": "Achronyme test phase2",
                 "contribution_hash": contribution_hash
-            }]
+            }],
+            "final_beacon": {
+                "source": "https://example.invalid/public-randomness/42",
+                "randomness": BEACON_RANDOMNESS,
+                "iterations": 10,
+                "contribution_hash": BEACON_CONTRIBUTION_HASH,
+                "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+            }
         }
     });
     std::fs::write(

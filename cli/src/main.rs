@@ -52,12 +52,17 @@ fn main() -> Result<()> {
             TrustedSetupCommand::Package {
                 r1cs,
                 zkey,
+                contributed_zkey,
                 phase1,
                 store,
                 tool,
                 phase1_source,
                 phase1_blake2b512,
                 contributor,
+                beacon_source,
+                beacon_randomness,
+                beacon_iterations,
+                beacon_contribution_hash,
                 format,
             },
     } = &cli.command
@@ -65,12 +70,17 @@ fn main() -> Result<()> {
         return cli::commands::trusted_setup::package(
             r1cs,
             zkey,
+            contributed_zkey,
             phase1,
             store,
             tool,
             phase1_source,
             phase1_blake2b512,
             contributor,
+            beacon_source,
+            beacon_randomness,
+            *beacon_iterations,
+            beacon_contribution_hash,
             format,
         );
     }

@@ -15,10 +15,11 @@ use memory::{FieldElement, PrimeId};
 use crate::groth16::{fe_to_ark, AchronymeCircuit};
 
 pub use artifact::{
-    CeremonyContributor, CeremonyProvenance, CeremonyTranscript, TrustedKeyManifest, MANIFEST_FILE,
-    TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION, ZKEY_FILE,
+    CeremonyBeacon, CeremonyContributor, CeremonyProvenance, CeremonyTranscript,
+    TrustedKeyManifest, MANIFEST_FILE, TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION,
+    ZKEY_FILE,
 };
-pub use package::{package_trusted_key, PackageTrustedKey, PackagedTrustedKey};
+pub use package::{package_trusted_key, PackageFinalBeacon, PackageTrustedKey, PackagedTrustedKey};
 
 pub struct LoadedTrustedKey {
     pub proving_key: ProvingKey<Bn254>,

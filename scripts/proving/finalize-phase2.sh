@@ -9,11 +9,12 @@ source "$script_dir/common.sh"
 
 usage() {
     printf '%s\n' \
-        "usage: $0 --r1cs FILE --wtns FILE --phase1 FILE --zkey FILE" \
+        "usage: $0 --r1cs FILE --wtns FILE --phase1 FILE --contributed-zkey FILE" \
         "  --export-evidence FILE" \
         "  --source CIRCOM --input-file TOML [--lib DIR ...] --work-dir DIR" \
         "  --store DIR --ach-bin FILE --phase1-source URL" \
         "  --contributor ID=HASH [--contributor ID=HASH ...]" \
+        "  --beacon-source URL --beacon-randomness 64_HEX --beacon-iterations N" \
         "  [--phase1-blake2b512 HASH]" >&2
     exit 2
 }
@@ -21,7 +22,7 @@ usage() {
 r1cs=
 wtns=
 phase1=
-zkey=
+contributed_zkey=
 export_evidence=
 source_file=
 input_file=
@@ -30,6 +31,9 @@ store=
 ach_bin=
 phase1_source=
 phase1_blake2b512=$ACHRONYME_PHASE1_BLAKE2B512
+beacon_source=
+beacon_randomness=
+beacon_iterations=
 declare -a lib_dirs=()
 declare -a contributors=()
 while [[ $# -gt 0 ]]; do
@@ -37,7 +41,7 @@ while [[ $# -gt 0 ]]; do
         --r1cs) r1cs=${2:-}; shift 2 ;;
         --wtns) wtns=${2:-}; shift 2 ;;
         --phase1) phase1=${2:-}; shift 2 ;;
-        --zkey) zkey=${2:-}; shift 2 ;;
+        --contributed-zkey) contributed_zkey=${2:-}; shift 2 ;;
         --export-evidence) export_evidence=${2:-}; shift 2 ;;
         --source) source_file=${2:-}; shift 2 ;;
         --input-file) input_file=${2:-}; shift 2 ;;
@@ -48,14 +52,24 @@ while [[ $# -gt 0 ]]; do
         --phase1-source) phase1_source=${2:-}; shift 2 ;;
         --phase1-blake2b512) phase1_blake2b512=${2:-}; shift 2 ;;
         --contributor) contributors+=("${2:-}"); shift 2 ;;
+        --beacon-source) beacon_source=${2:-}; shift 2 ;;
+        --beacon-randomness) beacon_randomness=${2:-}; shift 2 ;;
+        --beacon-iterations) beacon_iterations=${2:-}; shift 2 ;;
         *) usage ;;
     esac
 done
-[[ -n "$r1cs" && -n "$wtns" && -n "$phase1" && -n "$zkey" ]] || usage
+[[ -n "$r1cs" && -n "$wtns" && -n "$phase1" && -n "$contributed_zkey" ]] || usage
 [[ -n "$export_evidence" ]] || usage
 [[ -n "$source_file" && -n "$input_file" && -n "$work_dir" ]] || usage
 [[ -n "$store" && -n "$ach_bin" && -n "$phase1_source" ]] || usage
 [[ ${#contributors[@]} -gt 0 ]] || die "at least one --contributor is required"
+[[ "$beacon_source" =~ ^https://[^[:space:]]+$ && ${#beacon_source} -le 2048 ]] || \
+    die "final beacon source must be a non-empty HTTPS URL"
+[[ "$beacon_randomness" =~ ^[0-9a-f]{64}$ ]] || \
+    die "final beacon randomness must be lowercase 64-hex"
+[[ "$beacon_iterations" =~ ^[0-9]+$ ]] || die "invalid final beacon iterations"
+((beacon_iterations >= 10 && beacon_iterations <= 63)) || \
+    die "final beacon iterations must be between 10 and 63"
 [[ "$phase1_blake2b512" =~ ^[0-9a-f]{128}$ ]] || die "invalid phase-1 BLAKE2b-512"
 for contributor in "${contributors[@]}"; do
     validate_contributor_pair "$contributor"
@@ -71,7 +85,7 @@ require_snarkjs
 require_regular_file "$r1cs" "R1CS artifact"
 require_regular_file "$wtns" "witness artifact"
 require_regular_file "$phase1" "phase-1 artifact"
-require_regular_file "$zkey" "final zkey"
+require_regular_file "$contributed_zkey" "contributed zkey"
 require_regular_file "$export_evidence" "proving export evidence"
 require_regular_file "$source_file" "Circom source"
 require_regular_file "$input_file" "witness input"
@@ -79,7 +93,7 @@ require_regular_file "$ach_bin" "Achronyme binary"
 require_clean_tracked_checkout "$repo_root"
 verify_phase1_hash "$phase1" "$phase1_blake2b512"
 phase1_sha256_start=$(sha256_file "$phase1")
-zkey_sha256_start=$(sha256_file "$zkey")
+contributed_zkey_sha256_start=$(sha256_file "$contributed_zkey")
 
 jq -e '
     type == "object" and
@@ -146,21 +160,48 @@ metrics="$work_dir/finalize.metrics.jsonl"
 create_metrics_file "$metrics"
 
 phase1_log="$work_dir/phase1-verify.log"
-zkey_log="$work_dir/zkey-verify.log"
+contributed_zkey_log="$work_dir/contributed-zkey-verify.log"
+final_zkey_log="$work_dir/final-zkey-verify.log"
 run_measured_logged "$metrics" phase1_transcript "$phase1_log" \
     snarkjs powersoftau verify "$phase1"
 run_measured "$metrics" witness_check snarkjs wtns check "$r1cs" "$wtns"
-run_measured_logged "$metrics" final_zkey_verify "$zkey_log" \
-    snarkjs zkey verify "$r1cs" "$phase1" "$zkey"
-assert_contributors_in_log "$zkey_log" "${contributors[@]}"
+run_measured_logged "$metrics" contributed_zkey_verify "$contributed_zkey_log" \
+    snarkjs zkey verify "$r1cs" "$phase1" "$contributed_zkey"
+assert_contributors_in_log "$contributed_zkey_log" "${contributors[@]}"
+
+beacon_name="Achronyme final beacon"
+final_zkey="$work_dir/circuit_final.zkey"
+partial_final_zkey="$work_dir/.circuit_final.zkey.partial"
+ensure_absent "$final_zkey"
+ensure_absent "$partial_final_zkey"
+run_measured "$metrics" final_beacon \
+    snarkjs zkey beacon "$contributed_zkey" "$partial_final_zkey" \
+        "$beacon_randomness" "$beacon_iterations" -n="$beacon_name"
+require_regular_file "$partial_final_zkey" "unverified final zkey"
+run_measured_logged "$metrics" final_zkey_verify "$final_zkey_log" \
+    snarkjs zkey verify "$r1cs" "$phase1" "$partial_final_zkey"
+assert_contributors_in_log "$final_zkey_log" "${contributors[@]}"
+
+beacon_contribution_hash=
+while IFS='|' read -r contribution_id contribution_hash; do
+    if [[ "$contribution_id" == "$beacon_name" ]]; then
+        [[ -z "$beacon_contribution_hash" ]] || \
+            die "verified zkey contains duplicate final beacon records"
+        beacon_contribution_hash=$contribution_hash
+    fi
+done < <(extract_zkey_contributions "$final_zkey_log")
+[[ "$beacon_contribution_hash" =~ ^[0-9a-f]{128}$ ]] || \
+    die "final beacon contribution hash was not found in verified zkey"
+mv -- "$partial_final_zkey" "$final_zkey"
+zkey_sha256_start=$(sha256_file "$final_zkey")
 
 snarkjs_vkey="$snarkjs_dir/verification_key.json"
 snarkjs_proof="$snarkjs_dir/proof.json"
 snarkjs_public="$snarkjs_dir/public.json"
 run_measured "$metrics" export_verification_key \
-    snarkjs zkey export verificationkey "$zkey" "$snarkjs_vkey"
+    snarkjs zkey export verificationkey "$final_zkey" "$snarkjs_vkey"
 run_measured "$metrics" snarkjs_prove \
-    snarkjs groth16 prove "$zkey" "$wtns" "$snarkjs_proof" "$snarkjs_public"
+    snarkjs groth16 prove "$final_zkey" "$wtns" "$snarkjs_proof" "$snarkjs_public"
 run_measured "$metrics" snarkjs_verify \
     snarkjs groth16 verify "$snarkjs_vkey" "$snarkjs_public" "$snarkjs_proof"
 run_measured "$metrics" achronyme_verify_snarkjs \
@@ -173,9 +214,14 @@ for contributor in "${contributors[@]}"; do
 done
 run_measured "$metrics" package_trusted_key \
     "$ach_bin" trusted-setup package \
-        --r1cs "$r1cs" --zkey "$zkey" --phase1 "$phase1" --store "$store" \
+        --r1cs "$r1cs" --zkey "$final_zkey" \
+        --contributed-zkey "$contributed_zkey" \
+        --phase1 "$phase1" --store "$store" \
         --tool "$ACHRONYME_SNARKJS_VERSION" --phase1-source "$phase1_source" \
         --phase1-blake2b512 "$phase1_blake2b512" \
+        --beacon-source "$beacon_source" --beacon-randomness "$beacon_randomness" \
+        --beacon-iterations "$beacon_iterations" \
+        --beacon-contribution-hash "$beacon_contribution_hash" \
         "${contributor_args[@]}" --format json
 
 achronyme_r1cs="$achronyme_dir/circuit.r1cs"
@@ -209,7 +255,8 @@ r1cs_constraints=$(od -An -tu4 -j84 -N4 "$r1cs" | tr -d ' ')
 [[ "$r1cs_constraints" == "$export_constraints" ]] || \
     die "export evidence constraint count mismatch"
 r1cs_sha256=$original_r1cs_sha256
-zkey_sha256=$(sha256_file "$zkey")
+zkey_sha256=$(sha256_file "$final_zkey")
+contributed_zkey_sha256=$contributed_zkey_sha256_start
 phase1_sha256=$(sha256_file "$phase1")
 artifact_dir="$store/$r1cs_sha256"
 require_directory "$artifact_dir" "packaged trusted-key artifact"
@@ -230,7 +277,9 @@ require_directory "$artifact_dir" "packaged trusted-key artifact"
     die "witness changed during phase-2 finalization"
 [[ "$(sha256_file "$phase1")" == "$phase1_sha256_start" ]] || \
     die "phase-1 artifact changed during phase-2 finalization"
-[[ "$(sha256_file "$zkey")" == "$zkey_sha256_start" ]] || \
+[[ "$(sha256_file "$contributed_zkey")" == "$contributed_zkey_sha256_start" ]] || \
+    die "contributed zkey changed during phase-2 finalization"
+[[ "$(sha256_file "$final_zkey")" == "$zkey_sha256_start" ]] || \
     die "final zkey changed during phase-2 finalization"
 require_clean_tracked_checkout "$repo_root"
 
@@ -259,18 +308,25 @@ jq -n \
     --arg snarkjs_version "$ACHRONYME_SNARKJS_VERSION" \
     --arg r1cs_sha256 "$r1cs_sha256" \
     --arg wtns_sha256 "$(sha256_file "$wtns")" \
+    --arg contributed_zkey_sha256 "$contributed_zkey_sha256" \
     --arg zkey_sha256 "$zkey_sha256" \
     --arg phase1_sha256 "$phase1_sha256" \
     --arg phase1_blake2b512 "$phase1_blake2b512" \
+    --arg beacon_name "$beacon_name" \
+    --arg beacon_source "$beacon_source" \
+    --arg beacon_randomness "$beacon_randomness" \
+    --arg beacon_contribution_hash "$beacon_contribution_hash" \
+    --argjson beacon_iterations "$beacon_iterations" \
     --argjson constraints "$r1cs_constraints" \
     --argjson r1cs_bytes "$(stat -c %s "$r1cs")" \
     --argjson wtns_bytes "$(stat -c %s "$wtns")" \
-    --argjson zkey_bytes "$(stat -c %s "$zkey")" \
+    --argjson contributed_zkey_bytes "$(stat -c %s "$contributed_zkey")" \
+    --argjson zkey_bytes "$(stat -c %s "$final_zkey")" \
     --slurpfile contributors "$contributors_json" \
     --slurpfile metrics_data "$metrics_json" \
     '{
         format: "achronyme-proving-release-evidence",
-        version: 1,
+        version: 2,
         git_commit: $git_commit,
         achronyme_binary_sha256: $achronyme_binary_sha256,
         export_evidence: {
@@ -286,12 +342,25 @@ jq -n \
         },
         ceremony: {
             phase1: {sha256: $phase1_sha256, blake2b512: $phase1_blake2b512},
+            contributed_zkey: {
+                sha256: $contributed_zkey_sha256,
+                bytes: $contributed_zkey_bytes
+            },
+            final_beacon: {
+                name: $beacon_name,
+                source: $beacon_source,
+                randomness: $beacon_randomness,
+                iterations: $beacon_iterations,
+                contribution_hash: $beacon_contribution_hash
+            },
             final_zkey: {sha256: $zkey_sha256, bytes: $zkey_bytes},
             contributors: $contributors[0]
         },
         verification: {
             phase1: true,
             witness: true,
+            contributed_zkey: true,
+            final_beacon: true,
             final_zkey: true,
             snarkjs_proof_in_achronyme: true,
             achronyme_proof_in_snarkjs: true

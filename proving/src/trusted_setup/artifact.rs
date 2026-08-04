@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const TRUSTED_KEY_FORMAT: &str = "achronyme-trusted-key";
-pub const TRUSTED_KEY_VERSION: u32 = 1;
+pub const TRUSTED_KEY_VERSION: u32 = 2;
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const ZKEY_FILE: &str = "proving_key.zkey";
 pub const TRANSCRIPT_FILE: &str = "transcript.json";
@@ -36,6 +36,7 @@ pub struct CeremonyProvenance {
     pub phase1_sha256: String,
     pub transcript_sha256: String,
     pub contributors: Vec<CeremonyContributor>,
+    pub final_beacon: CeremonyBeacon,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -43,6 +44,16 @@ pub struct CeremonyProvenance {
 pub struct CeremonyContributor {
     pub id: String,
     pub contribution_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CeremonyBeacon {
+    pub source: String,
+    pub randomness: String,
+    pub iterations: u32,
+    pub contribution_hash: String,
+    pub contributed_zkey_sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -57,6 +68,7 @@ pub struct CeremonyTranscript {
     pub final_key: TranscriptFinalKey,
     pub tool: String,
     pub contributors: Vec<CeremonyContributor>,
+    pub final_beacon: CeremonyBeacon,
     pub verification: TranscriptVerification,
 }
 
@@ -172,7 +184,9 @@ fn validate_transcript(
     transcript: &CeremonyTranscript,
     manifest: &TrustedKeyManifest,
 ) -> Result<(), String> {
-    if transcript.format != "achronyme-ceremony-transcript" || transcript.version != 1 {
+    if transcript.format != "achronyme-ceremony-transcript"
+        || transcript.version != TRUSTED_KEY_VERSION
+    {
         return Err("unsupported ceremony transcript format or version".to_string());
     }
     if transcript.protocol != manifest.protocol || transcript.curve != manifest.curve {
@@ -213,6 +227,10 @@ fn validate_transcript(
             })
     {
         return Err("ceremony transcript provenance does not match manifest".to_string());
+    }
+    validate_beacon(&transcript.final_beacon)?;
+    if transcript.final_beacon != manifest.ceremony.final_beacon {
+        return Err("ceremony transcript final beacon does not match manifest".to_string());
     }
     let verification = &transcript.verification;
     if verification.phase1_hash != "b2sum phase1.ptau"
@@ -262,7 +280,32 @@ fn validate_manifest(
     for contributor in &manifest.ceremony.contributors {
         validate_contributor(contributor)?;
     }
+    validate_beacon(&manifest.ceremony.final_beacon)?;
     Ok(())
+}
+
+pub(super) fn validate_beacon(beacon: &CeremonyBeacon) -> Result<(), String> {
+    if !beacon.source.starts_with("https://")
+        || beacon.source.len() <= "https://".len()
+        || beacon.source.len() > 2048
+        || !beacon.source.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        return Err("final beacon source must be a non-empty HTTPS URL".to_string());
+    }
+    validate_hex(&beacon.randomness, 64, "final beacon randomness")?;
+    if !(10..=63).contains(&beacon.iterations) {
+        return Err("final beacon iterations must be between 10 and 63".to_string());
+    }
+    validate_hex(
+        &beacon.contribution_hash,
+        128,
+        "final beacon contribution hash",
+    )?;
+    validate_hex(
+        &beacon.contributed_zkey_sha256,
+        64,
+        "contributed zkey SHA-256",
+    )
 }
 
 pub(super) fn validate_contributor(contributor: &CeremonyContributor) -> Result<(), String> {

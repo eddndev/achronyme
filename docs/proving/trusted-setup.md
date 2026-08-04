@@ -167,7 +167,7 @@ operator's control. On that contributor's machine, run:
 ```text
 scripts/proving/contribute-phase2.sh \
   --input circuit_0000.zkey \
-  --output circuit_final.zkey \
+  --output circuit_0001.zkey \
   --name "contributor-pseudonym"
 ```
 
@@ -177,18 +177,28 @@ CI logs, or monitoring agents. Do not record the interactive session. The
 contributor must destroy any temporary entropy and toxic-waste material after
 the contribution is complete.
 
-Return the final zkey plus the contributor ID and contribution hash. The
+Return the contributed zkey plus the contributor ID and contribution hash. The
 release operator must not accept an ID/hash pair that is absent from
 `snarkjs zkey verify` output.
 
-### 4. Verify, package, prove, and cross-verify
+### 4. Commit a final public beacon and cross-verify
+
+After the independent contribution is fixed, commit to a future round from a
+publicly verifiable randomness network. Retrieve and verify that round only
+after it has been produced, and retain its stable HTTPS round URL and
+64-character lowercase randomness value. A public beacon does not replace an
+independent secret contribution; it finalizes the transcript without letting
+the last contributor choose the final transformation in advance.
+
+The finalizer applies the beacon itself. Ten means `2^10` hash iterations, as
+defined by `snarkjs zkey beacon`:
 
 ```text
 scripts/proving/finalize-phase2.sh \
   --r1cs ceremony/circuit.r1cs \
   --wtns ceremony/witness.wtns \
   --phase1 ceremony/phase1.ptau \
-  --zkey ceremony/circuit_final.zkey \
+  --contributed-zkey ceremony/circuit_0001.zkey \
   --export-evidence ceremony/export-evidence.json \
   --source circuit.circom \
   --input-file inputs.toml \
@@ -196,20 +206,25 @@ scripts/proving/finalize-phase2.sh \
   --store trusted-keys \
   --ach-bin target/release/ach \
   --phase1-source "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau" \
-  --contributor "contributor-pseudonym=CONTRIBUTION_HASH"
+  --contributor "contributor-pseudonym=CONTRIBUTION_HASH" \
+  --beacon-source "https://PUBLIC_BEACON/rounds/COMMITTED_ROUND" \
+  --beacon-randomness "64_HEX_RANDOMNESS" \
+  --beacon-iterations 10
 ```
 
 The finalizer performs all of the following before reporting success:
 
 1. binds the finalization to the measured export evidence and exact binary;
 2. verifies the phase-1 transcript and witness;
-3. verifies that the final zkey matches the exact R1CS and phase 1;
-4. matches every declared contributor ID/hash against the verified zkey;
-5. generates a snarkjs proof and verifies it with Achronyme;
-6. packages the immutable trusted store;
-7. recompiles and proves with Achronyme without local setup;
-8. verifies the Achronyme proof with both Achronyme and snarkjs;
-9. writes `release-evidence.json` with hashes, sizes, commit, constraints,
+3. verifies that the contributed zkey matches the exact R1CS and phase 1;
+4. matches every declared contributor ID/hash against that verified zkey;
+5. applies the committed public beacon and extracts its contribution hash;
+6. verifies the resulting final zkey and its complete contribution history;
+7. generates a snarkjs proof and verifies it with Achronyme;
+8. packages the immutable trusted store as artifact format version 2;
+9. recompiles and proves with Achronyme without local setup;
+10. verifies the Achronyme proof with both Achronyme and snarkjs;
+11. writes `release-evidence.json` with hashes, sizes, commit, constraints,
    elapsed time, and maximum RSS for each measured stage.
 
 ### 5. Verify detached artifacts
@@ -252,5 +267,6 @@ cargo build -p cli
 bash test/proving/trusted_setup_workflow.sh
 ```
 
-This gate tests format compatibility and both proof directions. Its local test
-beacon is intentionally public and provides no production trust.
+This gate tests an independent-contribution-shaped transcript, a separate
+final beacon, artifact compatibility, and both proof directions. Its local
+entropy and beacon are intentionally public and provide no production trust.

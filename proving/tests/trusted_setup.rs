@@ -10,6 +10,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 static FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+const BEACON_CONTRIBUTION_HASH: &str = "d4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_RANDOMNESS: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+const CONTRIBUTED_ZKEY_SHA256: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 fn basic_arithmetic_system() -> (ConstraintSystem, Vec<FieldElement>) {
     let mut cs = ConstraintSystem::new();
@@ -83,7 +87,7 @@ impl FixtureStore {
         let contribution_hash = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
         let transcript_value = serde_json::json!({
             "format": "achronyme-ceremony-transcript",
-            "version": 1,
+            "version": 2,
             "protocol": "groth16",
             "curve": "bn254",
             "circuit": {
@@ -108,6 +112,13 @@ impl FixtureStore {
                 "id": "Achronyme test phase2",
                 "contribution_hash": contribution_hash
             }],
+            "final_beacon": {
+                "source": "https://example.invalid/public-randomness/42",
+                "randomness": BEACON_RANDOMNESS,
+                "iterations": 10,
+                "contribution_hash": BEACON_CONTRIBUTION_HASH,
+                "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+            },
             "verification": {
                 "phase1_hash": "b2sum phase1.ptau",
                 "phase1_transcript": "snarkjs powersoftau verify phase1.ptau",
@@ -119,7 +130,7 @@ impl FixtureStore {
         std::fs::write(artifact_dir.join("transcript.json"), &transcript).unwrap();
         let manifest = serde_json::json!({
             "format": "achronyme-trusted-key",
-            "version": 1,
+            "version": 2,
             "protocol": "groth16",
             "curve": "bn254",
             "r1cs_sha256": digest,
@@ -134,7 +145,14 @@ impl FixtureStore {
                 "contributors": [{
                     "id": "Achronyme test phase2",
                     "contribution_hash": contribution_hash
-                }]
+                }],
+                "final_beacon": {
+                    "source": "https://example.invalid/public-randomness/42",
+                    "randomness": BEACON_RANDOMNESS,
+                    "iterations": 10,
+                    "contribution_hash": BEACON_CONTRIBUTION_HASH,
+                    "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+                }
             }
         });
         std::fs::write(
@@ -276,6 +294,18 @@ fn rejects_transcript_provenance_tampering_even_with_updated_hash() {
     });
 
     assert!(load_error(&cs, &store.root).contains("provenance does not match manifest"));
+}
+
+#[test]
+fn rejects_final_beacon_tampering_even_with_updated_transcript_hash() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    store.edit_transcript(|transcript| {
+        transcript["final_beacon"]["randomness"] =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()
+    });
+
+    assert!(load_error(&cs, &store.root).contains("final beacon does not match manifest"));
 }
 
 #[test]
