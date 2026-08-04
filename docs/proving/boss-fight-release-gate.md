@@ -44,13 +44,21 @@ gcloud compute instances create achronyme-proving-010 \
   --boot-disk-type pd-balanced \
   --boot-disk-size 150GB \
   --image-family ubuntu-2404-lts-amd64 \
-  --image-project ubuntu-os-cloud
+  --image-project ubuntu-os-cloud \
+  --max-run-duration=12h \
+  --instance-termination-action=STOP
 ```
 
 The command shape is defined by the
 [official gcloud instance-create reference](https://cloud.google.com/sdk/gcloud/reference/compute/instances/create).
 Creation, billing, firewall selection, and deletion are operator actions; the
 repository workflow does not create cloud resources.
+
+The 12-hour termination bound stops compute if the operator disconnects or a
+stage stalls beyond the six-hour export timeout. `STOP` preserves the boot disk
+for failure evidence, so disk charges continue until the instance and disk are
+deleted. Restarting the VM starts a new 12-hour run-duration window; it is not a
+substitute for the final cleanup check.
 
 Use a disposable VM without unrelated credentials or workloads. Copy the
 release candidate source at an exact commit. Do not perform the independent
