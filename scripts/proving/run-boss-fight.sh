@@ -43,6 +43,12 @@ require_regular_file "$ach_bin" "Achronyme binary"
 require_regular_file "$source_file" "ECDSA boss-fight circuit"
 require_regular_file "$input_file" "ECDSA boss-fight input fixture"
 require_directory "$library_dir" "circomlib directory"
+require_command git
+require_command sha256sum
+
+git_commit=$(git -C "$repo_root" rev-parse --verify HEAD)
+[[ "$git_commit" =~ ^[0-9a-f]{40,64}$ ]] || die "cannot resolve the tested Git commit"
+achronyme_binary_sha256=$(sha256_file "$ach_bin")
 
 max_virtual_memory_bytes=$((max_virtual_memory_gib * 1024 * 1024 * 1024))
 declare -a export_command=(
@@ -63,6 +69,8 @@ if [[ "$dry_run" == true ]]; then
     printf 'timeout_seconds: %s\n' "$timeout_seconds"
     printf 'max_virtual_memory_gib: %s\n' "$max_virtual_memory_gib"
     printf 'min_free_disk_gib: %s\n' "$min_free_disk_gib"
+    printf 'git_commit: %s\n' "$git_commit"
+    printf 'achronyme_binary_sha256: %s\n' "$achronyme_binary_sha256"
     printf 'command:'
     printf ' %q' "${export_command[@]}"
     printf '\n'
@@ -75,6 +83,7 @@ require_command prlimit
 require_command timeout
 require_command /usr/bin/time
 require_snarkjs
+require_clean_git_checkout "$repo_root"
 ensure_absent "$work_dir"
 mkdir -p "$(dirname "$work_dir")"
 available_kib=$(df -Pk "$(dirname "$work_dir")" | awk 'NR == 2 {print $4}')
@@ -105,10 +114,17 @@ required_domain=$((constraints + public_inputs + 1))
 [[ "$required_domain" -le "$phase1_capacity" ]] || \
     die "power-$ACHRONYME_PHASE1_POWER phase 1 is too small for $required_domain domain entries"
 
+require_clean_git_checkout "$repo_root"
+[[ "$(git -C "$repo_root" rev-parse --verify HEAD)" == "$git_commit" ]] || \
+    die "Git commit changed during the boss-fight export"
+[[ "$(sha256_file "$ach_bin")" == "$achronyme_binary_sha256" ]] || \
+    die "Achronyme binary changed during the boss-fight export"
+
 evidence="$work_dir/bossfight-export.json"
 ensure_absent "$evidence"
 jq -n \
-    --arg git_commit "$(git -C "$repo_root" rev-parse HEAD)" \
+    --arg git_commit "$git_commit" \
+    --arg achronyme_binary_sha256 "$achronyme_binary_sha256" \
     --arg achronyme_version "$("$ach_bin" --version)" \
     --arg source_sha256 "$(sha256_file "$source_file")" \
     --arg inputs_sha256 "$(sha256_file "$input_file")" \
@@ -128,6 +144,7 @@ jq -n \
         format: "achronyme-bossfight-export",
         version: 1,
         git_commit: $git_commit,
+        achronyme_binary_sha256: $achronyme_binary_sha256,
         achronyme_version: $achronyme_version,
         fixture: {source_sha256: $source_sha256, inputs_sha256: $inputs_sha256},
         circuit: {

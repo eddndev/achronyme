@@ -18,6 +18,8 @@ rg -Fq 'n2-standard-8' "$boss"
 rg -Uq 'does not[[:space:]]+prove that 32 GB is sufficient' "$boss"
 rg -Fq 'release-evidence.json' "$boss"
 rg -Fq 'run-boss-fight.sh' "$boss"
+rg -Fq 'clean checkout' "$boss"
+rg -Uq 'Achronyme binary[[:space:]]+SHA-256' "$boss"
 rg -Fq 'Proving setup policy' "$repo_root/docs/migration/0.1.0.md"
 rg -Fq 'trusted-setup.md' "$repo_root/README.md"
 

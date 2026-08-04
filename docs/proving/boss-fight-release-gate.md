@@ -74,6 +74,12 @@ git status --short
 The source checkout must be clean at the tested commit. Do not benchmark a
 debug binary or a checkout with unrecorded source changes.
 
+The harness requires a clean checkout and refuses a dirty tree before
+allocating the circuit. It records the exact Git commit and Achronyme binary
+SHA-256, then checks the checkout and binary again before writing evidence.
+This prevents a changed source tree or a replaced executable from being
+attributed to the recorded commit.
+
 ## Stage 1: bounded R1CS and witness export
 
 Inspect the exact command without allocating the circuit:
@@ -163,7 +169,8 @@ Before the 0.1.0 release is approved, review all of these outputs:
 - R1CS, witness, phase-1, final-zkey, transcript, and manifest hashes;
 - verified contributor IDs/hashes;
 - successful snarkjs-to-Achronyme and Achronyme-to-snarkjs verification;
-- the exact tested Git commit and release binary version.
+- the exact tested Git commit, release binary version, and Achronyme binary
+  SHA-256.
 
 The final evidence must contain no witness values, contributor entropy, toxic
 waste, or proving-key bytes. Hashes and resource measurements are safe to
