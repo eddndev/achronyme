@@ -45,6 +45,7 @@ jobs:
 
       - name: Verify proving workflow contracts
         run: |
+          bash test/proving/ci_workflow_contract_test.sh
           bash test/proving/ci_workflow_contract.sh
           bash test/proving/documentation_contract.sh
           bash test/proving/boss_fight_harness_test.sh
