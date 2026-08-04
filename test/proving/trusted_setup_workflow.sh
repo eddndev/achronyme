@@ -11,7 +11,7 @@ source "$scripts_dir/common.sh"
 for script in "$scripts_dir"/*.sh; do
     bash -n "$script"
 done
-if rg -n -- '--entropy|[[:space:]]-e=' \
+if grep -En -- '--entropy|[[:space:]]-e=' \
     "$scripts_dir"/*.sh >/dev/null; then
     die "production ceremony scripts must not accept command-line entropy"
 fi
