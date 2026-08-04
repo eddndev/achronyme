@@ -1,0 +1,362 @@
+#![cfg(feature = "groth16-bn254")]
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use base64::Engine;
+use constraints::r1cs::{ConstraintSystem, LinearCombination};
+use memory::FieldElement;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+static FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+const BEACON_CONTRIBUTION_HASH: &str = "d4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+const BEACON_RANDOMNESS: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+const CONTRIBUTED_ZKEY_SHA256: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn basic_arithmetic_system() -> (ConstraintSystem, Vec<FieldElement>) {
+    let mut cs = ConstraintSystem::new();
+    let out = cs.alloc_input();
+    let a = cs.alloc_witness();
+    let b = cs.alloc_witness();
+    let _unused = cs.alloc_witness();
+    cs.enforce(
+        LinearCombination::from_variable(a),
+        LinearCombination::from_variable(b),
+        LinearCombination::from_variable(out),
+    );
+    let witness = vec![
+        FieldElement::from_u64(1),
+        FieldElement::from_u64(42),
+        FieldElement::from_u64(6),
+        FieldElement::from_u64(7),
+        FieldElement::from_u64(42),
+    ];
+    (cs, witness)
+}
+
+fn same_dimensions_different_system() -> ConstraintSystem {
+    let mut cs = ConstraintSystem::new();
+    let out = cs.alloc_input();
+    let a = cs.alloc_witness();
+    let b = cs.alloc_witness();
+    let unused = cs.alloc_witness();
+    cs.enforce(
+        LinearCombination::from_variable(unused),
+        LinearCombination::from_variable(b),
+        LinearCombination::from_variable(out),
+    );
+    assert_eq!(a.index(), 2);
+    assert_eq!(out.index(), 1);
+    cs
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn unique_temp_root(label: &str) -> PathBuf {
+    let id = FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("ach-trusted-{label}-{}-{id}", std::process::id()))
+}
+
+struct FixtureStore {
+    root: PathBuf,
+    digest: String,
+}
+
+impl FixtureStore {
+    fn new(cs: &ConstraintSystem) -> Self {
+        let root = unique_temp_root("zkey");
+        let digest = proving::trusted_setup::r1cs_sha256(cs);
+        let artifact_dir = root.join(&digest);
+        std::fs::create_dir_all(&artifact_dir).unwrap();
+
+        let encoded = include_str!("fixtures/trusted_basic_arithmetic.zkey.b64");
+        let zkey = base64::engine::general_purpose::STANDARD
+            .decode(encoded.split_whitespace().collect::<String>())
+            .unwrap();
+        let zkey_sha256 = sha256_hex(&zkey);
+        std::fs::write(artifact_dir.join("proving_key.zkey"), zkey).unwrap();
+
+        let phase1_sha256 = "19a7c2843196e632054628fc0ce4226a6607472a89c057dfc0a61ffaca4a1395";
+        let contribution_hash = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
+        let transcript_value = serde_json::json!({
+            "format": "achronyme-ceremony-transcript",
+            "version": 3,
+            "protocol": "groth16",
+            "curve": "bn254",
+            "circuit": {
+                "file": "circuit.r1cs",
+                "r1cs_sha256": digest,
+                "constraints": 1,
+                "public_inputs": 1,
+                "variables": 5
+            },
+            "phase1": {
+                "file": "phase1.ptau",
+                "source": "https://example.invalid/test-only.ptau",
+                "sha256": phase1_sha256,
+                "blake2b512": "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678"
+            },
+            "final_key": {
+                "file": "proving_key.zkey",
+                "zkey_sha256": zkey_sha256
+            },
+            "tool": "snarkjs@0.7.6",
+            "contributors": [{
+                "id": "Achronyme test phase2",
+                "contribution_hash": contribution_hash
+            }],
+            "final_beacon": {
+                "source": "https://example.invalid/public-randomness/42",
+                "round": 42,
+                "randomness": BEACON_RANDOMNESS,
+                "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "commitment_publication": "https://example.invalid/test-only/commitment-42",
+                "commitment_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "iterations": 10,
+                "contribution_hash": BEACON_CONTRIBUTION_HASH,
+                "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+            },
+            "verification": {
+                "phase1_hash": "b2sum phase1.ptau",
+                "phase1_transcript": "snarkjs powersoftau verify phase1.ptau",
+                "circuit_key_binding": "snarkjs zkey verify circuit.r1cs phase1.ptau proving_key.zkey"
+            }
+        });
+        let mut transcript = serde_json::to_vec_pretty(&transcript_value).unwrap();
+        transcript.push(b'\n');
+        std::fs::write(artifact_dir.join("transcript.json"), &transcript).unwrap();
+        let manifest = serde_json::json!({
+            "format": "achronyme-trusted-key",
+            "version": 3,
+            "protocol": "groth16",
+            "curve": "bn254",
+            "r1cs_sha256": digest,
+            "zkey_sha256": zkey_sha256,
+            "constraints": 1,
+            "public_inputs": 1,
+            "variables": 5,
+            "ceremony": {
+                "tool": "snarkjs@0.7.6",
+                "phase1_sha256": phase1_sha256,
+                "transcript_sha256": sha256_hex(&transcript),
+                "contributors": [{
+                    "id": "Achronyme test phase2",
+                    "contribution_hash": contribution_hash
+                }],
+                "final_beacon": {
+                    "source": "https://example.invalid/public-randomness/42",
+                    "round": 42,
+                    "randomness": BEACON_RANDOMNESS,
+                    "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                    "commitment_publication": "https://example.invalid/test-only/commitment-42",
+                    "commitment_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "iterations": 10,
+                    "contribution_hash": BEACON_CONTRIBUTION_HASH,
+                    "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
+                }
+            }
+        });
+        std::fs::write(
+            artifact_dir.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        Self { root, digest }
+    }
+
+    fn artifact_dir(&self) -> PathBuf {
+        self.root.join(&self.digest)
+    }
+
+    fn path(&self, name: &str) -> PathBuf {
+        self.artifact_dir().join(name)
+    }
+
+    fn edit_manifest(&self, edit: impl FnOnce(&mut Value)) {
+        let path = self.path("manifest.json");
+        let mut manifest: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        edit(&mut manifest);
+        std::fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    }
+
+    fn edit_transcript(&self, edit: impl FnOnce(&mut Value)) {
+        let path = self.path("transcript.json");
+        let mut transcript: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        edit(&mut transcript);
+        let mut bytes = serde_json::to_vec_pretty(&transcript).unwrap();
+        bytes.push(b'\n');
+        std::fs::write(path, bytes).unwrap();
+        let digest = sha256_hex(&std::fs::read(self.path("transcript.json")).unwrap());
+        self.edit_manifest(|manifest| manifest["ceremony"]["transcript_sha256"] = digest.into());
+    }
+
+    fn update_zkey_hash(&self) {
+        let digest = sha256_hex(&std::fs::read(self.path("proving_key.zkey")).unwrap());
+        self.edit_manifest(|manifest| manifest["zkey_sha256"] = digest.clone().into());
+        self.edit_transcript(|transcript| transcript["final_key"]["zkey_sha256"] = digest.into());
+    }
+
+    fn clone_artifact_for(&self, cs: &ConstraintSystem) {
+        let digest = proving::trusted_setup::r1cs_sha256(cs);
+        let target = self.root.join(&digest);
+        std::fs::create_dir_all(&target).unwrap();
+        for name in ["manifest.json", "proving_key.zkey", "transcript.json"] {
+            std::fs::copy(self.path(name), target.join(name)).unwrap();
+        }
+        let manifest_path = target.join("manifest.json");
+        let mut manifest: Value =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["r1cs_sha256"] = digest.into();
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        let transcript_path = target.join("transcript.json");
+        let mut transcript: Value =
+            serde_json::from_slice(&std::fs::read(&transcript_path).unwrap()).unwrap();
+        transcript["circuit"]["r1cs_sha256"] = proving::trusted_setup::r1cs_sha256(cs).into();
+        let mut transcript_bytes = serde_json::to_vec_pretty(&transcript).unwrap();
+        transcript_bytes.push(b'\n');
+        std::fs::write(&transcript_path, &transcript_bytes).unwrap();
+        let transcript_digest = sha256_hex(&transcript_bytes);
+        let mut manifest: Value =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["ceremony"]["transcript_sha256"] = transcript_digest.into();
+        std::fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    }
+}
+
+impl Drop for FixtureStore {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+fn load_error(cs: &ConstraintSystem, store: &Path) -> String {
+    proving::trusted_setup::load_trusted_key(cs, store)
+        .err()
+        .expect("trusted artifact should be rejected")
+}
+
+#[test]
+fn trusted_zkey_proves_exact_exported_r1cs() {
+    let (cs, witness) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    let result = proving::groth16_bn254::generate_proof(
+        &cs,
+        &witness,
+        &store.root,
+        &proving::groth16::ProvingKeySource::TrustedStore(store.root.clone()),
+    )
+    .expect("ceremony-derived zkey should prove the exact circuit");
+
+    let akron::ProveResult::Proof {
+        proof_json,
+        public_json,
+        vkey_json,
+    } = result
+    else {
+        panic!("expected proof artifacts");
+    };
+    assert!(
+        proving::groth16_bn254::verify_proof_from_json(&proof_json, &public_json, &vkey_json)
+            .expect("verify trusted proof")
+    );
+}
+
+#[test]
+fn rejects_zkey_hash_tampering() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    let path = store.path("proving_key.zkey");
+    let mut bytes = std::fs::read(&path).unwrap();
+    *bytes.last_mut().unwrap() ^= 1;
+    std::fs::write(path, bytes).unwrap();
+
+    assert!(load_error(&cs, &store.root).contains("SHA-256 does not match manifest"));
+}
+
+#[test]
+fn rejects_transcript_hash_tampering() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    std::fs::write(store.path("transcript.json"), b"changed\n").unwrap();
+
+    assert!(load_error(&cs, &store.root).contains("transcript SHA-256"));
+}
+
+#[test]
+fn rejects_transcript_provenance_tampering_even_with_updated_hash() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    store.edit_transcript(|transcript| {
+        transcript["contributors"][0]["id"] = "different contributor".into()
+    });
+
+    assert!(load_error(&cs, &store.root).contains("provenance does not match manifest"));
+}
+
+#[test]
+fn rejects_final_beacon_tampering_even_with_updated_transcript_hash() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    store.edit_transcript(|transcript| {
+        transcript["final_beacon"]["randomness"] =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()
+    });
+
+    assert!(load_error(&cs, &store.root).contains("final beacon does not match manifest"));
+}
+
+#[test]
+fn rejects_manifest_curve_tampering() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    store.edit_manifest(|manifest| manifest["curve"] = "bls12-381".into());
+
+    assert!(load_error(&cs, &store.root).contains("groth16 on bn254"));
+}
+
+#[test]
+fn rejects_malformed_zkey_even_when_manifest_hash_matches() {
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    std::fs::write(store.path("proving_key.zkey"), b"zkey\x01\0\0\0").unwrap();
+    store.update_zkey_hash();
+
+    assert!(load_error(&cs, &store.root).contains("truncated zkey integer"));
+}
+
+#[test]
+fn rejects_same_size_key_for_different_constraints() {
+    let (fixture_cs, _) = basic_arithmetic_system();
+    let other_cs = same_dimensions_different_system();
+    let store = FixtureStore::new(&fixture_cs);
+    store.clone_artifact_for(&other_cs);
+
+    assert!(load_error(&other_cs, &store.root).contains("constraint matrices do not match"));
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_symlinked_artifact_directory() {
+    use std::os::unix::fs::symlink;
+
+    let (cs, _) = basic_arithmetic_system();
+    let store = FixtureStore::new(&cs);
+    let alias_root = unique_temp_root("alias");
+    std::fs::create_dir_all(&alias_root).unwrap();
+    symlink(store.artifact_dir(), alias_root.join(&store.digest)).unwrap();
+
+    let error = load_error(&cs, &alias_root);
+    let _ = std::fs::remove_dir_all(alias_root);
+    assert!(error.contains("artifact directory") && error.contains("must be a directory"));
+}

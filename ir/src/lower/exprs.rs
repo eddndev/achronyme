@@ -80,6 +80,12 @@ impl<F: FieldBackend> IrLowering<F> {
                 "prove blocks cannot be nested inside circuits (a circuit is already generating constraints)".into(),
                 to_ir_span(span),
             )),
+            Expr::Concurrent { span, .. }
+            | Expr::Spawn { span, .. }
+            | Expr::Await { span, .. } => Err(IrError::UnsupportedOperation(
+                "task effects are not allowed inside circuits".into(),
+                to_ir_span(span),
+            )),
             // CircuitCall removed — keyword-arg calls are now unified in Call
             Expr::FnExpr { span, .. } => Err(IrError::UnsupportedOperation(
                 "closures are not supported in circuits (captured variables cannot be tracked as circuit wires — use 'fn' declarations instead)".into(),

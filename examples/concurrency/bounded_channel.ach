@@ -1,0 +1,16 @@
+fn produce(messages) {
+    await channel_send(messages, "hello")
+    await channel_send(messages, " world")
+}
+
+let messages = channel(1)
+let text = concurrent {
+    spawn produce(messages)
+    let first = await channel_receive(messages)
+    let second = await channel_receive(messages)
+    first + second
+}
+
+assert(text == "hello world")
+channel_close(messages)
+print("bounded-channel-ok")

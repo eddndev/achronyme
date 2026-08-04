@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+temporary_root=""
+smoke_root=""
+
+dump_smoke_logs() {
+    local log
+
+    printf 'LLVM production gate smoke logs:\n' >&2
+    for log in "$smoke_root"/*.stdout "$smoke_root"/*.stderr; do
+        [[ -f "$log" ]] || continue
+        printf '[%s]\n' "${log##*/}" >&2
+        cat "$log" >&2
+    done
+}
+
+cleanup() {
+    local exit_status=$?
+
+    if [[ "$exit_status" -ne 0 && -n "$smoke_root" && -d "$smoke_root" ]]; then
+        dump_smoke_logs
+    fi
+    if [[ -n "$temporary_root" && -d "$temporary_root" ]]; then
+        rm -rf "$temporary_root"
+    fi
+    trap - EXIT
+    exit "$exit_status"
+}
+
+trap cleanup EXIT
+
 if [[ "$(uname -s)" != "Linux" ]]; then
     echo "LLVM production gate requires Linux" >&2
     exit 1
@@ -42,6 +71,7 @@ echo "Gate host: $(uname -s) $(uname -m)"
 echo "Gate Rust: $(rustc --version)"
 echo "Gate Clang: $clang_version"
 
+bash test/llvm_production_gate_contract.sh
 bash test/release_bundle_contract.sh
 cargo build -p akron-aot-runtime
 bash test/release_panic_contract.sh
@@ -60,7 +90,6 @@ cargo test -p cli \
 cargo build --release -p cli -p akron-aot-runtime
 
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/akron-llvm-production-gate.XXXXXX")"
-trap 'rm -rf "$temporary_root"' EXIT
 package_root="$temporary_root/package"
 install_root="$temporary_root/install"
 smoke_root="$temporary_root/smoke"
@@ -146,6 +175,8 @@ fi
         "$ach" --no-config aot io.ach --output io-native \
         > io-build.stdout 2> io-build.stderr
     printf '%s\n' "$smoke_root/io-output.txt" | \
+        AKRON_ALLOW_READ="$smoke_root" \
+        AKRON_ALLOW_WRITE="$smoke_root" \
         AKRON_ENGINE_TRACE=1 ./io-native > io.stdout 2> io.stderr
 )
 grep -q 'akron-installed-io' "$smoke_root/io.stdout"

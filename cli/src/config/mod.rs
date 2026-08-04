@@ -20,6 +20,7 @@ pub struct AchronymeToml {
     pub project: ProjectSection,
     pub build: Option<BuildSection>,
     pub vm: Option<VmSection>,
+    pub proving: Option<ProvingSection>,
     pub circuit: Option<CircuitSection>,
     pub circom: Option<CircomSection>,
 }
@@ -61,6 +62,26 @@ pub struct VmSection {
     pub max_heap: Option<String>,
     pub stress_gc: Option<bool>,
     pub gc_stats: Option<bool>,
+    pub allow_read: Option<Vec<String>>,
+    pub allow_write: Option<Vec<String>>,
+    pub allow_connect: Option<Vec<String>>,
+    pub allow_listen: Option<Vec<String>>,
+    pub max_tasks: Option<usize>,
+    pub max_resources: Option<usize>,
+    pub max_task_scopes: Option<usize>,
+    pub max_pending_native_requests: Option<usize>,
+    pub max_retained_task_results: Option<usize>,
+    pub max_channels: Option<usize>,
+    pub max_channel_operations: Option<usize>,
+    pub blocking_workers: Option<usize>,
+    pub blocking_queue_capacity: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvingSection {
+    pub insecure_dev_setup: Option<bool>,
+    pub trusted_key_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,6 +120,20 @@ pub struct ProjectConfig {
     pub stress_gc: bool,
     pub gc_stats: bool,
     pub circuit_stats: bool,
+    pub proving_key_source: proving::groth16::ProvingKeySource,
+    pub allow_read: Vec<PathBuf>,
+    pub allow_write: Vec<PathBuf>,
+    pub allow_connect: Vec<String>,
+    pub allow_listen: Vec<String>,
+    pub max_tasks: Option<usize>,
+    pub max_resources: Option<usize>,
+    pub max_task_scopes: Option<usize>,
+    pub max_pending_native_requests: Option<usize>,
+    pub max_retained_task_results: Option<usize>,
+    pub max_channels: Option<usize>,
+    pub max_channel_operations: Option<usize>,
+    pub blocking_workers: Option<usize>,
+    pub blocking_queue_capacity: Option<usize>,
     pub circom_lib_dirs: Vec<PathBuf>,
 }
 

@@ -7,14 +7,16 @@ use memory::{BigInt, BigIntWidth, CircomHandle, FieldElement, Function, Value, I
 
 use crate::loader::{validate_field_limbs, LoaderError};
 use crate::specs::{
-    SER_TAG_BIGINT, SER_TAG_BYTES, SER_TAG_CIRCOM_HANDLE, SER_TAG_FALSE, SER_TAG_FIELD,
-    SER_TAG_INT, SER_TAG_NIL, SER_TAG_STRING, SER_TAG_TRUE,
+    CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect, SER_TAG_BIGINT,
+    SER_TAG_BYTES, SER_TAG_CIRCOM_HANDLE, SER_TAG_FALSE, SER_TAG_FIELD, SER_TAG_INT, SER_TAG_NIL,
+    SER_TAG_STRING, SER_TAG_TRUE,
 };
 
 use super::{
-    CompiledProgram, ProgramCapabilities, EXECUTABLE_FORMAT_VERSION, MAX_BIGINTS, MAX_BLOBS,
-    MAX_BLOB_LEN, MAX_BYTECODE, MAX_CIRCOM_ARGS, MAX_CIRCOM_HANDLES, MAX_CONSTANTS, MAX_FIELDS,
-    MAX_FUNCTIONS, MAX_STRINGS, MAX_STRING_LEN, MAX_UPVALUES,
+    CompiledProgram, ProgramCapabilities, ProgramNativeMetadata, EXECUTABLE_FORMAT_VERSION,
+    LEGACY_CANONICAL_FORMAT_VERSION, MAX_BIGINTS, MAX_BLOBS, MAX_BLOB_LEN, MAX_BYTECODE,
+    MAX_CIRCOM_ARGS, MAX_CIRCOM_HANDLES, MAX_CONSTANTS, MAX_FIELDS, MAX_FUNCTIONS,
+    MAX_NATIVE_METADATA, MAX_STRINGS, MAX_STRING_LEN, MAX_UPVALUES,
 };
 
 impl CompiledProgram {
@@ -25,16 +27,29 @@ impl CompiledProgram {
         if &magic[..3] != b"ACH" {
             return Err(LoaderError::Format("invalid ACHB magic".to_string()));
         }
-        if magic[3] != EXECUTABLE_FORMAT_VERSION {
-            return Err(LoaderError::Format(format!(
-                "CompiledProgram reader requires format 0x{EXECUTABLE_FORMAT_VERSION:02x}, got 0x{:02x}",
-                magic[3]
-            )));
+        match magic[3] {
+            EXECUTABLE_FORMAT_VERSION => Self::read_v13_body(reader),
+            LEGACY_CANONICAL_FORMAT_VERSION => Self::read_v12_body(reader),
+            version => Err(LoaderError::Format(format!(
+                "CompiledProgram reader supports formats 0x{LEGACY_CANONICAL_FORMAT_VERSION:02x} \
+                 and 0x{EXECUTABLE_FORMAT_VERSION:02x}, got 0x{version:02x}"
+            ))),
         }
-        Self::read_v12_body(reader)
     }
 
     pub(crate) fn read_v12_body<R: Read>(reader: &mut R) -> Result<Self, LoaderError> {
+        Self::read_canonical_body(reader, LEGACY_CANONICAL_FORMAT_VERSION, false)
+    }
+
+    pub(crate) fn read_v13_body<R: Read>(reader: &mut R) -> Result<Self, LoaderError> {
+        Self::read_canonical_body(reader, EXECUTABLE_FORMAT_VERSION, true)
+    }
+
+    fn read_canonical_body<R: Read>(
+        reader: &mut R,
+        format_version: u8,
+        has_native_metadata: bool,
+    ) -> Result<Self, LoaderError> {
         let prime_byte = reader.read_u8()?;
         let prime_id = PrimeId::from_byte(prime_byte).ok_or_else(|| {
             LoaderError::Format(format!("unknown PrimeId byte 0x{prime_byte:02x}"))
@@ -62,9 +77,14 @@ impl CompiledProgram {
         let main_chunk = read_u32_values(reader, MAX_BYTECODE, "main bytecode")?;
         let main_line_info = read_u32_values(reader, MAX_BYTECODE, "main line table")?;
         let debug_symbols = read_debug_symbols(reader)?;
+        let native_metadata = if has_native_metadata {
+            read_native_metadata(reader)?
+        } else {
+            Self::builtin_native_metadata()
+        };
 
         let program = Self {
-            format_version: EXECUTABLE_FORMAT_VERSION,
+            format_version,
             bytecode_version,
             capabilities,
             prime_id,
@@ -84,10 +104,70 @@ impl CompiledProgram {
                 line_info: main_line_info,
             },
             debug_symbols,
+            native_metadata,
         };
         program.validate()?;
         Ok(program)
     }
+}
+
+fn read_native_metadata<R: Read>(
+    reader: &mut R,
+) -> Result<HashMap<u16, ProgramNativeMetadata>, LoaderError> {
+    let count = read_count(reader, MAX_NATIVE_METADATA, "native metadata")?;
+    let mut metadata = HashMap::with_capacity(count);
+    for _ in 0..count {
+        let index = reader.read_u16::<LittleEndian>()?;
+        let effect_bits = reader.read_u32::<LittleEndian>()?;
+        let effects = EffectSet::from_bits(effect_bits).ok_or_else(|| {
+            LoaderError::Format(format!(
+                "native metadata {index} has unknown effect bits 0x{effect_bits:x}"
+            ))
+        })?;
+        let capability_bits = reader.read_u32::<LittleEndian>()?;
+        let capabilities = CapabilitySet::from_bits(capability_bits).ok_or_else(|| {
+            LoaderError::Format(format!(
+                "native metadata {index} has unknown capability bits 0x{capability_bits:x}"
+            ))
+        })?;
+        let behavior_byte = reader.read_u8()?;
+        let behavior = NativeBehavior::from_byte(behavior_byte).ok_or_else(|| {
+            LoaderError::Format(format!(
+                "native metadata {index} has unknown behavior {behavior_byte}"
+            ))
+        })?;
+        let cancellation_byte = reader.read_u8()?;
+        let cancellation = CancellationPolicy::from_byte(cancellation_byte).ok_or_else(|| {
+            LoaderError::Format(format!(
+                "native metadata {index} has unknown cancellation policy {cancellation_byte}"
+            ))
+        })?;
+        let resource_operation = reader.read_u8()?;
+        let resource_kind = reader.read_u8()?;
+        let resource =
+            ResourceEffect::from_bytes(resource_operation, resource_kind).ok_or_else(|| {
+                LoaderError::Format(format!(
+                    "native metadata {index} has invalid resource encoding \
+                     {resource_operation}/{resource_kind}"
+                ))
+            })?;
+        let previous = metadata.insert(
+            index,
+            ProgramNativeMetadata {
+                effects,
+                capabilities,
+                behavior,
+                cancellation,
+                resource,
+            },
+        );
+        if previous.is_some() {
+            return Err(LoaderError::Format(format!(
+                "duplicate native metadata index {index}"
+            )));
+        }
+    }
+    Ok(metadata)
 }
 
 fn read_strings<R: Read>(reader: &mut R) -> Result<Vec<String>, LoaderError> {

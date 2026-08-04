@@ -21,6 +21,7 @@
 
 use achronyme_parser::ast::*;
 use memory::FieldBackend;
+use resolve::{lookup_prove_method, ProveMethodKind};
 
 use super::helpers::to_span;
 use super::{CompEnvValue, ProveIrCompiler};
@@ -69,30 +70,17 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
         args: &[&Expr],
         span: &Span,
     ) -> Result<CircuitExpr, ProveIrError> {
-        match method {
+        let Some(decl) = lookup_prove_method(method) else {
+            return self.reject_non_provable_method(method, span);
+        };
+        self.check_method_arity(method, decl.explicit_arity, args.len(), span)?;
+
+        match decl.kind {
             // --- Universally supported ---
-            "len" => {
-                if !args.is_empty() {
-                    return Err(ProveIrError::WrongArgumentCount {
-                        name: "len".into(),
-                        expected: 0,
-                        got: args.len(),
-                        span: to_span(span),
-                    });
-                }
-                self.compile_len_call(object, span)
-            }
+            ProveMethodKind::Len => self.compile_len_call(object, span),
 
             // --- Identity in circuit context ---
-            "to_field" => {
-                if !args.is_empty() {
-                    return Err(ProveIrError::WrongArgumentCount {
-                        name: "to_field".into(),
-                        expected: 0,
-                        got: args.len(),
-                        span: to_span(span),
-                    });
-                }
+            ProveMethodKind::ToField => {
                 // All circuit values are field elements — identity
                 self.compile_expr(object)
             }
@@ -100,15 +88,7 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
             // --- Int methods desugared to circuit primitives ---
             // NOTE: abs/min/max use CircuitCmpOp::Lt which requires a signed-range
             // comparison gadget at instantiation time (Phase B). See CircuitCmpOp doc.
-            "abs" => {
-                if !args.is_empty() {
-                    return Err(ProveIrError::WrongArgumentCount {
-                        name: "abs".into(),
-                        expected: 0,
-                        got: args.len(),
-                        span: to_span(span),
-                    });
-                }
+            ProveMethodKind::Abs => {
                 let x = self.compile_expr(object)?;
                 let zero = CircuitExpr::Const(FieldConst::zero());
                 Ok(CircuitExpr::Mux {
@@ -124,8 +104,7 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
                     if_false: Box::new(x),
                 })
             }
-            "min" => {
-                self.check_method_arity("min", 1, args.len(), span)?;
+            ProveMethodKind::Min => {
                 let n = self.compile_expr(object)?;
                 let m = self.compile_expr(args[0])?;
                 Ok(CircuitExpr::Mux {
@@ -138,8 +117,7 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
                     if_false: Box::new(m),
                 })
             }
-            "max" => {
-                self.check_method_arity("max", 1, args.len(), span)?;
+            ProveMethodKind::Max => {
                 let n = self.compile_expr(object)?;
                 let m = self.compile_expr(args[0])?;
                 Ok(CircuitExpr::Mux {
@@ -152,8 +130,7 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
                     if_false: Box::new(n),
                 })
             }
-            "pow" => {
-                self.check_method_arity("pow", 1, args.len(), span)?;
+            ProveMethodKind::Pow => {
                 let base = self.compile_expr(object)?;
                 let exp = self.extract_const_u64(args[0], span)?;
                 Ok(CircuitExpr::Pow {
@@ -161,7 +138,15 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
                     exp,
                 })
             }
+        }
+    }
 
+    fn reject_non_provable_method(
+        &self,
+        method: &str,
+        span: &Span,
+    ) -> Result<CircuitExpr, ProveIrError> {
+        match method {
             // --- Methods that cannot be compiled to constraints ---
             "to_string" => Err(self.method_not_constrainable(
                 "to_string",

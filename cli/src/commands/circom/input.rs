@@ -95,6 +95,25 @@ pub(super) fn parse_inputs_toml<F: FieldBackend>(
     Ok(map)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ecdsa_release_fixture_preserves_large_limbs_and_signal_aliases() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap();
+        let path = root.join("test/proving/ecdsa_verify.inputs.toml");
+        let inputs = parse_inputs_toml::<memory::Bn254Fr>(path.to_str().unwrap()).unwrap();
+
+        assert_eq!(inputs.len(), 28);
+        assert_eq!(inputs["s_0"].to_decimal_string(), "10600419463435818137");
+        assert_eq!(inputs["pubkey_4"], inputs["pubkey_1_0"]);
+        assert_eq!(inputs["pubkey_7"], inputs["pubkey_1_3"]);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Command entry point
 // ---------------------------------------------------------------------------

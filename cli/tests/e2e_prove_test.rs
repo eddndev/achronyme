@@ -14,6 +14,19 @@ fn fe(n: u64) -> FieldElement {
     FieldElement::from_u64(n)
 }
 
+fn generate_groth16(
+    cs: &constraints::r1cs::ConstraintSystem,
+    witness: &[FieldElement],
+    cache_dir: &std::path::Path,
+) -> Result<ProveResult, String> {
+    proving::groth16_bn254::generate_proof(
+        cs,
+        witness,
+        cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+}
+
 /// Lower self-contained source → optimize → bool_prop → R1CS compile with witness.
 /// Returns the compiler (with constraint system) and the witness vector.
 fn lower_and_compile_r1cs(
@@ -95,8 +108,8 @@ assert_eq(a * b, c)
     let (compiler, witness) = lower_and_compile_r1cs(source, &[("a", 6), ("b", 7), ("c", 42)]);
 
     let cache_dir = tempfile::tempdir().unwrap();
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, cache_dir.path())
-        .expect("generate_proof failed");
+    let result =
+        generate_groth16(&compiler.cs, &witness, cache_dir.path()).expect("generate_proof failed");
 
     match result {
         ProveResult::Proof {
@@ -156,8 +169,8 @@ assert_eq(poseidon(a, b), h)
     );
 
     let cache_dir = tempfile::tempdir().unwrap();
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, cache_dir.path())
-        .expect("generate_proof failed");
+    let result =
+        generate_groth16(&compiler.cs, &witness, cache_dir.path()).expect("generate_proof failed");
 
     match result {
         ProveResult::Proof {
@@ -192,8 +205,8 @@ assert_eq(mux(flag, a, b), r)
         lower_and_compile_r1cs(source, &[("flag", 1), ("a", 10), ("b", 20), ("r", 10)]);
 
     let cache_dir = tempfile::tempdir().unwrap();
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, cache_dir.path())
-        .expect("generate_proof failed");
+    let result =
+        generate_groth16(&compiler.cs, &witness, cache_dir.path()).expect("generate_proof failed");
 
     match result {
         ProveResult::Proof { proof_json, .. } => {
@@ -251,8 +264,8 @@ assert_eq(a * b, c)
     let (compiler, witness) = lower_and_compile_r1cs(source, &[("a", 6), ("b", 7), ("c", 42)]);
 
     let cache_dir = tempfile::tempdir().unwrap();
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, cache_dir.path())
-        .expect("generate_proof failed");
+    let result =
+        generate_groth16(&compiler.cs, &witness, cache_dir.path()).expect("generate_proof failed");
 
     match result {
         ProveResult::Proof {
@@ -349,7 +362,7 @@ assert_eq((a + b) * b, out)
         .expect("optimized witness must verify");
 
     let cache_dir = tempfile::tempdir().unwrap();
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, cache_dir.path())
+    let result = generate_groth16(&compiler.cs, &witness, cache_dir.path())
         .expect("generate_proof over optimized system failed");
     match result {
         ProveResult::Proof {
@@ -403,9 +416,8 @@ assert_eq(a * b, c)
 
     // First run: a=3, b=5, c=15
     let (compiler1, witness1) = lower_and_compile_r1cs(source, &[("a", 3), ("b", 5), ("c", 15)]);
-    let result1 =
-        proving::groth16_bn254::generate_proof(&compiler1.cs, &witness1, cache_dir.path())
-            .expect("first generate_proof failed");
+    let result1 = generate_groth16(&compiler1.cs, &witness1, cache_dir.path())
+        .expect("first generate_proof failed");
     assert!(matches!(result1, ProveResult::Proof { .. }));
 
     // Cache directory should now contain key files
@@ -429,9 +441,8 @@ assert_eq(a * b, c)
 
     // Second run: same circuit structure, different witness (a=2, b=9, c=18)
     let (compiler2, witness2) = lower_and_compile_r1cs(source, &[("a", 2), ("b", 9), ("c", 18)]);
-    let result2 =
-        proving::groth16_bn254::generate_proof(&compiler2.cs, &witness2, cache_dir.path())
-            .expect("second generate_proof failed (should use cache)");
+    let result2 = generate_groth16(&compiler2.cs, &witness2, cache_dir.path())
+        .expect("second generate_proof failed (should use cache)");
 
     match result2 {
         ProveResult::Proof { public_json, .. } => {

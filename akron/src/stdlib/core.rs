@@ -31,7 +31,13 @@ fn extract_fe(vm: &VM, val: &Value) -> Result<FieldElement, RuntimeError> {
 pub mod core_impl {
     use super::*;
 
-    #[ach_native(name = "print", arity = -1)]
+    #[ach_native(
+        name = "print",
+        arity = -1,
+        effects = "io.console",
+        capabilities = "console.write",
+        behavior = "blocking"
+    )]
     pub fn native_print(vm: &mut VM, args: &[Value]) -> Result<Value, RuntimeError> {
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
@@ -77,6 +83,17 @@ pub mod core_impl {
             }
         } else if val.is_proof() {
             "Proof"
+        } else if val.is_bytes() {
+            "Bytes"
+        } else if val.is_task() {
+            "Task"
+        } else if let Some((kind, _)) = val.as_resource_handle() {
+            match kind {
+                memory::ValueResourceKind::File => "File",
+                memory::ValueResourceKind::Listener => "Listener",
+                memory::ValueResourceKind::Connection => "Connection",
+                memory::ValueResourceKind::Channel => "Channel",
+            }
         } else if val.is_function() || val.is_closure() {
             "Function"
         } else if val.is_native() {
@@ -102,7 +119,7 @@ pub mod core_impl {
         Ok(Value::nil())
     }
 
-    #[ach_native(name = "time", arity = 0)]
+    #[ach_native(name = "time", arity = 0, effects = "io.clock", capabilities = "clock")]
     pub fn native_time(_vm: &mut VM, _args: &[Value]) -> Result<Value, RuntimeError> {
         let now = std::time::SystemTime::now();
         let duration = now.duration_since(std::time::UNIX_EPOCH).unwrap();
@@ -215,7 +232,7 @@ pub mod core_impl {
         Ok(Value::field(handle))
     }
 
-    #[ach_native(name = "verify_proof", arity = 1)]
+    #[ach_native(name = "verify_proof", arity = 1, effects = "verify")]
     pub fn native_verify_proof(vm: &mut VM, args: &[Value]) -> Result<Value, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError::arity_mismatch(

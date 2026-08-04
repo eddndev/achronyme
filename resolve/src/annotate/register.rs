@@ -59,7 +59,7 @@ pub fn register_module(
                     });
                 }
                 let qualified = qualify(&prefix, name);
-                table.insert(
+                table.insert_module_symbol(
                     qualified.clone(),
                     CallableKind::UserFn {
                         qualified_name: qualified,
@@ -88,7 +88,7 @@ pub fn register_module(
                     continue;
                 }
                 let qualified = qualify(&prefix, name);
-                table.insert(
+                table.insert_module_symbol(
                     qualified.clone(),
                     CallableKind::Constant {
                         qualified_name: qualified,
@@ -132,17 +132,17 @@ pub fn register_all(table: &mut SymbolTable, graph: &ModuleGraph) -> Result<(), 
 ///
 /// ## Name-collision policy
 ///
-/// Builtins go in under their bare name. If a root module also declares
-/// `fn poseidon() {...}`, the later [`register_module`] call will panic
-/// on duplicate insert. A future refinement may reject user shadowing
-/// with a diagnostic or let user-defined symbols win; until then, the
-/// production call order is:
+/// Builtins go in under their bare name. A root-module function or exported
+/// constant with the same name shadows that lookup, matching the VM compiler's
+/// global binding semantics. The builtin symbol remains in flat table storage
+/// so registry metadata and native handles stay auditable. The production call
+/// order is:
 ///
 /// 1. `register_builtins(&mut table)` — populates bare builtin names.
 /// 2. `register_all(&mut table, &graph)` — populates module symbols.
 ///
-/// so any collision surfaces as a clear table panic instead of a silent
-/// dispatch mismatch.
+/// User symbols therefore replace only the bare lookup mapping, not the
+/// builtin metadata entry.
 pub fn register_builtins(table: &mut SymbolTable) {
     let n = table.builtin_registry().len();
     for i in 0..n {

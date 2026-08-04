@@ -1,7 +1,7 @@
-pub struct NativeMeta {
-    pub name: &'static str,
-    pub arity: isize,
-}
+pub use resolve::{
+    CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, NativeMeta, ResourceEffect,
+    ResourceKind, CAPABILITY_CATALOG, EFFECT_CATALOG,
+};
 
 // --- SERIALIZATION CONTRACT ---
 // Binary Format Tags (v2 — tagged u64, no floats)

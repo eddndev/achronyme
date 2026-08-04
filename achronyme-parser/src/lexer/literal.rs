@@ -220,32 +220,7 @@ impl<'a> Lexer<'a> {
             }
         }
         let lexeme = self.ascii_str(&self.source[start.0..self.pos])?.to_string();
-        let kind = match lexeme.as_str() {
-            "let" => TokenKind::Let,
-            "mut" => TokenKind::Mut,
-            "if" => TokenKind::If,
-            "else" => TokenKind::Else,
-            "while" => TokenKind::While,
-            "for" => TokenKind::For,
-            "in" => TokenKind::In,
-            "fn" => TokenKind::Fn,
-            "return" => TokenKind::Return,
-            "break" => TokenKind::Break,
-            "continue" => TokenKind::Continue,
-            "print" => TokenKind::Print,
-            "nil" => TokenKind::Nil,
-            "true" => TokenKind::True,
-            "false" => TokenKind::False,
-            "public" => TokenKind::Public,
-            "witness" => TokenKind::Witness,
-            "prove" => TokenKind::Prove,
-            "circuit" => TokenKind::Circuit,
-            "forever" => TokenKind::Forever,
-            "import" => TokenKind::Import,
-            "export" => TokenKind::Export,
-            "as" => TokenKind::As,
-            _ => TokenKind::Ident,
-        };
+        let kind = crate::token::keyword_kind(&lexeme).unwrap_or(TokenKind::Ident);
         Ok(Token {
             kind,
             span: self.make_span(start),

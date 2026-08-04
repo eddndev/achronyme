@@ -7,6 +7,7 @@ use std::io::Cursor;
 
 use super::ErrorFormat;
 use crate::commands::engine::{ExecutionEngine, ExecutionError, PreparedEngine};
+use crate::commands::runtime::RuntimeSecurity;
 use crate::prove_handler::{DefaultProveHandler, ProveBackend, SharedProveHandler};
 
 #[allow(clippy::too_many_arguments)]
@@ -22,7 +23,36 @@ pub fn run_file(
     error_format: ErrorFormat,
     circom_lib_dirs: &[std::path::PathBuf],
 ) -> Result<()> {
-    run_file_with_engine(
+    run_file_with_key_source(
+        path,
+        stress_gc,
+        ptau,
+        prove_backend,
+        prime_id,
+        max_heap,
+        gc_stats,
+        circuit_stats,
+        error_format,
+        circom_lib_dirs,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_file_with_key_source(
+    path: &str,
+    stress_gc: bool,
+    ptau: Option<&str>,
+    prove_backend: &str,
+    prime_id: memory::field::PrimeId,
+    max_heap: Option<&str>,
+    gc_stats: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[std::path::PathBuf],
+    key_source: &proving::groth16::ProvingKeySource,
+) -> Result<()> {
+    run_file_with_engine_and_key_source(
         path,
         stress_gc,
         ptau,
@@ -35,6 +65,8 @@ pub fn run_file(
         error_format,
         circom_lib_dirs,
         ExecutionEngine::default(),
+        &RuntimeSecurity::default(),
+        key_source,
     )
 }
 
@@ -52,6 +84,42 @@ pub fn run_file_with_engine(
     error_format: ErrorFormat,
     circom_lib_dirs: &[std::path::PathBuf],
     engine: ExecutionEngine,
+    runtime_security: &RuntimeSecurity,
+) -> Result<()> {
+    run_file_with_engine_and_key_source(
+        path,
+        stress_gc,
+        ptau,
+        prove_backend,
+        prime_id,
+        max_heap,
+        max_instructions,
+        gc_stats,
+        circuit_stats,
+        error_format,
+        circom_lib_dirs,
+        engine,
+        runtime_security,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_file_with_engine_and_key_source(
+    path: &str,
+    stress_gc: bool,
+    ptau: Option<&str>,
+    prove_backend: &str,
+    prime_id: memory::field::PrimeId,
+    max_heap: Option<&str>,
+    max_instructions: Option<u64>,
+    gc_stats: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    circom_lib_dirs: &[std::path::PathBuf],
+    engine: ExecutionEngine,
+    runtime_security: &RuntimeSecurity,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     if ptau.is_some() {
         eprintln!(
@@ -64,7 +132,7 @@ pub fn run_file_with_engine(
         _ => ProveBackend::R1cs,
     };
 
-    let (mut vm, handler) = configured_vm(
+    let (mut vm, handler) = configured_vm(VmConfiguration {
         backend,
         prime_id,
         error_format,
@@ -72,7 +140,9 @@ pub fn run_file_with_engine(
         stress_gc,
         max_heap,
         max_instructions,
-    )?;
+        runtime_security,
+        key_source,
+    })?;
 
     let result = if path.ends_with(".achb") {
         execute_binary(path, &mut vm, engine)
@@ -105,19 +175,24 @@ pub fn run_file_with_engine(
     Ok(())
 }
 
-fn configured_vm(
+struct VmConfiguration<'a> {
     backend: ProveBackend,
     prime_id: memory::field::PrimeId,
     error_format: ErrorFormat,
     circuit_stats: bool,
     stress_gc: bool,
-    max_heap: Option<&str>,
+    max_heap: Option<&'a str>,
     max_instructions: Option<u64>,
-) -> Result<(VM, Rc<DefaultProveHandler>)> {
+    runtime_security: &'a RuntimeSecurity,
+    key_source: &'a proving::groth16::ProvingKeySource,
+}
+
+fn configured_vm(config: VmConfiguration<'_>) -> Result<(VM, Rc<DefaultProveHandler>)> {
     let mut vm = VM::new();
     super::register_std_modules(&mut vm)?;
-    vm.stress_mode = stress_gc;
-    if let Some(limit_str) = max_heap {
+    config.runtime_security.apply(&mut vm)?;
+    vm.stress_mode = config.stress_gc;
+    if let Some(limit_str) = config.max_heap {
         let limit = parse_size(limit_str).ok_or_else(|| {
             anyhow::anyhow!(
                 "invalid --max-heap value: `{limit_str}` (expected e.g. \"256M\", \"1G\", \"512K\")"
@@ -125,14 +200,15 @@ fn configured_vm(
         })?;
         vm.heap.set_max_heap_bytes(limit);
     }
-    if let Some(limit) = max_instructions {
+    if let Some(limit) = config.max_instructions {
         vm.instruction_budget = limit;
     }
     let handler = Rc::new(DefaultProveHandler::new(
-        backend,
-        prime_id,
-        error_format,
-        circuit_stats,
+        config.backend,
+        config.prime_id,
+        config.error_format,
+        config.circuit_stats,
+        config.key_source.clone(),
     ));
     vm.verify_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
     vm.prove_handler = Some(Box::new(SharedProveHandler(Rc::clone(&handler))));
@@ -166,6 +242,9 @@ fn execute_binary(path: &str, vm: &mut VM, engine: ExecutionEngine) -> Result<()
 }
 
 fn execute_program(vm: &mut VM, program: CompiledProgram, engine: ExecutionEngine) -> Result<()> {
+    vm.host_policy
+        .require_program(program.requested_host_capabilities())
+        .map_err(|error| anyhow::anyhow!("Host capability preflight failed: {error}"))?;
     let prepared = PreparedEngine::prepare(engine, &program)?;
     vm.load_program(program)
         .map_err(|error| anyhow::anyhow!("Program loader error: {error}"))?;
@@ -241,10 +320,15 @@ fn parse_size(s: &str) -> Option<usize> {
 
 /// Format a runtime error with source location if available.
 fn format_runtime_error(vm: &VM, err: &akron::RuntimeError) -> String {
-    match &vm.last_error_location {
+    let mut message = match &vm.last_error_location {
         Some((func_name, line)) => format!("[line {line}] in {func_name}: {err}"),
         None => format!("Runtime error: {err}"),
+    };
+    if let Some(task) = vm.last_task_failure() {
+        message.push_str("\nTask failure: ");
+        message.push_str(&task.to_string());
     }
+    message
 }
 
 #[cfg(test)]

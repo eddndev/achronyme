@@ -12,6 +12,12 @@ impl ProveEngine {
         program: &ir::IrProgram,
         inputs: &HashMap<String, FieldElement>,
     ) -> Result<ProveResult, ProveError> {
+        if self.opts.key_source != proving::groth16::ProvingKeySource::InsecureLocal {
+            return Err(ProveError::ProofGeneration(
+                "plonkish proving currently requires explicit insecure development setup"
+                    .to_string(),
+            ));
+        }
         let mut compiler = PlonkishCompiler::new();
         let proven = ir::passes::bool_prop::compute_proven_boolean(program);
         compiler.set_proven_boolean(proven);

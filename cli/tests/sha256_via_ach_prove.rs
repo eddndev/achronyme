@@ -23,7 +23,7 @@ fn run_ach(source: &str) -> anyhow::Result<()> {
     f.write_all(source.as_bytes()).expect("write ach source");
     f.flush().expect("flush ach source");
 
-    cli::commands::run::run_file(
+    cli::commands::run::run_file_with_key_source(
         ach_path.to_str().unwrap(),
         false,
         None,
@@ -34,6 +34,7 @@ fn run_ach(source: &str) -> anyhow::Result<()> {
         false,
         EF,
         &[],
+        &proving::groth16::ProvingKeySource::InsecureLocal,
     )
 }
 

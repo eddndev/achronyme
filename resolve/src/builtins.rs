@@ -56,9 +56,10 @@
 mod entry;
 mod error;
 mod handles;
+mod reference;
 mod registry;
 
-pub use entry::BuiltinEntry;
+pub use entry::{BuiltinEntry, NativeMeta};
 pub use error::BuiltinAuditError;
 pub use handles::{ProveIrLowerHandle, VmFnHandle};
 pub use registry::BuiltinRegistry;

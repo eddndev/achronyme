@@ -1,4 +1,5 @@
 pub mod codegen;
+mod concurrency_analysis;
 pub mod control_flow;
 pub mod error;
 pub mod expressions;

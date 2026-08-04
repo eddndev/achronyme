@@ -1,3 +1,4 @@
+use akron::specs::CapabilitySet;
 use akron::{CallFrame, ProveError, ProveHandler, ProveResult, VerifyHandler, VM};
 use akronc::Compiler;
 use memory::FieldElement;
@@ -186,6 +187,7 @@ pub(crate) fn run_source_with_mock_proof(source: &str) -> Result<VM, String> {
     let main_func = compiler.compilers.last().expect("No main compiler");
 
     let mut vm = VM::new();
+    vm.host_policy.grant(CapabilitySet::CONSOLE_WRITE);
     vm.import_strings(compiler.interner.strings);
     vm.heap.import_bytes(compiler.bytes_interner.blobs);
     let field_map = vm

@@ -41,6 +41,21 @@ pub(super) fn validate(toml: &AchronymeToml) -> Result<()> {
         }
     }
 
+    if let Some(ref proving) = toml.proving {
+        if proving.insecure_dev_setup.unwrap_or(false) && proving.trusted_key_dir.is_some() {
+            anyhow::bail!(
+                "achronyme.toml: proving.insecure_dev_setup and proving.trusted_key_dir are mutually exclusive"
+            );
+        }
+        if proving
+            .trusted_key_dir
+            .as_deref()
+            .is_some_and(|path| path.trim().is_empty())
+        {
+            anyhow::bail!("achronyme.toml: proving.trusted_key_dir cannot be empty");
+        }
+    }
+
     if let Some(ref circuit) = toml.circuit {
         if let Some(ref prime) = circuit.prime {
             if memory::field::PrimeId::from_name(prime).is_none() {
@@ -176,6 +191,26 @@ mod tests {
         )
         .unwrap();
         assert!(load_toml(&path).is_err());
+    }
+
+    #[test]
+    fn validate_rejects_conflicting_proving_key_sources() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(TOML_FILENAME);
+        fs::write(
+            &path,
+            concat!(
+                "[project]\nname = \"t\"\nversion = \"0.1.0\"\n\n",
+                "[proving]\ninsecure_dev_setup = true\ntrusted_key_dir = \"ceremony/keys\"\n"
+            ),
+        )
+        .unwrap();
+
+        let error = load_toml(&path).unwrap_err().to_string();
+        assert!(
+            error.contains("mutually exclusive"),
+            "unexpected validation error: {error}"
+        );
     }
 
     #[test]

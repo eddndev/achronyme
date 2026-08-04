@@ -82,6 +82,36 @@ fn aot_command_builds_executable_from_source() {
     let stderr = String::from_utf8_lossy(&limited.stderr);
     assert!(stderr.contains("instruction budget exhausted"), "{stderr}");
     assert!(stderr.contains("[line 1] in main"), "{stderr}");
+
+    let invalid_pool = Command::new(&executable)
+        .env("AKRON_BLOCKING_WORKERS", "0")
+        .output()
+        .expect("run AOT program with invalid pool configuration");
+    assert!(!invalid_pool.status.success());
+    let stderr = String::from_utf8_lossy(&invalid_pool.stderr);
+    assert!(stderr.contains("blocking_workers must be 1..="), "{stderr}");
+
+    let invalid_pending = Command::new(&executable)
+        .env("AKRON_MAX_PENDING_NATIVE_REQUESTS", "4097")
+        .output()
+        .expect("run AOT program with invalid pending-request limit");
+    assert!(!invalid_pending.status.success());
+    let stderr = String::from_utf8_lossy(&invalid_pending.stderr);
+    assert!(
+        stderr.contains("max_pending_native_requests must be 0..="),
+        "{stderr}"
+    );
+
+    let invalid_retained = Command::new(&executable)
+        .env("AKRON_MAX_RETAINED_TASK_RESULTS", "4097")
+        .output()
+        .expect("run AOT program with invalid retained-result limit");
+    assert!(!invalid_retained.status.success());
+    let stderr = String::from_utf8_lossy(&invalid_retained.stderr);
+    assert!(
+        stderr.contains("max_retained_task_results must be 0..="),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -112,6 +142,52 @@ fn aot_bailout_honors_heap_limit() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("heap limit exceeded"), "{stderr}");
+}
+
+#[test]
+fn aot_bailout_runs_the_embedded_structured_scheduler() {
+    let runtime = runtime_archive();
+    assert!(runtime.is_file());
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("tasks.ach");
+    let executable = directory.path().join("tasks");
+    std::fs::write(
+        &source,
+        "fn answer() { 42 }\nreturn concurrent { let child = spawn answer(); await child }\n",
+    )
+    .unwrap();
+
+    let compile = Command::new(env!("CARGO_BIN_EXE_ach"))
+        .arg("--no-config")
+        .arg("aot")
+        .arg(&source)
+        .arg("--output")
+        .arg(&executable)
+        .arg("--runtime")
+        .arg(&runtime)
+        .output()
+        .unwrap();
+    assert!(
+        compile.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let output = Command::new(&executable)
+        .env("AKRON_ENGINE_TRACE", "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "Exit Status: 42\n");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("LLVM AOT bailout:"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]

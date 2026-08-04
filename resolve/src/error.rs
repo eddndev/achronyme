@@ -8,6 +8,7 @@
 //! [`ResolveError`].
 
 use crate::builtins::BuiltinAuditError;
+use crate::EffectSet;
 use achronyme_parser::ast::Span;
 use std::fmt;
 use std::path::PathBuf;
@@ -188,6 +189,28 @@ pub enum ResolveError {
         /// with a "help" suggestion; this enum stores the reason only.
         reason: &'static str,
     },
+
+    /// A call with the task effect was not explicitly awaited or spawned.
+    MissingAwait {
+        /// Span of the call expression.
+        span: Span,
+        /// Effects inferred for the call target.
+        effects: EffectSet,
+        /// Human-readable path from the call target to the task effect.
+        effect_path: Vec<String>,
+    },
+
+    /// Host or task effects reached a proof/circuit-only context.
+    RestrictedEffect {
+        /// Span of the offending expression.
+        span: Span,
+        /// `prove` or `circuit`.
+        context: &'static str,
+        /// Forbidden effects inferred for the expression.
+        effects: EffectSet,
+        /// Human-readable call path to the effect source.
+        effect_path: Vec<String>,
+    },
 }
 
 impl fmt::Display for ResolveError {
@@ -242,6 +265,18 @@ impl fmt::Display for ResolveError {
             Self::ProveBlockUnsupportedShape { shape, reason, .. } => {
                 write!(f, "{shape} not supported inside a prove block: {reason}")
             }
+            Self::MissingAwait { effects, .. } => {
+                write!(
+                    f,
+                    "call with effects `{effects}` must be prefixed with `await`"
+                )
+            }
+            Self::RestrictedEffect {
+                context, effects, ..
+            } => write!(
+                f,
+                "effects `{effects}` are not allowed inside a `{context}` context"
+            ),
         }
     }
 }

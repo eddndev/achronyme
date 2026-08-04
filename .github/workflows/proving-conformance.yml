@@ -1,0 +1,54 @@
+name: Proving Conformance
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Trusted setup and proof interoperability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.96.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pinned snarkjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          snarkjs_root="$RUNNER_TEMP/achronyme-snarkjs"
+          npm install --prefix "$snarkjs_root" --no-audit --no-fund \
+            --no-package-lock snarkjs@0.7.6
+          test -x "$snarkjs_root/node_modules/.bin/snarkjs"
+          echo "$snarkjs_root/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Verify pinned drand client
+        run: |
+          npm ci --prefix scripts/proving/drand --ignore-scripts --no-audit --no-fund
+          npm test --prefix scripts/proving/drand
+
+      - name: Build Achronyme CLI
+        run: cargo build -p cli
+
+      - name: Verify proving workflow contracts
+        run: |
+          bash test/proving/ci_workflow_contract_test.sh
+          bash test/proving/ci_workflow_contract.sh
+          bash test/proving/documentation_contract.sh
+          bash test/proving/boss_fight_harness_test.sh
+
+      - name: Run trusted-setup interoperability gate
+        run: bash test/proving/trusted_setup_workflow.sh

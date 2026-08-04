@@ -4,7 +4,8 @@ use crate::loader::LoaderError;
 use crate::opcode::instruction::{decode_bx, decode_opcode};
 use crate::{CallFrame, GlobalEntry, OpCode, VM};
 
-use super::{required_handle, CompiledProgram};
+use super::validation::required_handle;
+use super::CompiledProgram;
 
 impl VM {
     /// Materialize a validated program into this VM.
@@ -18,6 +19,7 @@ impl VM {
 
         self.last_result = Value::nil();
         self.last_error_location = None;
+        self.clear_task_failure();
 
         let required_globals = required_global_slots(&program, self.globals.len());
         self.globals

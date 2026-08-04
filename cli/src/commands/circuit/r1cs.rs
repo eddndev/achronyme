@@ -9,20 +9,25 @@ use memory::{FieldBackend, FieldElement};
 use zkc::r1cs_backend::R1CSCompiler;
 
 use super::bn254::Bn254Ops;
+use crate::commands::r1cs_proof::Groth16Field;
 use crate::style::{format_number, Styler};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
+pub(super) fn run_r1cs_pipeline<
+    F: FieldBackend + PoseidonParamsProvider + Bn254Ops + Groth16Field,
+>(
     program: &ir::IrProgram<F>,
     r1cs_path: &str,
     wtns_path: &str,
     inputs: Option<&HashMap<String, FieldElement<F>>>,
     prime_id: PrimeId,
+    prove: bool,
     solidity_path: Option<&str>,
     style: &Styler,
     verbose: bool,
     no_optimize: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     let mut compiler = R1CSCompiler::<F>::new();
     compiler.prime_id = prime_id;
@@ -55,9 +60,11 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
         .count();
 
     if let Some(input_map) = inputs {
-        // Unified: compile + witness in one pass (with early IR evaluation)
-        let mut witness_vec = compiler
-            .compile_ir_with_witness(program, input_map)
+        // Compile the circuit shape before any witness-dependent work. This
+        // lets a trusted key be bound and parsed before input evaluation or
+        // witness generation begins.
+        compiler
+            .compile_ir(program)
             .map_err(|e| anyhow::anyhow!("R1CS compilation error: {e}"))?;
 
         // R1CS linear constraint elimination
@@ -72,13 +79,26 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
                     r1cs_stats.variables_eliminated,
                 );
             }
-            // Re-fill substituted wires in the witness
-            if let Some(subs) = &compiler.substitution_map {
-                for (var_idx, lc) in subs {
-                    witness_vec[*var_idx] = lc
-                        .evaluate(&witness_vec)
-                        .map_err(|e| anyhow::anyhow!("witness fixup failed: {e}"))?;
-                }
+        }
+
+        let prepared_key = if prove {
+            F::prepare_groth16_key(&compiler.cs, key_source)
+                .map_err(|error| anyhow::anyhow!("trusted-key preflight failed: {error}"))?
+        } else {
+            None
+        };
+
+        ir::eval::evaluate(program, input_map).map_err(|error| {
+            anyhow::anyhow!("R1CS compilation error: evaluation error: {error}")
+        })?;
+        let mut witness_vec = compiler
+            .fill_witness(input_map)
+            .map_err(|e| anyhow::anyhow!("R1CS compilation error: {e}"))?;
+        if let Some(subs) = &compiler.substitution_map {
+            for (var_idx, lc) in subs {
+                witness_vec[*var_idx] = lc
+                    .evaluate(&witness_vec)
+                    .map_err(|e| anyhow::anyhow!("witness fixup failed: {e}"))?;
             }
         }
 
@@ -169,6 +189,54 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
                 wtns_data.len(),
             );
         }
+
+        if prove {
+            let cache_dir = crate::cache_dir();
+            let result = F::generate_groth16_proof(
+                &compiler.cs,
+                &witness_vec,
+                &cache_dir,
+                key_source,
+                prepared_key.as_ref(),
+            )
+            .map_err(|error| anyhow::anyhow!("proof generation failed: {error}"))?;
+            let akron::ProveResult::Proof {
+                proof_json,
+                public_json,
+                vkey_json,
+            } = result
+            else {
+                return Err(anyhow::anyhow!("R1CS backend returned a non-Groth16 proof"));
+            };
+            let output_dir = std::path::Path::new(r1cs_path)
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            let proof_path = output_dir.join("proof.json");
+            let public_path = output_dir.join("public.json");
+            let vkey_path = output_dir.join("vkey.json");
+            fs::write(&proof_path, proof_json)?;
+            fs::write(&public_path, public_json)?;
+            fs::write(&vkey_path, vkey_json)?;
+
+            if verbose {
+                eprintln!();
+                eprintln!(
+                    "{} {}",
+                    style.success("Proof generated"),
+                    style.dim("(Groth16)")
+                );
+                for path in [&proof_path, &public_path, &vkey_path] {
+                    eprintln!("    Wrote {}", style.bold(&path.display().to_string()));
+                }
+            } else {
+                eprintln!(
+                    "wrote {}, {}, {}",
+                    proof_path.display(),
+                    public_path.display(),
+                    vkey_path.display()
+                );
+            }
+        }
     } else {
         // No inputs: compile constraints only
         compiler
@@ -221,8 +289,8 @@ pub(super) fn run_r1cs_pipeline<F: FieldBackend + PoseidonParamsProvider + Bn254
     if let Some(sol_path) = solidity_path {
         let cache_dir = crate::cache_dir();
 
-        let sol_source =
-            F::solidity_from_cs(&compiler.cs, &cache_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let sol_source = F::solidity_from_cs(&compiler.cs, &cache_dir, key_source)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         fs::write(sol_path, &sol_source).with_context(|| format!("cannot write {sol_path}"))?;
 

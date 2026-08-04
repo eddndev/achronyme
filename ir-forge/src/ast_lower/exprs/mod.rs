@@ -122,6 +122,12 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
                 description: "prove blocks cannot be nested inside circuits".into(),
                 span: to_span(span),
             }),
+            Expr::Concurrent { span, .. } | Expr::Spawn { span, .. } | Expr::Await { span, .. } => {
+                Err(ProveIrError::UnsupportedOperation {
+                    description: "task effects are not allowed inside circuits".into(),
+                    span: to_span(span),
+                })
+            }
             // CircuitCall removed — keyword-arg calls are now unified in Call
             Expr::FnExpr { span, .. } => Err(ProveIrError::UnsupportedOperation {
                 description: "closures are not supported in circuits \

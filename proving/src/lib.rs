@@ -1,8 +1,14 @@
 #[cfg(feature = "groth16-core")]
 pub mod groth16;
 
+#[cfg(feature = "groth16-core")]
+mod json_artifact;
+
 #[cfg(feature = "groth16-bn254")]
 pub mod groth16_bn254;
+
+#[cfg(feature = "groth16-bn254")]
+pub mod trusted_setup;
 
 #[cfg(feature = "groth16-bls12-381")]
 pub mod groth16_bls12_381;

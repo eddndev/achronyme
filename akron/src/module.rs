@@ -5,13 +5,29 @@
 //! External modules (IO, zkML, etc.) implement the same trait to
 //! extend the VM without modifying its internals.
 
-use crate::native::NativeFn;
+use crate::native::{NativeAsyncStart, NativeFn};
+use crate::specs::{CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect};
 
 /// A single native function definition.
 pub struct NativeDef {
+    /// Canonical source-level name.
     pub name: &'static str,
+    /// Runtime implementation.
     pub func: NativeFn,
+    /// Fixed arity, or -1 for a variadic function.
     pub arity: isize, // -1 = variadic
+    /// Effects inferred at call sites.
+    pub effects: EffectSet,
+    /// Host authority required to invoke the function.
+    pub capabilities: CapabilitySet,
+    /// Whether the function completes, blocks, or suspends.
+    pub behavior: NativeBehavior,
+    /// Cancellation contract.
+    pub cancellation: CancellationPolicy,
+    /// Owned resource created or consumed by the call.
+    pub resource: ResourceEffect,
+    /// Optional two-stage adapter for bounded blocking-pool execution.
+    pub async_start: Option<NativeAsyncStart>,
 }
 
 /// Trait implemented by each group of native functions.
@@ -34,7 +50,11 @@ pub trait NativeModule {
 /// The order here **must** match the `VmFnHandle` ordering in
 /// `resolve::BuiltinRegistry::default()` — `bootstrap_natives` verifies this.
 pub fn builtin_modules() -> Vec<Box<dyn NativeModule>> {
-    use crate::stdlib::{bigint::BigintModule, core::CoreModule};
+    use crate::stdlib::{bigint::BigintModule, core::CoreModule, task_control::TaskControlModule};
 
-    vec![Box::new(CoreModule), Box::new(BigintModule)]
+    vec![
+        Box::new(CoreModule),
+        Box::new(BigintModule),
+        Box::new(TaskControlModule),
+    ]
 }

@@ -1,0 +1,28 @@
+fn serve(listener) {
+    let connection = await tcp_accept(listener)
+    let input = await tcp_read(connection, 64)
+    await tcp_write(connection, input)
+    await tcp_close(connection)
+    await tcp_listener_close(listener)
+}
+
+fn request(address) {
+    let connection = await tcp_connect(address)
+    await tcp_write(connection, "ping")
+    let response = await tcp_read(connection, 64)
+    await tcp_close(connection)
+    response
+}
+
+let address = read_line()
+let listener = await tcp_listen(address)
+let response = concurrent {
+    let server_task = spawn serve(listener)
+    let client_task = spawn request(address)
+    let value = await client_task
+    await server_task
+    value
+}
+
+assert(response != nil)
+print("tcp-echo-ok")

@@ -27,12 +27,13 @@ use crate::annotate::{annotate_program, register_all, register_builtins, Resolve
 use crate::availability::{infer_availability, AvailabilityResult};
 use crate::builtins::BuiltinRegistry;
 use crate::const_eval::evaluate_constants;
+use crate::effect_inference::{infer_effects, validate_effects, EffectInferenceResult};
 use crate::error::ResolveError;
 use crate::module_graph::{ModuleGraph, ModuleId, ModuleSource};
 use crate::symbol::{Availability, CallableKind, SymbolId};
 use crate::table::SymbolTable;
 
-/// The three pieces of state the resolver produces for a program.
+/// The complete state bundle the resolver produces for a program.
 ///
 /// Build with [`build_resolver_state`]; destructure into a compiler's
 /// own fields at install time. Cheap-ish to build (one graph build +
@@ -52,6 +53,8 @@ pub struct ResolverState {
     /// Availability inference result — restriction reasons for every
     /// function narrowed from `Both`.
     pub availability: AvailabilityResult,
+    /// Transitive effects inferred for functions and source expressions.
+    pub effects: EffectInferenceResult,
 }
 
 impl ResolverState {
@@ -71,8 +74,9 @@ impl ResolverState {
 ///    [`BuiltinRegistry`].
 /// 3. [`register_builtins`] installs every builtin.
 /// 4. [`register_all`] installs every module's exported symbols.
-/// 5. [`annotate_program`] walks every module and fills the
-///    annotation map.
+/// 5. [`annotate_program`] walks every module and fills the annotation map.
+/// 6. Availability and transitive effects are inferred.
+/// 7. Effect diagnostics are appended to the resolved program.
 ///
 /// Any of those steps can fail and the error is propagated — callers
 /// that want to run in shadow mode (observation only) should swallow
@@ -81,18 +85,35 @@ pub fn build_resolver_state(
     root_relative_path: &str,
     source: &mut dyn ModuleSource,
 ) -> Result<ResolverState, ResolveError> {
+    build_resolver_state_with_registry(root_relative_path, source, BuiltinRegistry::default())
+}
+
+/// Build resolver state with a caller-supplied builtin/native registry.
+///
+/// Compiler hosts use this variant to add metadata for external native
+/// modules before annotation and effect inference run.
+pub fn build_resolver_state_with_registry(
+    root_relative_path: &str,
+    source: &mut dyn ModuleSource,
+    registry: BuiltinRegistry,
+) -> Result<ResolverState, ResolveError> {
     let graph = ModuleGraph::build(root_relative_path, source)?;
-    let mut table = SymbolTable::with_registry(BuiltinRegistry::default())?;
+    let mut table = SymbolTable::with_registry(registry)?;
     register_builtins(&mut table);
     register_all(&mut table, &graph)?;
     let mut resolved = annotate_program(&graph, &table);
     resolved.const_values = evaluate_constants(&graph);
     let availability = infer_availability(&mut table, &graph, &resolved);
+    let effects = infer_effects(&table, &graph, &resolved);
+    resolved
+        .diagnostics
+        .extend(validate_effects(&table, &graph, &resolved, &effects));
     Ok(ResolverState {
         table,
         resolved,
         graph,
         availability,
+        effects,
     })
 }
 

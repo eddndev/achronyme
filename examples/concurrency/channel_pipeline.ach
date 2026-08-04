@@ -1,0 +1,27 @@
+fn produce(queue) {
+    for value in 1..6 {
+        await channel_send(queue, value)
+    }
+}
+
+fn consume(queue) {
+    mut total = 0
+    for _index in 0..5 {
+        let value = await channel_receive(queue)
+        total = total + value
+    }
+    total
+}
+
+let queue = channel(2)
+let total = concurrent {
+    let producer = spawn produce(queue)
+    let consumer = spawn consume(queue)
+    let result = await consumer
+    await producer
+    result
+}
+
+assert(total == 15)
+channel_close(queue)
+print("channel-pipeline-ok")

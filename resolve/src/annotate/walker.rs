@@ -19,12 +19,13 @@
 //!   Split out because the callee + each positional arg get
 //!   prove-block shape checks before being walked.
 
-use achronyme_parser::ast::{Block, ElseBranch, Expr, ForIterable, Span, Stmt};
+use achronyme_parser::ast::{Block, ElseBranch, Expr, ExprId, ForIterable, Span, Stmt};
 
 use super::classify::{classify_let_rhs, is_dynamic_fn_if, is_namespace_alias_ident};
 use super::context::{AnnotateCtx, LocalKind};
 use super::resolve::{resolve_dot_access, resolve_ident, resolve_static_access};
 use crate::error::UnsupportedShape;
+use crate::lookup_prove_method;
 
 pub(super) fn walk_stmt(ctx: &mut AnnotateCtx, stmt: &Stmt) {
     match stmt {
@@ -137,8 +138,12 @@ pub(super) fn walk_expr(ctx: &mut AnnotateCtx, expr: &Expr) {
         }
         Expr::UnaryOp { operand, .. } => walk_expr(ctx, operand),
         Expr::Call {
-            callee, args, span, ..
-        } => walk_call(ctx, callee, args, span),
+            id,
+            callee,
+            args,
+            span,
+            ..
+        } => walk_call(ctx, *id, callee, args, span),
         Expr::Index {
             object,
             index,
@@ -223,6 +228,9 @@ pub(super) fn walk_expr(ctx: &mut AnnotateCtx, expr: &Expr) {
             walk_block_scoped(ctx, body);
         }
         Expr::Forever { body, .. } => walk_block_scoped(ctx, body),
+        Expr::Concurrent { body, .. } => walk_block_scoped(ctx, body),
+        Expr::Spawn { call, .. } => walk_expr(ctx, call),
+        Expr::Await { task, .. } => walk_expr(ctx, task),
         Expr::Block { block, .. } => walk_block_scoped(ctx, block),
         Expr::FnExpr { params, body, .. } => {
             ctx.push_scope();
@@ -262,15 +270,25 @@ pub(super) fn walk_expr(ctx: &mut AnnotateCtx, expr: &Expr) {
 /// [`UnsupportedShape::NonStaticFnArg`].
 pub(super) fn walk_call(
     ctx: &mut AnnotateCtx,
+    call_id: ExprId,
     callee: &Expr,
     args: &[achronyme_parser::ast::CallArg],
     call_span: &Span,
 ) {
+    if is_circom_callee(ctx, callee) {
+        ctx.circom_calls.insert((ctx.module.id, call_id));
+    }
+    if let Expr::Ident { name, .. } = callee {
+        if let Some(LocalKind::DynamicFn(targets)) = ctx.lookup_local(name) {
+            ctx.call_targets
+                .insert((ctx.module.id, call_id), targets.clone());
+        }
+    }
     if ctx.in_prove_depth > 0 {
         // DynamicFnValue: calling a local that was bound to an
         // if/else of fn references.
         if let Expr::Ident { name, span, .. } = callee {
-            if matches!(ctx.lookup_local(name), Some(LocalKind::DynamicFn)) {
+            if matches!(ctx.lookup_local(name), Some(LocalKind::DynamicFn(_))) {
                 ctx.push_diagnostic(
                     span.clone(),
                     UnsupportedShape::DynamicFnValue,
@@ -283,8 +301,14 @@ pub(super) fn walk_call(
         // the `Expr::DotAccess` path and resolve to a module symbol;
         // non-namespace DotAccess callees are runtime method dispatch
         // which prove blocks can't model.
-        if let Expr::DotAccess { object, span, .. } = callee {
-            if !is_namespace_alias_ident(ctx, object) {
+        if let Expr::DotAccess {
+            object,
+            field,
+            span,
+            ..
+        } = callee
+        {
+            if !is_namespace_alias_ident(ctx, object) && lookup_prove_method(field).is_none() {
                 ctx.push_diagnostic(
                     span.clone(),
                     UnsupportedShape::RuntimeMethodChain,
@@ -317,5 +341,18 @@ pub(super) fn walk_call(
     walk_expr(ctx, callee);
     for a in args {
         walk_expr(ctx, &a.value);
+    }
+}
+
+fn is_circom_callee(ctx: &AnnotateCtx<'_>, callee: &Expr) -> bool {
+    match callee {
+        Expr::Ident { name, .. } => !ctx.is_local(name) && ctx.circom_templates.contains(name),
+        Expr::DotAccess { object, .. } => match object.as_ref() {
+            Expr::Ident { name, .. } => !ctx.is_local(name) && ctx.circom_namespaces.contains(name),
+            _ => false,
+        },
+        Expr::StaticAccess { type_name, .. } => ctx.circom_namespaces.contains(type_name),
+        Expr::Call { callee, .. } => is_circom_callee(ctx, callee),
+        _ => false,
     }
 }

@@ -7,9 +7,9 @@
 //! downstream consumers — the VM compiler's shadow dispatch and the
 //! ProveIR compiler's annotation-driven resolution.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use achronyme_parser::ast::ExprId;
+use achronyme_parser::ast::{ExprId, Stmt};
 
 use super::context::AnnotateCtx;
 use super::helpers::module_prefix;
@@ -48,6 +48,12 @@ pub struct ResolvedProgram {
     /// downstream consumers fall back to their legacy lookup for
     /// anything not in the map.
     pub annotations: HashMap<AnnotationKey, SymbolId>,
+    /// Statically known targets for calls through a dynamic fn-valued local.
+    pub call_targets: HashMap<AnnotationKey, Vec<SymbolId>>,
+    /// Calls syntactically rooted at a selective or namespace `.circom`
+    /// import. Circom libraries are intentionally outside ModuleGraph, so
+    /// this side table preserves their compile-time effect classification.
+    pub circom_calls: HashSet<AnnotationKey>,
     /// Resolve-time diagnostics accumulated by the walker — currently
     /// only [`ResolveError::ProveBlockUnsupportedShape`] variants
     /// emitted inside `prove {}` / `circuit {}` scopes. Empty for
@@ -122,13 +128,18 @@ pub fn annotate_program(graph: &ModuleGraph, table: &SymbolTable) -> ResolvedPro
     let mut out = ResolvedProgram::default();
     for module in graph.iter() {
         let prefix = module_prefix(module.id, graph);
+        let (circom_namespaces, circom_templates) = circom_imports(&module.program.stmts);
         let mut ctx = AnnotateCtx {
             graph,
             table,
             module,
             prefix,
             annotations: &mut out.annotations,
+            call_targets: &mut out.call_targets,
+            circom_calls: &mut out.circom_calls,
             diagnostics: &mut out.diagnostics,
+            circom_namespaces: &circom_namespaces,
+            circom_templates: &circom_templates,
             scope: Vec::new(),
             in_prove_depth: 0,
         };
@@ -137,4 +148,26 @@ pub fn annotate_program(graph: &ModuleGraph, table: &SymbolTable) -> ResolvedPro
         }
     }
     out
+}
+
+fn circom_imports(stmts: &[Stmt]) -> (HashSet<String>, HashSet<String>) {
+    fn collect(stmt: &Stmt, namespaces: &mut HashSet<String>, templates: &mut HashSet<String>) {
+        match stmt {
+            Stmt::Import { path, alias, .. } if path.ends_with(".circom") => {
+                namespaces.insert(alias.clone());
+            }
+            Stmt::SelectiveImport { names, path, .. } if path.ends_with(".circom") => {
+                templates.extend(names.iter().cloned());
+            }
+            Stmt::Export { inner, .. } => collect(inner, namespaces, templates),
+            _ => {}
+        }
+    }
+
+    let mut namespaces = HashSet::new();
+    let mut templates = HashSet::new();
+    for stmt in stmts {
+        collect(stmt, &mut namespaces, &mut templates);
+    }
+    (namespaces, templates)
 }

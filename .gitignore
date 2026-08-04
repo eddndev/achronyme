@@ -38,3 +38,6 @@ wasm/pkg/
 docs/node_modules/
 docs/.astro/
 docs/dist/
+
+# Proving helpers
+scripts/proving/drand/node_modules/

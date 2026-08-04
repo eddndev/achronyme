@@ -28,7 +28,11 @@ groth16-core = [
 ]
 
 # Groth16 on BN254 (Ethereum-compatible, default)
-groth16-bn254 = ["groth16-core", "dep:ark-bn254"]
+groth16-bn254 = [
+    "groth16-core",
+    "dep:ark-bn254",
+    "dep:semaphore-rs-ark-circom",
+]
 
 # Groth16 on BLS12-381 (Zcash/Filecoin-compatible)
 groth16-bls12-381 = ["groth16-core", "dep:ark-bls12-381"]
@@ -53,6 +57,7 @@ ir = { path = "../ir" }
 
 # Serialization
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 # Groth16 shared (activated by groth16-core feature)
 ark-groth16 = { version = "0.5", optional = true }
@@ -67,10 +72,15 @@ sha2 = { version = "0.10", optional = true }
 # Curve-specific (activated by groth16-bn254 / groth16-bls12-381)
 ark-bn254 = { version = "0.5", optional = true }
 ark-bls12-381 = { version = "0.5", optional = true }
+semaphore-rs-ark-circom = { version = "0.5.4", optional = true }
 
 # PlonK/halo2 (activated by plonk-bn254)
 halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2", tag = "v2023_04_20", features = ["circuit-params"], optional = true }
 rand = { version = "0.8", optional = true }
+
+[dev-dependencies]
+base64 = "0.22"
+tempfile = "3"
 
 [[example]]
 name = "groth16_synthetic_timing"

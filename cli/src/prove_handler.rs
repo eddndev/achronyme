@@ -77,6 +77,7 @@ impl DefaultProveHandler {
         prime_id: PrimeId,
         error_format: ErrorFormat,
         circuit_stats: bool,
+        key_source: proving::groth16::ProvingKeySource,
     ) -> Self {
         let cache_dir = crate::cache_dir();
         let style = Styler::from_env(&error_format);
@@ -93,6 +94,7 @@ impl DefaultProveHandler {
                 backend,
                 prime_id,
                 circuit_stats,
+                key_source,
             },
             Box::new(observer),
         );

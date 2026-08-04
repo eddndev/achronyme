@@ -8,6 +8,8 @@ pub(crate) fn ct_select_u64x4(a: &[u64; 4], b: &[u64; 4], flag: u64) -> Option<[
             return Some(unsafe { x86_64::ct_select_u64x4_avx2(a, b, flag) });
         }
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    let _ = (a, b, flag);
     None
 }
 

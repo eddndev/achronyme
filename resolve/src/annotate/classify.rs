@@ -69,8 +69,8 @@ pub(super) fn classify_let_rhs(ctx: &AnnotateCtx, rhs: &Expr) -> LocalKind {
         ..
     } = rhs
     {
-        if is_dynamic_fn_if(ctx, then_block, else_branch.as_ref()) {
-            return LocalKind::DynamicFn;
+        if let Some(targets) = dynamic_fn_targets(ctx, then_block, else_branch.as_ref()) {
+            return LocalKind::DynamicFn(targets);
         }
     }
     if matches!(rhs, Expr::Map { .. }) {
@@ -93,26 +93,34 @@ pub(super) fn is_dynamic_fn_if(
     then_block: &Block,
     else_branch: Option<&ElseBranch>,
 ) -> bool {
-    if block_tail_fn(ctx, then_block).is_none() {
-        return false;
-    }
+    dynamic_fn_targets(ctx, then_block, else_branch).is_some()
+}
+
+/// Collect every statically possible target of a fn-valued `if` expression.
+pub(super) fn dynamic_fn_targets(
+    ctx: &AnnotateCtx,
+    then_block: &Block,
+    else_branch: Option<&ElseBranch>,
+) -> Option<Vec<SymbolId>> {
+    let mut targets = vec![block_tail_fn(ctx, then_block)?];
     match else_branch {
-        Some(ElseBranch::Block(b)) => block_tail_fn(ctx, b).is_some(),
-        Some(ElseBranch::If(e)) => {
-            // Nested else-if: require the whole chain to be fn-valued.
-            if let Expr::If {
-                then_block: inner_then,
-                else_branch: inner_else,
+        Some(ElseBranch::Block(block)) => targets.push(block_tail_fn(ctx, block)?),
+        Some(ElseBranch::If(expr)) => {
+            let Expr::If {
+                then_block,
+                else_branch,
                 ..
-            } = e.as_ref()
-            {
-                is_dynamic_fn_if(ctx, inner_then, inner_else.as_ref())
-            } else {
-                false
-            }
+            } = expr.as_ref()
+            else {
+                return None;
+            };
+            targets.extend(dynamic_fn_targets(ctx, then_block, else_branch.as_ref())?);
         }
-        None => false,
+        None => return None,
     }
+    targets.sort();
+    targets.dedup();
+    Some(targets)
 }
 
 /// Extract the fn-valued symbol out of a block's tail statement, if any.
@@ -135,8 +143,10 @@ pub(super) fn is_namespace_alias_ident(ctx: &AnnotateCtx, expr: &Expr) -> bool {
     if ctx.is_local(name) {
         return false;
     }
-    ctx.module
-        .imports
-        .iter()
-        .any(|e| matches!(e.kind, ImportEdgeKind::Namespace) && &e.alias == name)
+    ctx.circom_namespaces.contains(name)
+        || ctx
+            .module
+            .imports
+            .iter()
+            .any(|e| matches!(e.kind, ImportEdgeKind::Namespace) && &e.alias == name)
 }

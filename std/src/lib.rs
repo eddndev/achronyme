@@ -6,8 +6,13 @@
 
 pub mod conv;
 #[cfg(feature = "io")]
+pub mod file;
+#[cfg(feature = "io")]
 pub mod io;
+#[cfg(feature = "io")]
+pub mod net;
 pub mod string_ext;
+pub mod task;
 
 use akron::module::NativeModule;
 use akron::specs::NativeMeta;
@@ -21,10 +26,15 @@ pub fn std_modules() -> Vec<Box<dyn NativeModule>> {
     let mut modules: Vec<Box<dyn NativeModule>> = vec![
         Box::new(conv::ConvModule),
         Box::new(string_ext::StringExtModule),
+        Box::new(task::TaskModule),
     ];
 
     #[cfg(feature = "io")]
-    modules.push(Box::new(io::IoModule));
+    {
+        modules.push(Box::new(io::IoModule));
+        modules.push(Box::new(file::FileModule));
+        modules.push(Box::new(net::NetModule));
+    }
 
     modules
 }
@@ -42,6 +52,11 @@ pub fn std_native_table() -> Vec<NativeMeta> {
                 .map(|d| NativeMeta {
                     name: d.name,
                     arity: d.arity,
+                    effects: d.effects,
+                    capabilities: d.capabilities,
+                    behavior: d.behavior,
+                    cancellation: d.cancellation,
+                    resource: d.resource,
                 })
                 .collect::<Vec<_>>()
         })

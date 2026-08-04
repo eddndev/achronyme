@@ -10,12 +10,18 @@ use crate::specs::{
     SER_TAG_INT, SER_TAG_NIL, SER_TAG_STRING, SER_TAG_TRUE,
 };
 
-use super::{required_handle, CompiledProgram, EXECUTABLE_FORMAT_VERSION};
+use super::validation::required_handle;
+use super::{CompiledProgram, EXECUTABLE_FORMAT_VERSION};
 
 impl CompiledProgram {
     /// Serialize the current, self-describing ACHB format.
     pub fn write_executable<W: Write>(&self, writer: &mut W) -> Result<(), LoaderError> {
         self.validate()?;
+        if self.format_version != EXECUTABLE_FORMAT_VERSION {
+            return Err(LoaderError::Format(
+                "legacy programs must be recompiled before serialization".to_string(),
+            ));
+        }
 
         writer.write_all(b"ACH")?;
         writer.write_u8(EXECUTABLE_FORMAT_VERSION)?;
@@ -78,8 +84,29 @@ impl CompiledProgram {
         write_u32_values(writer, &self.main.chunk, "main bytecode")?;
         write_u32_values(writer, &self.main.line_info, "main line table")?;
         write_debug_symbols(writer, &self.debug_symbols)?;
+        write_native_metadata(writer, &self.native_metadata)?;
         Ok(())
     }
+}
+
+fn write_native_metadata<W: Write>(
+    writer: &mut W,
+    metadata: &HashMap<u16, super::ProgramNativeMetadata>,
+) -> Result<(), LoaderError> {
+    write_count(writer, metadata.len(), "native metadata")?;
+    let mut sorted: Vec<_> = metadata.iter().collect();
+    sorted.sort_by_key(|(index, _)| **index);
+    for (&index, metadata) in sorted {
+        writer.write_u16::<LittleEndian>(index)?;
+        writer.write_u32::<LittleEndian>(metadata.effects.bits())?;
+        writer.write_u32::<LittleEndian>(metadata.capabilities.bits())?;
+        writer.write_u8(metadata.behavior.to_byte())?;
+        writer.write_u8(metadata.cancellation.to_byte())?;
+        let (operation, kind) = metadata.resource.to_bytes();
+        writer.write_u8(operation)?;
+        writer.write_u8(kind)?;
+    }
+    Ok(())
 }
 
 fn write_count<W: Write>(writer: &mut W, count: usize, context: &str) -> Result<(), LoaderError> {

@@ -65,6 +65,23 @@ fn promo_skips_loops_with_calls() {
 }
 
 #[test]
+fn promo_skips_loops_with_task_execution_barriers() {
+    for barrier in [OpCode::Spawn, OpCode::Await, OpCode::ScopeExit] {
+        let mut max_slots: u16 = 4;
+        let instrs = vec![
+            (abx(OpCode::GetGlobal, 1, 5), 1),
+            (abc(barrier, 1, 1, 0), 1),
+            (abx(OpCode::SetGlobal, 1, 5), 1),
+            (abx(OpCode::Jump, 0, 0), 1),
+            (abc(OpCode::Return, 0, 0, 0), 1),
+        ];
+        let result = register_promotion(instrs.clone(), &mut max_slots);
+        assert_eq!(max_slots, 4);
+        assert_eq!(result, instrs, "barrier {barrier} must prevent promotion");
+    }
+}
+
+#[test]
 fn promo_break_jump_lands_on_set_global() {
     // Loop with a break that jumps to exit.  The exit should have SET_GLOBAL.
     //

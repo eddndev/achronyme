@@ -34,8 +34,11 @@ pub mod availability;
 pub mod build;
 pub mod builtins;
 pub mod const_eval;
+pub mod effect_inference;
+pub mod effects;
 pub mod error;
 pub mod module_graph;
+pub mod prove_methods;
 pub mod statics;
 pub mod symbol;
 pub mod table;
@@ -47,13 +50,21 @@ pub use annotate::{
 pub use availability::{infer_availability, AvailabilityResult, RestrictionReason};
 pub use build::{
     build_availability_map, build_dispatch_maps, build_outer_functions, build_resolver_state,
-    ResolverState,
+    build_resolver_state_with_registry, ResolverState,
 };
-pub use builtins::{BuiltinEntry, BuiltinRegistry};
+pub use builtins::{BuiltinEntry, BuiltinRegistry, NativeMeta};
 pub use const_eval::{evaluate_constants, ConstValues};
+pub use effect_inference::{
+    effect_chain, infer_effects, validate_effects, EffectCause, EffectInferenceResult,
+};
+pub use effects::{
+    CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect, ResourceKind,
+    CAPABILITY_CATALOG, EFFECT_CATALOG,
+};
 pub use error::{ResolveError, UnsupportedShape};
 pub use module_graph::{
     ImportEdge, ImportEdgeKind, LoadedModule, ModuleGraph, ModuleId, ModuleNode, ModuleSource,
 };
+pub use prove_methods::{lookup_prove_method, ProveMethodDecl, ProveMethodKind, PROVE_METHODS};
 pub use symbol::{Arity, Availability, CallableKind, SymbolId};
 pub use table::SymbolTable;

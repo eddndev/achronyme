@@ -1,6 +1,7 @@
 use super::common::{
     remap_field_handles, run_source_with_mock_proof, run_source_with_prove, MockProofHandler,
 };
+use akron::specs::CapabilitySet;
 use akron::{CallFrame, VM};
 use akronc::Compiler;
 use memory::{Function, Value};
@@ -128,6 +129,7 @@ fn proof_object_gc_survives_when_rooted() {
         print(j)
     "#;
     let mut vm = VM::new();
+    vm.host_policy.grant(CapabilitySet::CONSOLE_WRITE);
     vm.stress_mode = true; // GC on every allocation
 
     let mut compiler = Compiler::new();

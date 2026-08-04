@@ -23,10 +23,13 @@ use crate::style::Styler;
 mod input;
 mod plonkish;
 mod r1cs;
+mod repeat;
 
+use crate::commands::r1cs_proof::Groth16Field;
 use input::{parse_inputs, parse_inputs_toml};
 use plonkish::run_plonkish_pipeline;
-use r1cs::{run_r1cs_pipeline, run_r1cs_repeat};
+use r1cs::run_r1cs_pipeline;
+use repeat::run_r1cs_repeat;
 
 // ---------------------------------------------------------------------------
 // Command entry point
@@ -43,12 +46,54 @@ pub fn circom_command(
     backend: &str,
     prime_id: PrimeId,
     prove: bool,
+    low_memory: bool,
     solidity_path: Option<&str>,
     plonkish_json_path: Option<&str>,
     dump_ir: bool,
     circuit_stats: bool,
     lib_dirs: &[String],
     error_format: ErrorFormat,
+) -> Result<()> {
+    circom_command_with_key_source(
+        path,
+        r1cs_path,
+        wtns_path,
+        inputs,
+        input_files,
+        no_optimize,
+        backend,
+        prime_id,
+        prove,
+        low_memory,
+        solidity_path,
+        plonkish_json_path,
+        dump_ir,
+        circuit_stats,
+        lib_dirs,
+        error_format,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn circom_command_with_key_source(
+    path: &str,
+    r1cs_path: &str,
+    wtns_path: &str,
+    inputs: Option<&str>,
+    input_files: &[String],
+    no_optimize: bool,
+    backend: &str,
+    prime_id: PrimeId,
+    prove: bool,
+    low_memory: bool,
+    solidity_path: Option<&str>,
+    plonkish_json_path: Option<&str>,
+    dump_ir: bool,
+    circuit_stats: bool,
+    lib_dirs: &[String],
+    error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     // Validate flag combinations early
     if solidity_path.is_some() && backend != "r1cs" {
@@ -72,6 +117,12 @@ pub fn circom_command(
     if !matches!(backend, "r1cs" | "plonkish") {
         return Err(anyhow::anyhow!(
             "unknown backend `{backend}` (use \"r1cs\" or \"plonkish\")"
+        ));
+    }
+
+    if low_memory && (backend != "r1cs" || no_optimize || dump_ir || circuit_stats) {
+        return Err(anyhow::anyhow!(
+            "--low-memory requires an optimized r1cs export without --dump-ir or --circuit-stats"
         ));
     }
 
@@ -105,12 +156,14 @@ pub fn circom_command(
             backend,
             prime_id,
             prove,
+            low_memory,
             solidity_path,
             plonkish_json_path,
             dump_ir,
             circuit_stats,
             lib_dirs,
             error_format,
+            key_source,
         ),
         PrimeId::Bls12_381 => circom_command_inner::<memory::Bls12_381Fr>(
             path,
@@ -122,12 +175,14 @@ pub fn circom_command(
             backend,
             prime_id,
             prove,
+            low_memory,
             solidity_path,
             plonkish_json_path,
             dump_ir,
             circuit_stats,
             lib_dirs,
             error_format,
+            key_source,
         ),
         other => Err(anyhow::anyhow!(
             "prime `{}` is not supported for Circom compilation (use bn254 or bls12-381)",
@@ -137,7 +192,7 @@ pub fn circom_command(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
+fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>(
     path: &str,
     r1cs_path: &str,
     wtns_path: &str,
@@ -147,12 +202,14 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
     backend: &str,
     prime_id: PrimeId,
     prove: bool,
+    low_memory: bool,
     solidity_path: Option<&str>,
     plonkish_json_path: Option<&str>,
     dump_ir: bool,
     circuit_stats: bool,
     lib_dirs: &[String],
     error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     let mut resolved_inputs: Option<HashMap<String, FieldElement<F>>> = if let Some(raw) = inputs {
         Some(parse_inputs::<F>(raw)?)
@@ -238,18 +295,19 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
     };
 
     // Instantiate ProveIR → SSA IR with captures from main component args
-    // (Lysis path). Prove-bound runs drop the program right after
-    // constraint emission and read none of its metadata maps, so they
-    // take the lean instantiate — on large circuits the maps are the
-    // dominant share of the materialized program's heap. Flows that keep
-    // the program for diagnostics (dump, stats, verify-failure spans)
-    // stay on the full instantiate.
+    // (Lysis path). Prove-bound runs and explicit low-memory exports drop
+    // the program after optimized constraint emission and read none of its
+    // metadata maps, so they take the lean instantiate. On large circuits
+    // those maps are a dominant share of the materialized program's heap.
+    // Flows that keep the program for diagnostics (dump, stats, or
+    // verify-failure spans) stay on the full instantiate.
     let fe_captures: HashMap<String, FieldElement<F>> = capture_values
         .iter()
         .map(|(k, v)| (k.clone(), FieldElement::<F>::from_u64(*v)))
         .collect();
-    let lean_prove = backend == "r1cs" && prove && !no_optimize && !dump_ir && !circuit_stats;
-    let (mut program, fused_stats) = if lean_prove {
+    let lean_r1cs =
+        backend == "r1cs" && (prove || low_memory) && !no_optimize && !dump_ir && !circuit_stats;
+    let (mut program, fused_stats) = if lean_r1cs {
         // Fused pipeline: the pass pipeline runs against the
         // interner's emission events and the program materializes
         // once, already optimized — the unoptimized instruction Vec
@@ -416,6 +474,8 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                 no_optimize,
                 &proven,
                 want_reusable,
+                lean_r1cs,
+                key_source,
             )?;
 
             // Extra input files reuse the compiled circuit: only the
@@ -449,6 +509,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                         r1cs_path,
                         wtns_path,
                         prove,
+                        key_source,
                         &style,
                         verbose,
                     )?;
@@ -468,6 +529,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider>(
                 &style,
                 verbose,
                 &proven,
+                key_source,
             )
         }
         _ => unreachable!(),

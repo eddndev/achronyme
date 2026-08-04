@@ -277,6 +277,43 @@ fn fn_alias_local_resolves_to_target() {
 }
 
 #[test]
+fn dynamic_fn_call_records_all_static_targets() {
+    let mut src = MockSource::default();
+    src.add(
+        "main",
+        "fn with_clock() { time() }\n\
+         fn pure() { 1 }\n\
+         fn caller(flag) { let selected = if flag { with_clock } else { pure }\n selected() }",
+    );
+    let graph = ModuleGraph::build("main", &mut src).expect("build");
+    let table = build_full_table(&graph);
+    let resolved = annotate_program(&graph, &table);
+
+    let root = graph.get(graph.root());
+    let mut call_id = None;
+    visit_program(&root.program, |expr| {
+        if let Expr::Call { id, callee, .. } = expr {
+            if matches!(callee.as_ref(), Expr::Ident { name, .. } if name == "selected") {
+                call_id = Some(*id);
+            }
+        }
+    });
+    let mut targets = resolved
+        .call_targets
+        .get(&(graph.root(), call_id.expect("selected call")))
+        .cloned()
+        .expect("dynamic call targets");
+    targets.sort();
+
+    let mut expected = vec![
+        table.lookup("with_clock").unwrap(),
+        table.lookup("pure").unwrap(),
+    ];
+    expected.sort();
+    assert_eq!(targets, expected);
+}
+
+#[test]
 fn fn_alias_cross_module_via_static_access() {
     // `let a = l::helper; a()` — the alias resolves against a
     // namespace import, so the call site annotates to the

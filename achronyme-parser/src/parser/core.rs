@@ -13,6 +13,9 @@ pub(super) struct Parser {
     pub(super) pos: usize,
     /// Nesting depth: 0 = top-level, >0 = inside block/function.
     pub(super) block_depth: usize,
+    /// Number of enclosing `concurrent` expressions. Used for the
+    /// syntax-level placement check on `spawn`.
+    pub(super) concurrent_depth: usize,
     /// Expression parser recursion depth. Tracked separately from
     /// `block_depth` because expression nesting (`[[[...]]]`,
     /// `((((...))))`, chained postfix) can blow the stack without
@@ -45,6 +48,7 @@ impl Parser {
             tokens,
             pos: 0,
             block_depth: 0,
+            concurrent_depth: 0,
             expr_depth: 0,
             errors: Vec::new(),
             next_expr_id: 0,

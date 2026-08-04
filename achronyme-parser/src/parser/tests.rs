@@ -13,6 +13,8 @@ pub(crate) fn has_errors(source: &str) -> bool {
     !errors.is_empty()
 }
 
+#[path = "tests/concurrency.rs"]
+mod concurrency;
 #[path = "tests/depth_limits.rs"]
 mod depth_limits;
 #[path = "tests/expr_ids.rs"]

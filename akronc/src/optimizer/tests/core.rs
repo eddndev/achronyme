@@ -33,6 +33,11 @@ fn dest_reg_none_for_non_writes() {
     assert_eq!(dest_reg(abx(OpCode::JumpIfFalse, 2, 10)), None);
     assert_eq!(dest_reg(abc(OpCode::Return, 0, 0, 0)), None);
     assert_eq!(dest_reg(abx(OpCode::Print, 1, 0)), None);
+    assert_eq!(dest_reg(abc(OpCode::ScopeEnter, 0, 0, 0)), None);
+    assert_eq!(dest_reg(abc(OpCode::ScopeExit, 0, 0, 0)), None);
+    assert_eq!(dest_reg(abc(OpCode::CancelCheck, 0, 0, 0)), None);
+    assert_eq!(dest_reg(abc(OpCode::Spawn, 3, 3, 1)), Some(3));
+    assert_eq!(dest_reg(abc(OpCode::Await, 4, 4, 0)), Some(4));
 }
 
 // ── find_loops ──────────────────────────────────────────────────────

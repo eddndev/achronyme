@@ -1,0 +1,19 @@
+fn left() {
+    await yield_now()
+    20
+}
+
+fn right() {
+    22
+}
+
+let total = concurrent {
+    let left_task = spawn left()
+    let right_task = spawn right()
+    let left_value = await left_task
+    let right_value = await right_task
+    left_value + right_value
+}
+
+assert(total == 42)
+print("structured-tasks-ok")

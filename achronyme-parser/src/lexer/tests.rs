@@ -57,6 +57,27 @@ fn keywords() {
 }
 
 #[test]
+fn concurrency_keywords_are_reserved() {
+    assert_eq!(
+        kinds("concurrent spawn await"),
+        vec![
+            TokenKind::Concurrent,
+            TokenKind::Spawn,
+            TokenKind::Await,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn canonical_keyword_table_drives_the_lexer() {
+    for (source, expected) in crate::token::KEYWORDS {
+        let tokens = Lexer::tokenize(source).unwrap();
+        assert_eq!(tokens[0].kind, *expected, "keyword {source}");
+    }
+}
+
+#[test]
 fn ident_not_keyword() {
     let tokens = Lexer::tokenize("letter").unwrap();
     assert_eq!(tokens[0].kind, TokenKind::Ident);

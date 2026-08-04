@@ -17,6 +17,7 @@ pub(super) trait Bn254Ops: FieldBackend + PoseidonParamsProvider + Sized {
     fn solidity_from_cs(
         _cs: &constraints::r1cs::ConstraintSystem<Self>,
         _cache_dir: &std::path::Path,
+        _key_source: &proving::groth16::ProvingKeySource,
     ) -> Result<String, String> {
         Err(format!(
             "Solidity not supported for {}",
@@ -36,8 +37,9 @@ impl Bn254Ops for memory::Bn254Fr {
     fn solidity_from_cs(
         cs: &constraints::r1cs::ConstraintSystem<Self>,
         cache_dir: &std::path::Path,
+        key_source: &proving::groth16::ProvingKeySource,
     ) -> Result<String, String> {
-        let vk = proving::groth16_bn254::setup_vk_only(cs, cache_dir)
+        let vk = proving::groth16_bn254::setup_vk_only(cs, cache_dir, key_source)
             .map_err(|e| format!("Groth16 setup failed: {e}"))?;
         Ok(proving::solidity::generate_solidity_verifier(&vk))
     }

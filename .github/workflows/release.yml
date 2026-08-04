@@ -35,9 +35,14 @@ jobs:
     needs: metadata
     uses: ./.github/workflows/llvm-production-gate.yml
 
+  proving:
+    name: Proving conformance
+    needs: metadata
+    uses: ./.github/workflows/proving-conformance.yml
+
   build:
     name: Build (${{ matrix.target }})
-    needs: gate
+    needs: [gate, proving]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:

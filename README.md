@@ -66,6 +66,11 @@ let p = prove(hash: Public) {
 print(proof_json(p))  // Groth16 proof, verifiable on-chain
 ```
 
+Proof generation fails closed unless a key source is selected. Use
+`--insecure-dev-setup` only for local development. Production BN254 Groth16
+uses a ceremony-derived key selected with `--trusted-key-dir`; see the
+[production trusted-setup guide](docs/proving/trusted-setup.md).
+
 ---
 
 ## How It Works
@@ -260,6 +265,18 @@ ach circuit circuit.ach --inputs "x=42,y=7"
 # Compile circuit (CLI declarations)
 ach circuit circuit.ach --public "out" --witness "a,b" --inputs "out=42,a=6,b=7"
 
+# Export a large optimized R1CS and witness through the bounded path
+ach --no-config circom circuit.circom --input-file inputs.toml --low-memory \
+  --r1cs circuit.r1cs --wtns witness.wtns
+
+# Generate a local-only Groth16 proof with explicit insecure setup
+ach --insecure-dev-setup circuit circuit.ach \
+  --inputs "out=42,a=6,b=7" --prove
+
+# Generate a production BN254 Groth16 proof from a trusted key store
+ach --trusted-key-dir ./trusted-keys circuit circuit.ach \
+  --inputs "out=42,a=6,b=7" --prove
+
 # Plonkish backend
 ach circuit circuit.ach --backend plonkish --inputs "x=42,y=7"
 
@@ -274,15 +291,28 @@ ach compile script.ach --output script.achb
 
 # Disassemble
 ach disassemble script.ach
+
+# Verify detached Groth16 artifacts without project configuration
+ach verify --curve bn254 --proof proof.json --public public.json \
+  --vkey verification_key.json --format json
 ```
 
-Output `.r1cs` and `.wtns` files are compatible with snarkjs:
+Output `.r1cs` and `.wtns` files are compatible with snarkjs. Validate the
+witness, then follow the audited phase-2 contribution and packaging workflow;
+the zero-contribution challenge is never a production key:
 
 ```bash
-snarkjs groth16 setup circuit.r1cs pot12_final.ptau circuit.zkey
-snarkjs groth16 prove circuit.zkey witness.wtns proof.json public.json
-snarkjs groth16 verify verification_key.json public.json proof.json
+snarkjs wtns check circuit.r1cs witness.wtns
+scripts/proving/prepare-phase2.sh \
+  --r1cs circuit.r1cs --wtns witness.wtns \
+  --phase1 ceremony/phase1.ptau --work-dir ceremony
 ```
+
+See [Production trusted setup](docs/proving/trusted-setup.md) for phase-1
+verification, independent contribution, immutable key packaging, native proof
+generation, and bidirectional snarkjs conformance. The measured ECDSA release
+gate is documented in
+[ECDSA boss-fight release gate](docs/proving/boss-fight-release-gate.md).
 
 ---
 
@@ -304,7 +334,10 @@ Variables listed in the parameter list (e.g. `product: Public`) become public in
 
 The result is a `Proof` object (Groth16 or PlonK depending on `--prove-backend`). Extract components with `proof_json(p)`, `proof_public(p)`, `proof_vkey(p)`. Verify with `verify_proof(p)`.
 
-If no proving backend is available, the block still compiles the circuit, generates the witness, and verifies constraints locally (returns `nil`).
+The CLI refuses to generate a proof when no trusted key is available and local
+insecure setup was not explicitly enabled. BLS12-381 Groth16 and Plonkish
+proofs remain development-only in 0.1.0 because production trusted-key import
+is currently limited to BN254 Groth16.
 
 ---
 

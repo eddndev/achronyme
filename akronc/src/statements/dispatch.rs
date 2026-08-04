@@ -128,10 +128,12 @@ impl StatementCompiler for Compiler {
             Stmt::Return { value, .. } => {
                 if let Some(expr) = value {
                     let reg = self.compile_expr(expr)?;
+                    self.emit_concurrent_scope_cleanup(0)?;
                     self.emit_abc(OpCode::Return, reg, 1, 0)?;
                     self.free_reg(reg)?;
                 } else {
                     // Void return (0 values), do NOT load Nil
+                    self.emit_concurrent_scope_cleanup(0)?;
                     self.emit_abc(OpCode::Return, 0, 0, 0)?;
                 }
                 Ok(())
@@ -230,6 +232,9 @@ impl StatementCompiler for Compiler {
             Stmt::Error { .. } => Ok(()),
             Stmt::Expr(expr) => {
                 let reg = self.compile_expr(expr)?;
+                if matches!(expr, Expr::Spawn { .. }) {
+                    self.emit_abc(OpCode::TaskForget, reg, 0, 0)?;
+                }
                 self.free_reg(reg)?;
                 Ok(())
             }

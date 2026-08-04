@@ -7,6 +7,7 @@ use akron::opcode::OpCode;
 
 pub mod binary;
 
+mod concurrency;
 mod helpers;
 mod static_access;
 
@@ -131,6 +132,9 @@ impl ExpressionCompiler for Compiler {
                 self.compile_block(block, reg)?;
                 Ok(reg)
             }
+            Expr::Concurrent { body, .. } => self.compile_concurrent(body),
+            Expr::Spawn { call, .. } => self.compile_spawn(call),
+            Expr::Await { task, mode, .. } => self.compile_await(task, *mode),
 
             // === Functions ===
             Expr::FnExpr {

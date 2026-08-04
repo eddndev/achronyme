@@ -50,8 +50,10 @@ ir-forge = { path = "../ir-forge" }
 circom = { path = "../circom" }
 achronyme-parser = { path = "../achronyme-parser" }
 achronyme-std = { path = "../std" }
+resolve = { path = "../resolve" }
 
 [dev-dependencies]
+base64 = "0.22"
 tempfile = "3"
 # `cross_path_prove_baseline` test imports `zkc::lysis_oracle::compare`,
 # which is gated behind `test-support` since Phase 2.B (the oracle has

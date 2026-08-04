@@ -1,6 +1,7 @@
 use crate::symbol::{Arity, Availability};
+use crate::{CancellationPolicy, CapabilitySet, EffectSet, NativeBehavior, ResourceEffect};
 
-use super::{BuiltinAuditError, BuiltinEntry, ProveIrLowerHandle, VmFnHandle};
+use super::{BuiltinAuditError, BuiltinEntry, NativeMeta, ProveIrLowerHandle, VmFnHandle};
 
 /// The set of all registered builtins in a compilation session.
 ///
@@ -23,14 +24,42 @@ pub struct BuiltinRegistry {
 /// Convenience for building a [`BuiltinEntry`] inline in
 /// [`BuiltinRegistry::default()`].
 macro_rules! entry {
-    (vm $name:literal, $arity:expr, vm = $vm_idx:literal) => {
+    (
+        vm $name:literal, $arity:expr, vm = $vm_idx:literal,
+        effects = $effects:expr, capabilities = $capabilities:expr,
+        behavior = $behavior:expr, cancellation = $cancellation:expr
+    ) => {
         BuiltinEntry {
             name: $name,
             arity: $arity,
             availability: Availability::Vm,
             vm_fn: Some(VmFnHandle($vm_idx)),
             prove_ir_lower: None,
+            effects: $effects,
+            capabilities: $capabilities,
+            behavior: $behavior,
+            cancellation: $cancellation,
+            resource: ResourceEffect::None,
         }
+    };
+    (
+        vm $name:literal, $arity:expr, vm = $vm_idx:literal,
+        effects = $effects:expr, capabilities = $capabilities:expr,
+        behavior = $behavior:expr
+    ) => {
+        entry!(
+            vm $name, $arity, vm = $vm_idx,
+            effects = $effects, capabilities = $capabilities,
+            behavior = $behavior, cancellation = CancellationPolicy::None
+        )
+    };
+    (vm $name:literal, $arity:expr, vm = $vm_idx:literal) => {
+        entry!(
+            vm $name, $arity, vm = $vm_idx,
+            effects = EffectSet::empty(),
+            capabilities = CapabilitySet::empty(),
+            behavior = NativeBehavior::Immediate
+        )
     };
     (prove $name:literal, $arity:expr, prove = $prove_idx:literal) => {
         BuiltinEntry {
@@ -39,6 +68,11 @@ macro_rules! entry {
             availability: Availability::ProveIr,
             vm_fn: None,
             prove_ir_lower: Some(ProveIrLowerHandle($prove_idx)),
+            effects: EffectSet::CIRCUIT,
+            capabilities: CapabilitySet::empty(),
+            behavior: NativeBehavior::Immediate,
+            cancellation: CancellationPolicy::None,
+            resource: ResourceEffect::None,
         }
     };
     (both $name:literal, $arity:expr, vm = $vm_idx:literal, prove = $prove_idx:literal) => {
@@ -48,6 +82,11 @@ macro_rules! entry {
             availability: Availability::Both,
             vm_fn: Some(VmFnHandle($vm_idx)),
             prove_ir_lower: Some(ProveIrLowerHandle($prove_idx)),
+            effects: EffectSet::empty(),
+            capabilities: CapabilitySet::empty(),
+            behavior: NativeBehavior::Immediate,
+            cancellation: CancellationPolicy::None,
+            resource: ResourceEffect::None,
         }
     };
 }
@@ -69,31 +108,53 @@ impl Default for BuiltinRegistry {
     ///
     /// - **4 Both**: `poseidon`, `poseidon_many`, `assert`, `mux`
     ///   (`mux` is dispatched in both backends with a scalar VM fallback)
-    /// - **11 Vm-only**: `print`, `typeof`, `time`, `proof_json`,
+    /// - **12 Vm-only**: `print`, `typeof`, `time`, `proof_json`,
     ///   `proof_public`, `proof_vkey`, `verify_proof`, `gc_stats`,
-    ///   `bigint256`, `bigint512`, `from_bits`
+    ///   `bigint256`, `bigint512`, `from_bits`, `cancel_check`
     /// - **6 ProveIr-only**: `range_check`, `merkle_verify`, `len`,
     ///   `assert_eq`, `int_div`, `int_mod`
     ///
-    /// Total: **21 builtins**.
+    /// Total: **22 builtins**.
     fn default() -> Self {
         let entries = vec![
-            // ── VM-only (11) ───────────────────────────────────────
+            // VM-only (12)
             // VmFnHandle = positional index in builtin_modules()
-            entry!(vm "print",         Arity::Variadic,   vm = 0),
+            entry!(
+                vm "print", Arity::Variadic, vm = 0,
+                effects = EffectSet::IO_CONSOLE,
+                capabilities = CapabilitySet::CONSOLE_WRITE,
+                behavior = NativeBehavior::Blocking
+            ),
             entry!(vm "typeof",        Arity::Fixed(1),   vm = 1),
             // Handle 2 is `assert` — registered as Both below.
-            entry!(vm "time",          Arity::Fixed(0),   vm = 3),
+            entry!(
+                vm "time", Arity::Fixed(0), vm = 3,
+                effects = EffectSet::IO_CLOCK,
+                capabilities = CapabilitySet::CLOCK,
+                behavior = NativeBehavior::Immediate
+            ),
             entry!(vm "proof_json",    Arity::Fixed(1),   vm = 4),
             entry!(vm "proof_public",  Arity::Fixed(1),   vm = 5),
             entry!(vm "proof_vkey",    Arity::Fixed(1),   vm = 6),
             // Handles 7-8 (poseidon, poseidon_many) are Both — below.
-            entry!(vm "verify_proof",  Arity::Fixed(1),   vm = 9),
+            entry!(
+                vm "verify_proof", Arity::Fixed(1), vm = 9,
+                effects = EffectSet::VERIFY,
+                capabilities = CapabilitySet::empty(),
+                behavior = NativeBehavior::Immediate
+            ),
             entry!(vm "gc_stats",      Arity::Fixed(0),   vm = 10),
             // Handle 11 is `mux` — Both, below.
             entry!(vm "bigint256",     Arity::Fixed(1),   vm = 12),
             entry!(vm "bigint512",     Arity::Fixed(1),   vm = 13),
             entry!(vm "from_bits",     Arity::Fixed(2),   vm = 14),
+            entry!(
+                vm "cancel_check", Arity::Fixed(0), vm = 15,
+                effects = EffectSet::TASK,
+                capabilities = CapabilitySet::empty(),
+                behavior = NativeBehavior::Immediate,
+                cancellation = CancellationPolicy::Cooperative
+            ),
             // ── Both (4) ───────────────────────────────────────────
             entry!(both "poseidon",      Arity::Fixed(2), vm = 7,  prove = 0),
             entry!(both "poseidon_many", Arity::Variadic, vm = 8,  prove = 1),
@@ -128,6 +189,44 @@ impl BuiltinRegistry {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+        }
+    }
+
+    /// Build the production registry plus host-provided VM natives.
+    pub fn with_extra_natives(extras: &[NativeMeta]) -> Self {
+        let mut registry = Self::default();
+        registry.extend_extra_natives(extras);
+        registry
+            .audit()
+            .expect("external native metadata failed registry audit");
+        registry
+    }
+
+    /// Append host-provided VM natives after all current VM handles.
+    pub fn extend_extra_natives(&mut self, extras: &[NativeMeta]) {
+        let start = self.vm_native_count();
+        for (offset, metadata) in extras.iter().enumerate() {
+            let arity = match metadata.arity {
+                -1 => Arity::Variadic,
+                value if value >= 0 => Arity::Fixed(
+                    u8::try_from(value).expect("native arity must fit the u8 contract"),
+                ),
+                value => panic!("invalid native arity {value} for {}", metadata.name),
+            };
+            let handle = u32::try_from(start + offset)
+                .expect("native registry handle must fit the u32 contract");
+            self.push(BuiltinEntry {
+                name: metadata.name,
+                arity,
+                availability: Availability::Vm,
+                vm_fn: Some(VmFnHandle(handle)),
+                prove_ir_lower: None,
+                effects: metadata.effects,
+                capabilities: metadata.capabilities,
+                behavior: metadata.behavior,
+                cancellation: metadata.cancellation,
+                resource: metadata.resource,
+            });
         }
     }
 

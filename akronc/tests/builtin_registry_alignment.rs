@@ -167,6 +167,7 @@ fn production_vm_only_set() {
         "bigint256",
         "bigint512",
         "from_bits",
+        "cancel_check",
     ];
     expected.sort_unstable();
 

@@ -1,8 +1,8 @@
 #[test]
-fn release_version_is_0_0_1_without_a_prerelease_suffix() {
+fn release_version_is_0_1_0_without_a_prerelease_suffix() {
     let version = env!("CARGO_PKG_VERSION");
 
-    assert_eq!(version, "0.0.1");
+    assert_eq!(version, "0.1.0");
     assert_eq!(version.split('.').count(), 3);
     assert!(version.split('.').all(|part| part.parse::<u64>().is_ok()));
 }

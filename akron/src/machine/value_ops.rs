@@ -22,6 +22,10 @@ impl ValueOps for super::vm::VM {
             v if v.is_int() => format!("{}", v.as_int().unwrap_or(0)),
             v if v.is_bool() => format!("{}", v.as_bool().unwrap_or(false)),
             v if v.is_nil() => "nil".to_string(),
+            v if v.is_resource() => match v.as_resource_handle() {
+                Some((kind, handle)) => format!("<{kind:?}#{handle}>"),
+                None => "<bad resource>".to_string(),
+            },
             v if v.is_field() => {
                 let Some(handle) = v.as_handle() else {
                     return "<bad field>".into();

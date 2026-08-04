@@ -181,6 +181,9 @@ fn walk_expr(
             walk_block(info, body, module, anns);
         }
         Expr::Forever { body, .. } => walk_block(info, body, module, anns),
+        Expr::Concurrent { body, .. } => walk_block(info, body, module, anns),
+        Expr::Spawn { call, .. } => walk_expr(info, call, module, anns),
+        Expr::Await { task, .. } => walk_expr(info, task, module, anns),
         Expr::Block { block, .. } => walk_block(info, block, module, anns),
         Expr::FnExpr { body, .. } => {
             walk_block(info, body, module, anns);

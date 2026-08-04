@@ -127,8 +127,13 @@ fn achronyme_prove_snarkjs_verify(
 
     // 2. Achronyme Groth16 proof generation.
     let cache_dir = bench_cache_dir().join("achronyme_keys");
-    let result = proving::groth16_bn254::generate_proof(&compiler.cs, &witness, &cache_dir)
-        .map_err(|e| format!("Groth16 proof gen failed: {e}"))?;
+    let result = proving::groth16_bn254::generate_proof(
+        &compiler.cs,
+        &witness,
+        &cache_dir,
+        &proving::groth16::ProvingKeySource::InsecureLocal,
+    )
+    .map_err(|e| format!("Groth16 proof gen failed: {e}"))?;
 
     let (proof_json, public_json, vkey_json) = match result {
         akron::ProveResult::Proof {

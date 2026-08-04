@@ -6,11 +6,12 @@ use std::ops::{BitOr, BitOrAssign};
 use super::calls::{execute_instruction, finish_call, prepare_call, prepare_known_call};
 use super::context::{
     execution_window, interpreter_bailout, load_register, poll, poll_block, poll_fast_block,
-    poll_tier1_block, raise_error, refund_block, register_window, store_register,
+    poll_tier1_block, raise_error, refund_block, register_window, store_register, task_cancel,
+    task_resume, task_suspend, task_wake,
 };
 use super::specializations::{list_index, list_push};
 
-pub const RUNTIME_ABI_VERSION: u32 = 5;
+pub const RUNTIME_ABI_VERSION: u32 = 6;
 pub type RuntimeStatus = u32;
 pub type CompiledEntry =
     unsafe extern "C" fn(*const RuntimeApi, *mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
@@ -64,6 +65,8 @@ pub type ExecutionWindowFn = unsafe extern "C" fn(
     *mut u32,
 ) -> RuntimeStatus;
 pub type SpecializeInstructionFn = unsafe extern "C" fn(*mut c_void, u32, u32) -> RuntimeStatus;
+pub type TaskTransitionFn = unsafe extern "C" fn(*mut c_void, u32, u32, *mut u64) -> RuntimeStatus;
+pub type TaskSignalFn = unsafe extern "C" fn(*mut c_void, u32) -> RuntimeStatus;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -84,6 +87,7 @@ impl RuntimeCapabilities {
     pub const FAST_POLL: Self = Self(1 << 11);
     pub const KNOWN_CALLS: Self = Self(1 << 12);
     pub const LIST_SPECIALIZATION: Self = Self(1 << 13);
+    pub const STRUCTURED_TASKS: Self = Self(1 << 14);
     pub const CORE: Self = Self(Self::REGISTER_IO.0 | Self::POLL.0 | Self::RAISE_ERROR.0);
     pub const LLVM_BASELINE: Self = Self(Self::CORE.0 | Self::INTERPRETER_BAILOUT.0);
     pub const LLVM_TIER1: Self = Self(
@@ -99,6 +103,7 @@ impl RuntimeCapabilities {
     pub const LLVM_TIER2: Self = Self(
         Self::LLVM_TIER1.0 | Self::FAST_POLL.0 | Self::KNOWN_CALLS.0 | Self::LIST_SPECIALIZATION.0,
     );
+    pub const LLVM_TASKS: Self = Self(Self::LLVM_TIER2.0 | Self::STRUCTURED_TASKS.0);
 
     pub const fn empty() -> Self {
         Self(0)
@@ -156,6 +161,10 @@ pub struct RuntimeApi {
     pub prepare_known_call: PrepareKnownCallFn,
     pub list_push: SpecializeInstructionFn,
     pub list_index: SpecializeInstructionFn,
+    pub task_suspend: TaskTransitionFn,
+    pub task_resume: TaskTransitionFn,
+    pub task_wake: TaskSignalFn,
+    pub task_cancel: TaskSignalFn,
 }
 
 #[repr(C)]
@@ -244,7 +253,34 @@ struct RuntimeApiV4 {
 }
 
 pub const RUNTIME_ABI_V4_SIZE: u32 = size_of::<RuntimeApiV4>() as u32;
-pub const RUNTIME_ABI_V5_SIZE: u32 = size_of::<RuntimeApi>() as u32;
+
+#[repr(C)]
+struct RuntimeApiV5 {
+    magic: [u8; 8],
+    abi_version: u32,
+    struct_size: u32,
+    capabilities: RuntimeCapabilities,
+    load_register: LoadRegisterFn,
+    store_register: StoreRegisterFn,
+    poll: PollFn,
+    raise_error: RaiseErrorFn,
+    interpreter_bailout: InterpreterBailoutFn,
+    register_window: RegisterWindowFn,
+    poll_block: PollBlockFn,
+    refund_block: RefundBlockFn,
+    execute_instruction: ExecuteInstructionFn,
+    prepare_call: PrepareCallFn,
+    finish_call: FinishCallFn,
+    poll_tier1_block: PollTier1BlockFn,
+    execution_window: ExecutionWindowFn,
+    poll_fast_block: PollFastBlockFn,
+    prepare_known_call: PrepareKnownCallFn,
+    list_push: SpecializeInstructionFn,
+    list_index: SpecializeInstructionFn,
+}
+
+pub const RUNTIME_ABI_V5_SIZE: u32 = size_of::<RuntimeApiV5>() as u32;
+pub const RUNTIME_ABI_V6_SIZE: u32 = size_of::<RuntimeApi>() as u32;
 
 impl RuntimeApi {
     pub fn validate(
@@ -282,7 +318,7 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     magic: *b"AKRTABI\0",
     abi_version: RUNTIME_ABI_VERSION,
     struct_size: size_of::<RuntimeApi>() as u32,
-    capabilities: RuntimeCapabilities::LLVM_TIER2,
+    capabilities: RuntimeCapabilities::LLVM_TASKS,
     load_register,
     store_register,
     poll,
@@ -300,6 +336,10 @@ static RUNTIME_API: RuntimeApi = RuntimeApi {
     prepare_known_call,
     list_push,
     list_index,
+    task_suspend,
+    task_resume,
+    task_wake,
+    task_cancel,
 };
 
 pub fn runtime_api() -> &'static RuntimeApi {

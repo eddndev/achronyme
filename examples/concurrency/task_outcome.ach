@@ -1,0 +1,13 @@
+fn divide(numerator, denominator) {
+    assert(denominator != 0)
+    numerator / denominator
+}
+
+let result = concurrent {
+    let computation = spawn divide(42, 0)
+    await computation as outcome
+}
+
+assert(result["ok"] == false)
+assert(result["error"] != nil)
+print("task-outcome-ok")

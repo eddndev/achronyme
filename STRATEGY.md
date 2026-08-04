@@ -1,7 +1,7 @@
 # Achronyme: Estrategia Técnica y de Mercado
 
-> Última actualización: Junio 2026
-> Estado: v0.0.1 - 2,000+ tests (cross-validados con snarkjs), 2 backends con provers nativos Rust, 2 auditorías criptográficas limpias, pipeline E2E funcional, interoperabilidad Groth16 verificada. Imports/módulos, multi-curva (`FieldBackend`: BN254 / BLS12-381 / Goldilocks) y comparaciones acotadas a paridad con Circom ya están en `main`; los únicos bloqueadores reales que faltan para un v1.0 estable son la honestidad del trusted-setup y la fachada de SDK pública.
+> Ultima actualizacion: Agosto 2026
+> Estado: v0.1.0 en preparacion - proving nativo Rust, politica de setup fail-closed, import de zkeys BN254 derivados de ceremonia e interoperabilidad Groth16 verificada en fixtures pequenas. El gate ECDSA completo y medido sigue abierto hasta ejecutarse en el host de release y revisar su evidencia. Imports/modulos, multi-curva (`FieldBackend`: BN254 / BLS12-381 / Goldilocks) y comparaciones acotadas a paridad con Circom ya estan implementados; la fachada de SDK publica sigue siendo trabajo para v1.0.
 
 ---
 
@@ -136,10 +136,12 @@ EU Digital Identity Wallet, passports ZK, pruebas de humanidad. Nicho donde un e
 
 ### Provers Nativos
 
-Ambos backends tienen provers nativos en Rust — **no hay dependencia de Node.js/snarkjs** para generar proofs:
+Ambos backends tienen provers nativos en Rust. Node.js/snarkjs no forma parte
+del runtime de prueba, pero se usa como herramienta independiente para la
+ceremonia BN254 de produccion y las compuertas de interoperabilidad:
 
-- **Groth16**: ark-groth16 + ark-bn254 (`cli/src/groth16.rs`). Setup, prove, verify in-process. Caching de `.zkey` por hash SHA256 del R1CS.
-- **PlonK**: halo2 KZG (`cli/src/halo2_proof.rs`). PSE fork. ParamsKZG setup con caching por `k`. ProverSHPLONK + VerifierSHPLONK.
+- **Groth16**: ark-groth16 en `proving/src/groth16.rs`. En desarrollo, el setup local explicito guarda `proving_key.bin` y `verifying_key.bin` por hash SHA-256 del R1CS. En produccion BN254, el prover carga una zkey derivada de ceremonia desde un store inmutable y ligado al R1CS exacto.
+- **PlonK**: halo2 KZG en `proving/src/halo2_proof.rs`. ParamsKZG setup con caching por `k`, ProverSHPLONK y VerifierSHPLONK. En 0.1.0 su setup sigue siendo solo para desarrollo porque no hay import de parametros de produccion.
 
 Ambos seleccionables via `--prove-backend r1cs|plonkish` en la CLI.
 
@@ -235,10 +237,10 @@ Lo que realmente falta para un release estable:
 
 | Prioridad | Item | Esfuerzo |
 |-----------|------|----------|
-| Alta | Honestidad del trusted-setup: dejar de generar la clave con `OsRng` local de forma silenciosa — ponerlo tras un opt-in explícito (`--insecure-dev-setup`) + warning, y documentar la ruta de producción (export `.r1cs` → ceremonia ptau+phase2 en snarkjs → `.zkey` → prove + el verificador Solidity ya existente) | Bajo |
+| Alta | Ejecutar el gate ECDSA completo en el host de release: R1CS+witness, phase 1 verificada, contribucion phase 2 independiente, proof nativa y snarkjs, verificacion cruzada y evidencia de hashes/RSS/tiempo | Medio |
 | Alta | Fachada de SDK pública: crate `achronyme` con un `prove`/`verify` curado (+ el `prove!` que anuncia §9), extraer `DefaultProveHandler` fuera del binario `cli` a una librería embebible, y namespacing/`publish=false`/versiones en los 19 crates antes de publicar en crates.io | Alto |
 | Media | Verify out-of-process del backend Plonkish (los artefactos JSON circuit/proof/public/vkey ya se exportan; falta un `verify_proof_from_json` + subcomando CLI que los consuma) | Medio |
-| Media | Import nativo de `.zkey` para que `ach prove` pruebe sobre claves de una ceremonia externa sin depender de snarkjs en runtime | Medio |
+| Media | Extender import de parametros confiables a BLS12-381 y Plonkish; en 0.1.0 solo BN254 Groth16 tiene store de produccion | Medio |
 | Baja | Inferencia de cota más amplia para comparaciones (vars de inducción de bucle, anchos de señal declarados) + anotaciones de bit-width, para que más comparaciones eviten el fallback sin cota de ~760 constraints | Bajo |
 
 ### v0.2.0 — LSP + VS Code Extension — ENTREGADO

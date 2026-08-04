@@ -23,6 +23,7 @@ const _: () = assert!(std::mem::align_of::<Value>() == std::mem::align_of::<u64>
 
 pub(super) struct RuntimeContextState {
     vm: NonNull<VM>,
+    active_task: Option<u32>,
     pending_error: Option<RuntimeError>,
     gc_countdown: u32,
     bailout_ip: Option<u32>,
@@ -36,6 +37,24 @@ impl RuntimeContextState {
 
     pub(super) fn stats_mut(&mut self) -> &mut ExecutionStats {
         &mut self.stats
+    }
+
+    fn validate_active_task(&mut self) -> Result<(), RuntimeError> {
+        let expected = self.active_task;
+        let actual = unsafe { self.vm_mut() }.task_scheduler.current_task();
+        if actual == expected {
+            return Ok(());
+        }
+
+        let expected = expected
+            .map(|task| task.to_string())
+            .unwrap_or_else(|| "root".to_string());
+        let actual = actual
+            .map(|task| task.to_string())
+            .unwrap_or_else(|| "root".to_string());
+        Err(RuntimeError::task_failed(format!(
+            "compiled runtime changed active task from {expected} to {actual}"
+        )))
     }
 
     fn fail(&mut self, error: RuntimeError) -> RuntimeStatus {
@@ -53,9 +72,11 @@ pub struct RuntimeContext<'vm> {
 impl<'vm> RuntimeContext<'vm> {
     pub fn new(vm: &'vm mut VM) -> Self {
         let gc_countdown = if vm.stress_mode { 1 } else { GC_CHECK_INTERVAL };
+        let active_task = vm.task_scheduler.current_task();
         Self {
             state: RuntimeContextState {
                 vm: NonNull::from(vm),
+                active_task,
                 pending_error: None,
                 gc_countdown,
                 bailout_ip: None,
@@ -78,6 +99,9 @@ impl<'vm> RuntimeContext<'vm> {
     }
 
     pub fn finish(mut self, status: RuntimeStatus) -> Result<(), RuntimeError> {
+        if let Err(error) = self.state.validate_active_task() {
+            self.state.pending_error = Some(error);
+        }
         if matches!(status, STATUS_OK | STATUS_INTERPRETER_COMPLETED)
             && self.state.pending_error.is_none()
         {
@@ -118,7 +142,14 @@ where
     }
 
     let state = unsafe { &mut *context.cast::<RuntimeContextState>() };
-    match operation(state) {
+    if let Err(error) = state.validate_active_task() {
+        return state.fail(error);
+    }
+    let result = operation(state);
+    if let Err(error) = state.validate_active_task() {
+        return state.fail(error);
+    }
+    match result {
         Ok(status) => status,
         Err(error) => state.fail(error),
     }
@@ -315,5 +346,43 @@ pub(super) unsafe extern "C" fn interpreter_bailout(
         vm.interpret()?;
         unsafe { output.write(vm.last_result.to_abi_bits()) };
         Ok(STATUS_INTERPRETER_COMPLETED)
+    })
+}
+
+/// Crosses from compiled code into the resumable VM at an exact operation.
+///
+/// Version 0.1 lowers a suspension point to this transition before executing
+/// any part of that operation natively. The interpreter owns the scheduler
+/// until the root computation completes, so the operation is executed once.
+pub(super) unsafe extern "C" fn task_suspend(
+    context: *mut c_void,
+    frame_index: u32,
+    instruction_index: u32,
+    output: *mut u64,
+) -> RuntimeStatus {
+    unsafe { interpreter_bailout(context, frame_index, instruction_index, output) }
+}
+
+/// Enters the same exact VM continuation boundary used by task suspension.
+/// This separate ABI slot leaves room for resumable compiled continuations
+/// without exposing Rust task or reactor types in the stable C table.
+pub(super) unsafe extern "C" fn task_resume(
+    context: *mut c_void,
+    frame_index: u32,
+    instruction_index: u32,
+    output: *mut u64,
+) -> RuntimeStatus {
+    unsafe { interpreter_bailout(context, frame_index, instruction_index, output) }
+}
+
+pub(super) unsafe extern "C" fn task_wake(context: *mut c_void, task: u32) -> RuntimeStatus {
+    run_helper(context, |state| {
+        unsafe { state.vm_mut() }.wake_compiled_task(task)
+    })
+}
+
+pub(super) unsafe extern "C" fn task_cancel(context: *mut c_void, task: u32) -> RuntimeStatus {
+    run_helper(context, |state| {
+        unsafe { state.vm_mut() }.request_compiled_task_cancel(task)
     })
 }

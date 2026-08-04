@@ -12,6 +12,7 @@ use super::bn254::Bn254Ops;
 use super::inputs::{parse_inputs, parse_inputs_toml};
 use super::plonkish::run_plonkish_pipeline;
 use super::r1cs::run_r1cs_pipeline;
+use crate::commands::r1cs_proof::Groth16Field;
 use crate::style::Styler;
 
 #[allow(clippy::too_many_arguments)]
@@ -30,6 +31,43 @@ pub fn circuit_command(
     dump_ir: bool,
     circuit_stats: bool,
     error_format: ErrorFormat,
+) -> Result<()> {
+    circuit_command_with_key_source(
+        path,
+        r1cs_path,
+        wtns_path,
+        inputs,
+        input_file,
+        no_optimize,
+        backend,
+        prime_id,
+        prove,
+        solidity_path,
+        plonkish_json_path,
+        dump_ir,
+        circuit_stats,
+        error_format,
+        &proving::groth16::ProvingKeySource::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn circuit_command_with_key_source(
+    path: &str,
+    r1cs_path: &str,
+    wtns_path: &str,
+    inputs: Option<&str>,
+    input_file: Option<&str>,
+    no_optimize: bool,
+    backend: &str,
+    prime_id: PrimeId,
+    prove: bool,
+    solidity_path: Option<&str>,
+    plonkish_json_path: Option<&str>,
+    dump_ir: bool,
+    circuit_stats: bool,
+    error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     // 0. Validate flag combinations early (before expensive IR lowering)
     if solidity_path.is_some() && backend != "r1cs" {
@@ -62,6 +100,10 @@ pub fn circuit_command(
         ));
     }
 
+    if prove && inputs.is_none() && input_file.is_none() {
+        return Err(anyhow::anyhow!("--prove requires --inputs or --input-file"));
+    }
+
     // Dispatch on prime_id: one match at the CLI boundary, generics carry
     // the concrete field type through the rest of the pipeline.
     match prime_id {
@@ -80,6 +122,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         PrimeId::Bls12_381 => circuit_command_inner::<memory::Bls12_381Fr>(
             path,
@@ -96,6 +139,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         PrimeId::Goldilocks => circuit_command_inner::<memory::GoldilocksFr>(
             path,
@@ -112,6 +156,7 @@ pub fn circuit_command(
             dump_ir,
             circuit_stats,
             error_format,
+            key_source,
         ),
         other => Err(anyhow::anyhow!(
             "prime `{}` is not supported for circuit compilation",
@@ -121,7 +166,7 @@ pub fn circuit_command(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
+fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops + Groth16Field>(
     path: &str,
     r1cs_path: &str,
     wtns_path: &str,
@@ -136,6 +181,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
     dump_ir: bool,
     circuit_stats: bool,
     error_format: ErrorFormat,
+    key_source: &proving::groth16::ProvingKeySource,
 ) -> Result<()> {
     // Resolve inputs from either --inputs or --input-file into a unified map.
     let resolved_inputs: Option<HashMap<String, FieldElement<F>>> = if let Some(raw) = inputs {
@@ -319,11 +365,13 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
             wtns_path,
             resolved_inputs.as_ref(),
             prime_id,
+            prove,
             solidity_path,
             &style,
             verbose,
             no_optimize,
             &proven,
+            key_source,
         ),
         "plonkish" => run_plonkish_pipeline(
             &program,
@@ -334,6 +382,7 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops>(
             &style,
             verbose,
             &proven,
+            key_source,
         ),
         // Unreachable: backend validated at the top of this function
         _ => unreachable!(),

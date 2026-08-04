@@ -1,0 +1,45 @@
+# Public, fixed secp256k1 ECDSA diagnostic vector.
+# Private key 1 signed the SHA-256 prehash of
+# "achronyme ecdsa groth16 diagnostic vector".
+# Values are little-endian 64-bit limbs encoded as strings because TOML
+# integers are signed and several limbs exceed i64::MAX.
+r = [
+  "8640493642804984513",
+  "1852904973164856822",
+  "5243193105603364912",
+  "5650329140883233571",
+]
+s = [
+  "10600419463435818137",
+  "3653588198612269470",
+  "8464183763061628065",
+  "6201689187478580395",
+]
+msghash = [
+  "1494920748616258398",
+  "7901943616638701318",
+  "16907130083731622963",
+  "14369586280073249507",
+]
+pubkey = [
+  "6481385041966929816",
+  "188021827762530521",
+  "6170039885052185351",
+  "8772561819708210092",
+  "11261198710074299576",
+  "18237243440184513561",
+  "6747795201694173352",
+  "5204712524664259685",
+]
+
+# The Circom frontend currently accepts both flattened and two-dimensional
+# signal aliases. Keep both forms pinned so frontend naming changes fail before
+# the cloud run starts.
+pubkey_0_0 = "6481385041966929816"
+pubkey_0_1 = "188021827762530521"
+pubkey_0_2 = "6170039885052185351"
+pubkey_0_3 = "8772561819708210092"
+pubkey_1_0 = "11261198710074299576"
+pubkey_1_1 = "18237243440184513561"
+pubkey_1_2 = "6747795201694173352"
+pubkey_1_3 = "5204712524664259685"
