@@ -199,14 +199,14 @@ impl CompiledProgram {
     }
 
     /// Exact host authorities requested by referenced native globals.
+    ///
+    /// `ProgramCapabilities::UNKNOWN_HOST` records conservative effect-analysis
+    /// uncertainty; it is not an authority grant. Every native value that can
+    /// enter bytecode is loaded through `GetGlobal`, so its concrete metadata
+    /// remains the authority source even when the subsequent call is dynamic.
+    /// Runtime invocation checks the same concrete capability again.
     pub fn requested_host_capabilities(&self) -> CapabilitySet {
         let mut capabilities = CapabilitySet::empty();
-        if self
-            .capabilities
-            .contains(ProgramCapabilities::UNKNOWN_HOST)
-        {
-            capabilities |= CapabilitySet::UNKNOWN_HOST;
-        }
         for function in std::iter::once(&self.main).chain(self.functions.iter()) {
             for &instruction in &function.chunk {
                 if OpCode::from_u8(decode_opcode(instruction)) == Some(OpCode::GetGlobal) {

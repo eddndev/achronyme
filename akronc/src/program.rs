@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_dynamic_call_persists_unknown_host_authority() {
+    fn unresolved_dynamic_call_preserves_uncertainty_without_inventing_authority() {
         let source = "fn invoke(f) { f() }\ninvoke(time)";
         let mut compiler = Compiler::new();
         let program = compiler
@@ -186,9 +186,7 @@ mod tests {
         assert!(program
             .requested_effects()
             .contains(EffectSet::UNKNOWN_HOST));
-        assert!(program
-            .requested_host_capabilities()
-            .contains(CapabilitySet::UNKNOWN_HOST));
+        assert_eq!(program.requested_host_capabilities(), CapabilitySet::CLOCK);
         assert!(program
             .capabilities
             .contains(ProgramCapabilities::UNKNOWN_HOST));
@@ -199,8 +197,26 @@ mod tests {
         assert!(decoded
             .requested_effects()
             .contains(EffectSet::UNKNOWN_HOST));
-        assert!(decoded
-            .requested_host_capabilities()
-            .contains(CapabilitySet::UNKNOWN_HOST));
+        assert_eq!(decoded.requested_host_capabilities(), CapabilitySet::CLOCK);
+    }
+
+    #[test]
+    fn pure_dynamic_call_requests_no_host_authority() {
+        let source = "fn invoke(f) { f() }\ninvoke(fn() { 1 })";
+        let mut compiler = Compiler::new();
+        let program = compiler
+            .compile_program(source, &CompileOptions::default())
+            .unwrap();
+
+        assert!(program
+            .requested_effects()
+            .contains(EffectSet::UNKNOWN_HOST));
+        assert!(program
+            .capabilities
+            .contains(ProgramCapabilities::UNKNOWN_HOST));
+        assert_eq!(
+            program.requested_host_capabilities(),
+            CapabilitySet::empty()
+        );
     }
 }

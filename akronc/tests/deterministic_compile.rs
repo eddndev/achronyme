@@ -56,9 +56,10 @@ fn concurrent_compilation_and_metadata_are_deterministic() {
     assert!(program
         .requested_effects()
         .contains(akron::specs::EffectSet::TASK | akron::specs::EffectSet::UNKNOWN_HOST));
-    assert!(program
-        .requested_host_capabilities()
-        .contains(akron::specs::CapabilitySet::CLOCK | akron::specs::CapabilitySet::UNKNOWN_HOST));
+    assert_eq!(
+        program.requested_host_capabilities(),
+        akron::specs::CapabilitySet::CLOCK
+    );
 
     for iteration in 1..64 {
         assert_eq!(
