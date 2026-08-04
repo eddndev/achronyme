@@ -34,10 +34,44 @@ mkdir "$export_dir" "$ceremony_dir"
 r1cs="$export_dir/circuit.r1cs"
 wtns="$export_dir/witness.wtns"
 phase1="$work_root/phase1.ptau"
+source_file="$repo_root/test/circom/multiplier.circom"
+input_file="$repo_root/test/proving/multiplier.inputs.toml"
 
-"$ach_bin" --no-config circom "$repo_root/test/circom/multiplier.circom" \
-    --input-file "$repo_root/test/proving/multiplier.inputs.toml" \
+"$ach_bin" --no-config circom "$source_file" --input-file "$input_file" \
     --r1cs "$r1cs" --wtns "$wtns"
+
+evidence_checkout="$work_root/evidence-checkout"
+mkdir -p "$evidence_checkout/scripts/proving"
+cp "$scripts_dir/common.sh" "$scripts_dir/finalize-phase2.sh" \
+    "$scripts_dir/record-export-evidence.sh" "$evidence_checkout/scripts/proving/"
+git init -q "$evidence_checkout"
+git -C "$evidence_checkout" config user.email test@example.invalid
+git -C "$evidence_checkout" config user.name "Achronyme test"
+git -C "$evidence_checkout" add scripts
+git -C "$evidence_checkout" commit -qm initial
+recorded_export="$work_root/recorded-export.json"
+"$evidence_checkout/scripts/proving/record-export-evidence.sh" \
+    --ach-bin "$ach_bin" --source "$source_file" --input-file "$input_file" \
+    --r1cs "$r1cs" --wtns "$wtns" --output "$recorded_export"
+jq -e '
+    .format == "achronyme-proving-export" and
+    .version == 1 and
+    .tracked_checkout_clean == true and
+    (.achronyme_binary_sha256 | test("^[0-9a-f]{64}$")) and
+    .circuit.constraints == 1
+' "$recorded_export" >/dev/null
+printf '\n' >>"$evidence_checkout/scripts/proving/common.sh"
+if "$evidence_checkout/scripts/proving/record-export-evidence.sh" \
+    --ach-bin "$ach_bin" --source "$source_file" --input-file "$input_file" \
+    --r1cs "$r1cs" --wtns "$wtns" --output "$work_root/dirty-export.json" \
+    >"$work_root/dirty-export.out" 2>"$work_root/dirty-export.err"; then
+    die "dirty export evidence checkout unexpectedly passed"
+fi
+grep -Fq 'checkout must be clean' "$work_root/dirty-export.err"
+[[ ! -e "$work_root/dirty-export.json" ]] || \
+    die "dirty checkout wrote export evidence"
+git -C "$evidence_checkout" restore scripts/proving/common.sh
+
 snarkjs powersoftau new bn128 8 "$work_root/pot_0000.ptau" >/dev/null
 snarkjs powersoftau beacon \
     "$work_root/pot_0000.ptau" "$work_root/pot_final.ptau" \
@@ -61,18 +95,39 @@ contribution=$(extract_zkey_contributions "$work_root/test-zkey-verify.log" | se
 [[ "$contribution" == *"|"* ]] || die "test contribution hash was not parsed"
 contributor="${contribution/|/=}"
 
-"$scripts_dir/finalize-phase2.sh" \
-    --r1cs "$r1cs" --wtns "$wtns" --phase1 "$phase1" --zkey "$final_zkey" \
-    --source "$repo_root/test/circom/multiplier.circom" \
-    --input-file "$repo_root/test/proving/multiplier.inputs.toml" \
-    --work-dir "$ceremony_dir" --store "$store" --ach-bin "$ach_bin" \
-    --phase1-source "https://example.invalid/test-only.ptau" \
+export_evidence="$recorded_export"
+finalizer="$evidence_checkout/scripts/proving/finalize-phase2.sh"
+
+declare -a finalize_args=(
+    --r1cs "$r1cs" --wtns "$wtns" --phase1 "$phase1" --zkey "$final_zkey"
+    --source "$source_file" --input-file "$input_file"
+    --ach-bin "$ach_bin" --phase1-source "https://example.invalid/test-only.ptau"
     --phase1-blake2b512 "$phase1_blake2b512" --contributor "$contributor"
+)
+
+tampered_export="$work_root/tampered-export.json"
+jq '.circuit.witness.sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' \
+    "$export_evidence" >"$tampered_export"
+if "$finalizer" "${finalize_args[@]}" \
+    --export-evidence "$tampered_export" --work-dir "$work_root/tampered-finalize" \
+    --store "$work_root/tampered-store" >"$work_root/tampered.out" \
+    2>"$work_root/tampered.err"; then
+    die "tampered export evidence unexpectedly passed finalization preflight"
+fi
+grep -Fq 'export evidence witness SHA-256 mismatch' "$work_root/tampered.err"
+[[ ! -e "$work_root/tampered-store" ]] || \
+    die "tampered export evidence created a trusted-key store"
+
+"$finalizer" "${finalize_args[@]}" \
+    --export-evidence "$export_evidence" --work-dir "$ceremony_dir" --store "$store"
 
 evidence="$ceremony_dir/release-evidence.json"
 jq -e '
     .format == "achronyme-proving-release-evidence" and
     .version == 1 and
+    (.git_commit | test("^[0-9a-f]{40,64}$")) and
+    (.achronyme_binary_sha256 | test("^[0-9a-f]{64}$")) and
+    (.export_evidence.sha256 | test("^[0-9a-f]{64}$")) and
     .circuit.constraints == 1 and
     (.metrics | length >= 10) and
     (.verification | all(. == true))

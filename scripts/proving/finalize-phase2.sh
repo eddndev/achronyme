@@ -10,6 +10,7 @@ source "$script_dir/common.sh"
 usage() {
     printf '%s\n' \
         "usage: $0 --r1cs FILE --wtns FILE --phase1 FILE --zkey FILE" \
+        "  --export-evidence FILE" \
         "  --source CIRCOM --input-file TOML [--lib DIR ...] --work-dir DIR" \
         "  --store DIR --ach-bin FILE --phase1-source URL" \
         "  --contributor ID=HASH [--contributor ID=HASH ...]" \
@@ -21,6 +22,7 @@ r1cs=
 wtns=
 phase1=
 zkey=
+export_evidence=
 source_file=
 input_file=
 work_dir=
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
         --wtns) wtns=${2:-}; shift 2 ;;
         --phase1) phase1=${2:-}; shift 2 ;;
         --zkey) zkey=${2:-}; shift 2 ;;
+        --export-evidence) export_evidence=${2:-}; shift 2 ;;
         --source) source_file=${2:-}; shift 2 ;;
         --input-file) input_file=${2:-}; shift 2 ;;
         --lib) lib_dirs+=("${2:-}"); shift 2 ;;
@@ -49,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 [[ -n "$r1cs" && -n "$wtns" && -n "$phase1" && -n "$zkey" ]] || usage
+[[ -n "$export_evidence" ]] || usage
 [[ -n "$source_file" && -n "$input_file" && -n "$work_dir" ]] || usage
 [[ -n "$store" && -n "$ach_bin" && -n "$phase1_source" ]] || usage
 [[ ${#contributors[@]} -gt 0 ]] || die "at least one --contributor is required"
@@ -58,18 +62,78 @@ for contributor in "${contributors[@]}"; do
 done
 
 require_command b2sum
+require_command git
 require_command jq
 require_command od
+require_command sha256sum
 require_command /usr/bin/time
 require_snarkjs
 require_regular_file "$r1cs" "R1CS artifact"
 require_regular_file "$wtns" "witness artifact"
 require_regular_file "$phase1" "phase-1 artifact"
 require_regular_file "$zkey" "final zkey"
+require_regular_file "$export_evidence" "proving export evidence"
 require_regular_file "$source_file" "Circom source"
 require_regular_file "$input_file" "witness input"
 require_regular_file "$ach_bin" "Achronyme binary"
+require_clean_tracked_checkout "$repo_root"
 verify_phase1_hash "$phase1" "$phase1_blake2b512"
+phase1_sha256_start=$(sha256_file "$phase1")
+zkey_sha256_start=$(sha256_file "$zkey")
+
+jq -e '
+    type == "object" and
+    .format == "achronyme-proving-export" and
+    .tracked_checkout_clean == true and
+    .version == 1 and
+    (.git_commit | type == "string") and
+    (.achronyme_binary_sha256 | type == "string") and
+    (.fixture.source_sha256 | type == "string") and
+    (.fixture.inputs_sha256 | type == "string") and
+    (.circuit.r1cs.sha256 | type == "string") and
+    (.circuit.r1cs.bytes | type == "number") and
+    (.circuit.witness.sha256 | type == "string") and
+    (.circuit.witness.bytes | type == "number") and
+    (.circuit.constraints | type == "number")
+' "$export_evidence" >/dev/null || die "invalid proving export evidence"
+
+export_evidence_format=$(jq -r '.format' "$export_evidence")
+export_git_commit=$(jq -r '.git_commit' "$export_evidence")
+export_binary_sha256=$(jq -r '.achronyme_binary_sha256' "$export_evidence")
+export_source_sha256=$(jq -r '.fixture.source_sha256' "$export_evidence")
+export_inputs_sha256=$(jq -r '.fixture.inputs_sha256' "$export_evidence")
+export_r1cs_sha256=$(jq -r '.circuit.r1cs.sha256' "$export_evidence")
+export_wtns_sha256=$(jq -r '.circuit.witness.sha256' "$export_evidence")
+export_r1cs_bytes=$(jq -r '.circuit.r1cs.bytes' "$export_evidence")
+export_wtns_bytes=$(jq -r '.circuit.witness.bytes' "$export_evidence")
+export_constraints=$(jq -r '.circuit.constraints' "$export_evidence")
+for digest in "$export_binary_sha256" "$export_source_sha256" \
+    "$export_inputs_sha256" "$export_r1cs_sha256" "$export_wtns_sha256"; do
+    [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || die "invalid digest in proving export evidence"
+done
+[[ "$export_git_commit" =~ ^[0-9a-f]{40,64}$ ]] || \
+    die "invalid Git commit in proving export evidence"
+for value in "$export_r1cs_bytes" "$export_wtns_bytes" "$export_constraints"; do
+    [[ "$value" =~ ^[0-9]+$ ]] || die "invalid count in proving export evidence"
+done
+
+[[ "$(git -C "$repo_root" rev-parse --verify HEAD)" == "$export_git_commit" ]] || \
+    die "export evidence Git commit does not match the finalization checkout"
+[[ "$(sha256_file "$ach_bin")" == "$export_binary_sha256" ]] || \
+    die "export evidence Achronyme binary SHA-256 mismatch"
+[[ "$(sha256_file "$source_file")" == "$export_source_sha256" ]] || \
+    die "export evidence source SHA-256 mismatch"
+[[ "$(sha256_file "$input_file")" == "$export_inputs_sha256" ]] || \
+    die "export evidence input SHA-256 mismatch"
+[[ "$(sha256_file "$r1cs")" == "$export_r1cs_sha256" ]] || \
+    die "export evidence R1CS SHA-256 mismatch"
+[[ "$(sha256_file "$wtns")" == "$export_wtns_sha256" ]] || \
+    die "export evidence witness SHA-256 mismatch"
+[[ "$(stat -c %s "$r1cs")" == "$export_r1cs_bytes" ]] || \
+    die "export evidence R1CS size mismatch"
+[[ "$(stat -c %s "$wtns")" == "$export_wtns_bytes" ]] || \
+    die "export evidence witness size mismatch"
+export_evidence_sha256=$(sha256_file "$export_evidence")
 
 mkdir -p "$work_dir"
 require_directory "$work_dir" "finalization work directory"
@@ -142,11 +206,33 @@ run_measured "$metrics" snarkjs_verify_achronyme \
 
 r1cs_constraints=$(od -An -tu4 -j84 -N4 "$r1cs" | tr -d ' ')
 [[ "$r1cs_constraints" =~ ^[0-9]+$ ]] || die "cannot read R1CS constraint count"
+[[ "$r1cs_constraints" == "$export_constraints" ]] || \
+    die "export evidence constraint count mismatch"
 r1cs_sha256=$original_r1cs_sha256
 zkey_sha256=$(sha256_file "$zkey")
 phase1_sha256=$(sha256_file "$phase1")
 artifact_dir="$store/$r1cs_sha256"
 require_directory "$artifact_dir" "packaged trusted-key artifact"
+
+[[ "$(sha256_file "$export_evidence")" == "$export_evidence_sha256" ]] || \
+    die "proving export evidence changed during finalization"
+[[ "$(git -C "$repo_root" rev-parse --verify HEAD)" == "$export_git_commit" ]] || \
+    die "Git commit changed during phase-2 finalization"
+[[ "$(sha256_file "$ach_bin")" == "$export_binary_sha256" ]] || \
+    die "Achronyme binary changed during phase-2 finalization"
+[[ "$(sha256_file "$source_file")" == "$export_source_sha256" ]] || \
+    die "Circom source changed during phase-2 finalization"
+[[ "$(sha256_file "$input_file")" == "$export_inputs_sha256" ]] || \
+    die "witness input changed during phase-2 finalization"
+[[ "$(sha256_file "$r1cs")" == "$export_r1cs_sha256" ]] || \
+    die "R1CS changed during phase-2 finalization"
+[[ "$(sha256_file "$wtns")" == "$export_wtns_sha256" ]] || \
+    die "witness changed during phase-2 finalization"
+[[ "$(sha256_file "$phase1")" == "$phase1_sha256_start" ]] || \
+    die "phase-1 artifact changed during phase-2 finalization"
+[[ "$(sha256_file "$zkey")" == "$zkey_sha256_start" ]] || \
+    die "final zkey changed during phase-2 finalization"
+require_clean_tracked_checkout "$repo_root"
 
 contributors_json="$work_dir/contributors.json"
 metrics_json="$work_dir/metrics.json"
@@ -163,10 +249,12 @@ metric_files=("$work_dir"/*.metrics.jsonl)
 shopt -u nullglob
 jq -s '.' "${metric_files[@]}" >"$metrics_json"
 
-git_commit=$(git -C "$repo_root" rev-parse HEAD)
 ach_version=$("$ach_bin" --version)
 jq -n \
-    --arg git_commit "$git_commit" \
+    --arg git_commit "$export_git_commit" \
+    --arg achronyme_binary_sha256 "$export_binary_sha256" \
+    --arg export_evidence_format "$export_evidence_format" \
+    --arg export_evidence_sha256 "$export_evidence_sha256" \
     --arg achronyme_version "$ach_version" \
     --arg snarkjs_version "$ACHRONYME_SNARKJS_VERSION" \
     --arg r1cs_sha256 "$r1cs_sha256" \
@@ -184,6 +272,12 @@ jq -n \
         format: "achronyme-proving-release-evidence",
         version: 1,
         git_commit: $git_commit,
+        achronyme_binary_sha256: $achronyme_binary_sha256,
+        export_evidence: {
+            format: $export_evidence_format,
+            version: 1,
+            sha256: $export_evidence_sha256
+        },
         tools: {achronyme: $achronyme_version, snarkjs: $snarkjs_version},
         circuit: {
             constraints: $constraints,

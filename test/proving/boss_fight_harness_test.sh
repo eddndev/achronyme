@@ -18,14 +18,16 @@ printf 'tracked\n' >"$checkout/tracked.txt"
 git -C "$checkout" add tracked.txt
 git -C "$checkout" commit -qm initial
 
-bash -c 'source "$1"; require_clean_git_checkout "$2"' _ "$common" "$checkout"
+bash -c 'source "$1"; require_clean_tracked_checkout "$2"' _ "$common" "$checkout"
+printf 'private input\n' >"$checkout/untracked-input.toml"
+bash -c 'source "$1"; require_clean_tracked_checkout "$2"' _ "$common" "$checkout"
 printf 'dirty\n' >>"$checkout/tracked.txt"
-if bash -c 'source "$1"; require_clean_git_checkout "$2"' _ \
+if bash -c 'source "$1"; require_clean_tracked_checkout "$2"' _ \
     "$common" "$checkout" >"$tmp_dir/dirty.out" 2>"$tmp_dir/dirty.err"; then
     printf 'dirty checkout unexpectedly accepted\n' >&2
     exit 1
 fi
-grep -Fq 'checkout must be clean' "$tmp_dir/dirty.err"
+grep -Fq 'tracked checkout must be clean' "$tmp_dir/dirty.err"
 
 bash -n "$harness"
 plan=$("$harness" --ach-bin "$ach_bin" --work-dir /tmp/achronyme-bossfight-test \

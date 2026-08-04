@@ -120,7 +120,22 @@ ach --no-config circom circuit.circom \
   --r1cs ceremony/circuit.r1cs \
   --wtns ceremony/witness.wtns
 snarkjs wtns check ceremony/circuit.r1cs ceremony/witness.wtns
+scripts/proving/record-export-evidence.sh \
+  --ach-bin target/release/ach \
+  --source circuit.circom \
+  --input-file inputs.toml \
+  --r1cs ceremony/circuit.r1cs \
+  --wtns ceremony/witness.wtns \
+  --output ceremony/export-evidence.json
 ```
+
+The evidence recorder requires a clean checkout for tracked files, validates
+the witness again, checks that the configured phase-1 power fits the actual
+R1CS domain, and binds the source, input fixture, R1CS, witness, Git commit, and
+exact `ach` binary by SHA-256. Untracked private input files are allowed and
+remain bound by their digest. Keep this file with the ceremony artifacts;
+finalization rejects missing, mismatched, or tampered export evidence before
+creating a trusted-key store.
 
 Use `--low-memory` for a large optimized R1CS export. It cannot be combined
 with `--no-optimize`, `--dump-ir`, or `--circuit-stats`, because those modes
@@ -174,6 +189,7 @@ scripts/proving/finalize-phase2.sh \
   --wtns ceremony/witness.wtns \
   --phase1 ceremony/phase1.ptau \
   --zkey ceremony/circuit_final.zkey \
+  --export-evidence ceremony/export-evidence.json \
   --source circuit.circom \
   --input-file inputs.toml \
   --work-dir ceremony \
@@ -185,14 +201,15 @@ scripts/proving/finalize-phase2.sh \
 
 The finalizer performs all of the following before reporting success:
 
-1. verifies the phase-1 transcript and witness;
-2. verifies that the final zkey matches the exact R1CS and phase 1;
-3. matches every declared contributor ID/hash against the verified zkey;
-4. generates a snarkjs proof and verifies it with Achronyme;
-5. packages the immutable trusted store;
-6. recompiles and proves with Achronyme without local setup;
-7. verifies the Achronyme proof with both Achronyme and snarkjs;
-8. writes `release-evidence.json` with hashes, sizes, commit, constraints,
+1. binds the finalization to the measured export evidence and exact binary;
+2. verifies the phase-1 transcript and witness;
+3. verifies that the final zkey matches the exact R1CS and phase 1;
+4. matches every declared contributor ID/hash against the verified zkey;
+5. generates a snarkjs proof and verifies it with Achronyme;
+6. packages the immutable trusted store;
+7. recompiles and proves with Achronyme without local setup;
+8. verifies the Achronyme proof with both Achronyme and snarkjs;
+9. writes `release-evidence.json` with hashes, sizes, commit, constraints,
    elapsed time, and maximum RSS for each measured stage.
 
 ### 5. Verify detached artifacts

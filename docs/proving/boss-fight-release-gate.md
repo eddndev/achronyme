@@ -82,11 +82,13 @@ git status --short
 The source checkout must be clean at the tested commit. Do not benchmark a
 debug binary or a checkout with unrecorded source changes.
 
-The harness requires a clean checkout and refuses a dirty tree before
-allocating the circuit. It records the exact Git commit and Achronyme binary
-SHA-256, then checks the checkout and binary again before writing evidence.
-This prevents a changed source tree or a replaced executable from being
-attributed to the recorded commit.
+The harness requires a clean checkout for tracked files and refuses staged or
+unstaged source changes before allocating the circuit. Untracked private input
+files are allowed because their contents are bound by SHA-256 instead of being
+committed. The harness records the exact Git commit and Achronyme binary
+SHA-256, then checks the tracked checkout and binary again before writing
+evidence. This prevents a changed source tree or a replaced executable from
+being attributed to the recorded commit.
 
 ## Stage 1: bounded R1CS and witness export
 
@@ -152,6 +154,7 @@ scripts/proving/finalize-phase2.sh \
   --wtns /var/tmp/achronyme-0.1.0-proving/export/witness.wtns \
   --phase1 /var/tmp/achronyme-0.1.0-proving/phase1.ptau \
   --zkey /var/tmp/achronyme-0.1.0-proving/circuit_final.zkey \
+  --export-evidence /var/tmp/achronyme-0.1.0-proving/bossfight-export.json \
   --source test/circomlib/ecdsa_verify_test.circom \
   --input-file test/proving/ecdsa_verify.inputs.toml \
   --lib test/circomlib \
@@ -165,6 +168,10 @@ scripts/proving/finalize-phase2.sh \
 This stage intentionally recompiles the circuit for the native trusted-key
 proof. Equality of the ceremony R1CS and the re-exported Achronyme R1CS is a
 checked invariant, not an assumption.
+
+The finalizer also checks that `bossfight-export.json` binds the same commit,
+release binary, source, fixture, R1CS, witness, sizes, and constraint count. A
+mismatch fails before the trusted-key store is created.
 
 ## Required release evidence
 

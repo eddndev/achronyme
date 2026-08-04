@@ -29,16 +29,16 @@ require_directory() {
     [[ ! -L "$path" && -d "$path" ]] || die "$label must be a directory, not a symlink: $path"
 }
 
-require_clean_git_checkout() {
+require_clean_tracked_checkout() {
     local checkout=$1
     require_directory "$checkout" "Git checkout"
     require_command git
     git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
         die "not a Git checkout: $checkout"
     local status
-    status=$(git -C "$checkout" status --porcelain=v1 --untracked-files=normal) || \
+    status=$(git -C "$checkout" status --porcelain=v1 --untracked-files=no) || \
         die "cannot inspect Git checkout: $checkout"
-    [[ -z "$status" ]] || die "checkout must be clean: $checkout"
+    [[ -z "$status" ]] || die "tracked checkout must be clean: $checkout"
 }
 
 ensure_absent() {
