@@ -206,7 +206,7 @@ echo ""
 echo "=== Solidity verifier tests ==="
 
 run_test "circuit/basic_arithmetic.ach (solidity)" \
-    "$ACH" circuit "$SCRIPT_DIR/circuit/basic_arithmetic.ach" \
+    "$ACH" --insecure-dev-setup circuit "$SCRIPT_DIR/circuit/basic_arithmetic.ach" \
     --r1cs "$R1CS_DIR/basic_sol.r1cs" --wtns "$R1CS_DIR/basic_sol.wtns" \
     --inputs "out=42,a=6,b=7" \
     --solidity "$R1CS_DIR/verifier.sol"
@@ -386,7 +386,7 @@ echo ""
 echo "=== Prove tests ==="
 for f in "$SCRIPT_DIR"/prove/*.ach; do
     name="prove/$(basename "$f")"
-    run_test "$name" "$ACH" run "$f"
+    run_test "$name" "$ACH" --insecure-dev-setup run "$f"
 done
 
 # --- Circom import tests ---
@@ -395,26 +395,26 @@ echo "=== Circom import tests ==="
 for f in "$SCRIPT_DIR"/circom_imports/*.ach; do
     [ -f "$f" ] || continue
     name="circom_imports/$(basename "$f")"
-    run_test "$name" "$ACH" run "$f"
+    run_test "$name" "$ACH" --insecure-dev-setup run "$f"
 done
 
 run_test "examples/circom_poseidon_chain.ach" \
-    "$ACH" run "$REPO_ROOT/examples/circom_poseidon_chain.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/circom_poseidon_chain.ach"
 
 run_test "examples/circom_merkle_membership.ach" \
-    "$ACH" run "$REPO_ROOT/examples/circom_merkle_membership.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/circom_merkle_membership.ach"
 
 run_test "examples/range_proof.ach" \
-    "$ACH" run "$REPO_ROOT/examples/range_proof.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/range_proof.ach"
 
 run_test "examples/merkle_depth4.ach" \
-    "$ACH" run "$REPO_ROOT/examples/merkle_depth4.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/merkle_depth4.ach"
 
 run_test "examples/eddsa_verify.ach" \
-    "$ACH" run "$REPO_ROOT/examples/eddsa_verify.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/eddsa_verify.ach"
 
 run_test "examples/tornado/src/main.ach" \
-    "$ACH" run "$REPO_ROOT/examples/tornado/src/main.ach"
+    "$ACH" --insecure-dev-setup run "$REPO_ROOT/examples/tornado/src/main.ach"
 
 # --- Summary ---
 echo ""
