@@ -93,10 +93,11 @@ phase1_blake2b512=$(blake2b512_file "$phase1")
     --work-dir "$ceremony_dir" --phase1-blake2b512 "$phase1_blake2b512"
 
 contributed_zkey="$ceremony_dir/circuit_0001.zkey"
-snarkjs zkey contribute \
-    "$ceremony_dir/circuit_0000.zkey" "$contributed_zkey" \
-    --name="test independent contributor" \
-    -e="test-only deterministic entropy" >/dev/null
+printf '%s\n' 'test-only deterministic entropy' | \
+    "$scripts_dir/contribute-phase2.sh" \
+        --input "$ceremony_dir/circuit_0000.zkey" \
+        --output "$contributed_zkey" --name "test independent contributor" \
+        --metrics "$ceremony_dir/contribute.metrics.jsonl" >/dev/null
 snarkjs zkey verify "$r1cs" "$phase1" "$contributed_zkey" \
     >"$work_root/test-zkey-verify.log" 2>&1
 contribution=$(extract_zkey_contributions "$work_root/test-zkey-verify.log" | sed -n '1p')

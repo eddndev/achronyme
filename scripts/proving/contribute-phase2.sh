@@ -36,7 +36,7 @@ create_metrics_file "$metrics"
 
 printf 'snarkjs will request private entropy interactively. Do not paste it into a command, log, or chat.\n' >&2
 run_measured "$metrics" phase2_contribution \
-    snarkjs zkey contribute "$input" "$output" --name "$name" -v
+    snarkjs zkey contribute "$input" "$output" --name="$name" -v
 require_regular_file "$output" "contributed zkey"
 printf 'contributed key: %s\n' "$output"
 printf 'sha256: %s\n' "$(sha256_file "$output")"
