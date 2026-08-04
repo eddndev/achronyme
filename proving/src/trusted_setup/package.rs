@@ -1,23 +1,27 @@
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use memory::{Bn254Fr, FieldElement};
 
 use super::artifact::{
-    open_regular_file, sha256_bytes, sha256_reader, validate_beacon, validate_contributor,
-    validate_hex, CeremonyBeacon, CeremonyContributor, CeremonyProvenance, CeremonyTranscript,
-    TranscriptCircuit, TranscriptFinalKey, TranscriptPhase1, TranscriptVerification,
-    TrustedKeyManifest, MANIFEST_FILE, TRANSCRIPT_FILE, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION,
-    ZKEY_FILE,
+    validate_beacon, validate_contributor, CeremonyBeacon, CeremonyContributor, CeremonyProvenance,
+    CeremonyTranscript, TranscriptCircuit, TranscriptFinalKey, TranscriptPhase1,
+    TranscriptVerification, TrustedKeyManifest, TRUSTED_KEY_FORMAT, TRUSTED_KEY_VERSION, ZKEY_FILE,
 };
+use super::install::{install_artifact, json_bytes};
+use super::support::{open_regular_file, sha256_bytes, sha256_reader, validate_hex};
 
 #[derive(Clone, Copy)]
 pub struct PackageFinalBeacon<'a> {
     pub contributed_zkey: &'a Path,
     pub source: &'a str,
+    pub round: u64,
     pub randomness: &'a str,
+    pub evidence_sha256: &'a str,
+    pub commitment_publication: &'a str,
+    pub commitment_sha256: &'a str,
     pub iterations: u32,
     pub contribution_hash: &'a str,
 }
@@ -26,7 +30,11 @@ impl PackageFinalBeacon<'_> {
     fn metadata(self, contributed_zkey_sha256: String) -> CeremonyBeacon {
         CeremonyBeacon {
             source: self.source.to_string(),
+            round: self.round,
             randomness: self.randomness.to_string(),
+            evidence_sha256: self.evidence_sha256.to_string(),
+            commitment_publication: self.commitment_publication.to_string(),
+            commitment_sha256: self.commitment_sha256.to_string(),
             iterations: self.iterations,
             contribution_hash: self.contribution_hash.to_string(),
             contributed_zkey_sha256,
@@ -304,81 +312,6 @@ fn read_sections(
         return Err(format!("{label} has trailing or unindexed bytes"));
     }
     Ok(sections)
-}
-
-fn install_artifact(
-    store: &Path,
-    digest: &str,
-    zkey: &Path,
-    manifest: &[u8],
-    transcript: &[u8],
-) -> Result<(), String> {
-    validate_store(store)?;
-    let destination = store.join(digest);
-    if destination.exists() {
-        return Err(format!(
-            "trusted-key artifact `{}` already exists",
-            destination.display()
-        ));
-    }
-    std::fs::create_dir_all(store)
-        .map_err(|error| format!("cannot create trusted-key store: {error}"))?;
-    let staging = store.join(format!(".{digest}.partial-{}", std::process::id()));
-    std::fs::create_dir(&staging)
-        .map_err(|error| format!("cannot create trusted-key staging directory: {error}"))?;
-    let result = (|| {
-        write_new(&staging.join(MANIFEST_FILE), manifest)?;
-        write_new(&staging.join(TRANSCRIPT_FILE), transcript)?;
-        copy_new(zkey, &staging.join(ZKEY_FILE))?;
-        std::fs::rename(&staging, &destination)
-            .map_err(|error| format!("cannot install trusted-key artifact: {error}"))
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_dir_all(&staging);
-    }
-    result
-}
-
-fn validate_store(store: &Path) -> Result<(), String> {
-    if !store.exists() {
-        return Ok(());
-    }
-    let metadata = std::fs::symlink_metadata(store)
-        .map_err(|error| format!("cannot inspect trusted-key store: {error}"))?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err("trusted-key store must be a directory, not a symlink".to_string());
-    }
-    Ok(())
-}
-
-fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|error| format!("cannot create `{}`: {error}", path.display()))?;
-    file.write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
-}
-
-fn copy_new(source: &Path, destination: &Path) -> Result<(), String> {
-    let mut input = open_regular_file(source, "final proving key")?;
-    let mut output = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(destination)
-        .map_err(|error| format!("cannot create `{}`: {error}", destination.display()))?;
-    std::io::copy(&mut input, &mut output)
-        .and_then(|_| output.sync_all())
-        .map_err(|error| format!("cannot copy final proving key: {error}"))
-}
-
-fn json_bytes(value: &impl serde::Serialize) -> Result<Vec<u8>, String> {
-    let mut bytes = serde_json::to_vec_pretty(value)
-        .map_err(|error| format!("cannot serialize trusted-key metadata: {error}"))?;
-    bytes.push(b'\n');
-    Ok(bytes)
 }
 
 fn read_u32(reader: &mut File, label: &str) -> Result<u32, String> {

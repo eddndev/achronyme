@@ -1,13 +1,14 @@
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::path::Path;
 
 use constraints::r1cs::ConstraintSystem;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
+use super::support::{open_regular_file, sha256_bytes, sha256_reader, validate_hex};
 
 pub const TRUSTED_KEY_FORMAT: &str = "achronyme-trusted-key";
-pub const TRUSTED_KEY_VERSION: u32 = 2;
+pub const TRUSTED_KEY_VERSION: u32 = 3;
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const ZKEY_FILE: &str = "proving_key.zkey";
 pub const TRANSCRIPT_FILE: &str = "transcript.json";
@@ -50,7 +51,11 @@ pub struct CeremonyContributor {
 #[serde(deny_unknown_fields)]
 pub struct CeremonyBeacon {
     pub source: String,
+    pub round: u64,
     pub randomness: String,
+    pub evidence_sha256: String,
+    pub commitment_publication: String,
+    pub commitment_sha256: String,
     pub iterations: u32,
     pub contribution_hash: String,
     pub contributed_zkey_sha256: String,
@@ -285,14 +290,21 @@ fn validate_manifest(
 }
 
 pub(super) fn validate_beacon(beacon: &CeremonyBeacon) -> Result<(), String> {
-    if !beacon.source.starts_with("https://")
-        || beacon.source.len() <= "https://".len()
-        || beacon.source.len() > 2048
-        || !beacon.source.bytes().all(|byte| byte.is_ascii_graphic())
-    {
-        return Err("final beacon source must be a non-empty HTTPS URL".to_string());
-    }
+    validate_https_url(&beacon.source, "final beacon source")?;
+    validate_https_url(
+        &beacon.commitment_publication,
+        "final beacon commitment publication",
+    )?;
     validate_hex(&beacon.randomness, 64, "final beacon randomness")?;
+    if beacon.round == 0 {
+        return Err("final beacon round must be positive".to_string());
+    }
+    validate_hex(&beacon.evidence_sha256, 64, "final beacon evidence SHA-256")?;
+    validate_hex(
+        &beacon.commitment_sha256,
+        64,
+        "final beacon commitment SHA-256",
+    )?;
     if !(10..=63).contains(&beacon.iterations) {
         return Err("final beacon iterations must be between 10 and 63".to_string());
     }
@@ -306,6 +318,17 @@ pub(super) fn validate_beacon(beacon: &CeremonyBeacon) -> Result<(), String> {
         64,
         "contributed zkey SHA-256",
     )
+}
+
+fn validate_https_url(value: &str, label: &str) -> Result<(), String> {
+    if !value.starts_with("https://")
+        || value.len() <= "https://".len()
+        || value.len() > 2048
+        || !value.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        return Err(format!("{label} must be a non-empty HTTPS URL"));
+    }
+    Ok(())
 }
 
 pub(super) fn validate_contributor(contributor: &CeremonyContributor) -> Result<(), String> {
@@ -322,57 +345,4 @@ pub(super) fn validate_contributor(contributor: &CeremonyContributor) -> Result<
         128,
         "phase-2 contribution hash",
     )
-}
-
-pub(super) fn open_regular_file(path: &Path, label: &str) -> Result<File, String> {
-    let metadata = std::fs::symlink_metadata(path)
-        .map_err(|error| format!("cannot inspect {label} `{}`: {error}", path.display()))?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(format!(
-            "{label} `{}` must be a regular file",
-            path.display()
-        ));
-    }
-    File::open(path).map_err(|error| format!("cannot open {label} `{}`: {error}", path.display()))
-}
-
-pub(super) fn sha256_reader(reader: &mut File) -> Result<String, String> {
-    reader
-        .seek(SeekFrom::Start(0))
-        .map_err(|error| format!("cannot seek artifact for hashing: {error}"))?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0u8; 1024 * 1024];
-    loop {
-        let count = reader
-            .read(&mut buffer)
-            .map_err(|error| format!("cannot hash artifact: {error}"))?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(hex_digest(hasher.finalize()))
-}
-
-pub(super) fn sha256_bytes(bytes: &[u8]) -> String {
-    hex_digest(Sha256::digest(bytes))
-}
-
-fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
-    bytes
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
-pub(super) fn validate_hex(value: &str, length: usize, label: &str) -> Result<(), String> {
-    if value.len() != length
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(format!("{label} must be {length} lowercase hex characters"));
-    }
-    Ok(())
 }

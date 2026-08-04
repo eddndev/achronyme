@@ -88,8 +88,16 @@ impl Fixture {
                 contributor,
                 "--beacon-source",
                 "https://example.invalid/public-randomness/42",
+                "--beacon-round",
+                "42",
                 "--beacon-randomness",
                 BEACON_RANDOMNESS,
+                "--beacon-evidence-sha256",
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "--beacon-commitment-publication",
+                "https://example.invalid/test-only/commitment-42",
+                "--beacon-commitment-sha256",
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "--beacon-iterations",
                 "10",
                 "--beacon-contribution-hash",
@@ -120,8 +128,9 @@ fn packages_without_loading_project_configuration() {
     );
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["format"], "achronyme-trusted-key");
-    assert_eq!(value["version"], 2);
+    assert_eq!(value["version"], 3);
     assert_eq!(value["final_beacon"]["randomness"], BEACON_RANDOMNESS);
+    assert_eq!(value["final_beacon"]["round"], 42);
     assert_eq!(
         value["r1cs_sha256"],
         sha256_hex(&std::fs::read(&fixture.r1cs).unwrap())

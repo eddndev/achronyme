@@ -30,7 +30,7 @@ fn install_fixture_store(root: &std::path::Path) {
     let contribution_hash = "c4c8d61b26566a4e3110cb82dc894bdd5621c80d8d4e3d60b12671e6bb215413beebcb0b38cf77a2c77bb34736e1827ef1a65b9bc3694d6a6738867dead458c3";
     let transcript_value = serde_json::json!({
         "format": "achronyme-ceremony-transcript",
-        "version": 2,
+        "version": 3,
         "protocol": "groth16",
         "curve": "bn254",
         "circuit": {
@@ -57,7 +57,11 @@ fn install_fixture_store(root: &std::path::Path) {
         }],
         "final_beacon": {
             "source": "https://example.invalid/public-randomness/42",
+            "round": 42,
             "randomness": BEACON_RANDOMNESS,
+            "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "commitment_publication": "https://example.invalid/test-only/commitment-42",
+            "commitment_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "iterations": 10,
             "contribution_hash": BEACON_CONTRIBUTION_HASH,
             "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256
@@ -73,7 +77,7 @@ fn install_fixture_store(root: &std::path::Path) {
     std::fs::write(artifact_dir.join("transcript.json"), &transcript).unwrap();
     let manifest = serde_json::json!({
         "format": "achronyme-trusted-key",
-        "version": 2,
+        "version": 3,
         "protocol": "groth16",
         "curve": "bn254",
         "r1cs_sha256": R1CS_SHA256,
@@ -91,7 +95,11 @@ fn install_fixture_store(root: &std::path::Path) {
             }],
             "final_beacon": {
                 "source": "https://example.invalid/public-randomness/42",
+                "round": 42,
                 "randomness": BEACON_RANDOMNESS,
+                "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "commitment_publication": "https://example.invalid/test-only/commitment-42",
+                "commitment_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "iterations": 10,
                 "contribution_hash": BEACON_CONTRIBUTION_HASH,
                 "contributed_zkey_sha256": CONTRIBUTED_ZKEY_SHA256

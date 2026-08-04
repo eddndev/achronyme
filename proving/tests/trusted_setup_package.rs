@@ -97,7 +97,12 @@ impl Inputs {
             final_beacon: PackageFinalBeacon {
                 contributed_zkey: &self.contributed_zkey,
                 source: "https://example.invalid/public-randomness/42",
+                round: 31006463,
                 randomness: BEACON_RANDOMNESS,
+                evidence_sha256: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                commitment_publication: "https://example.invalid/test-only/commitment-31006463",
+                commitment_sha256:
+                    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 iterations: 10,
                 contribution_hash: BEACON_CONTRIBUTION_HASH,
             },
@@ -115,7 +120,7 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
 
     assert_eq!(packaged.manifest.format, TRUSTED_KEY_FORMAT);
     assert_eq!(packaged.manifest.version, TRUSTED_KEY_VERSION);
-    assert_eq!(TRUSTED_KEY_VERSION, 2);
+    assert_eq!(TRUSTED_KEY_VERSION, 3);
     assert_eq!(packaged.manifest.r1cs_sha256, sha256_hex(&r1cs_bytes));
     assert_eq!(packaged.manifest.zkey_sha256, sha256_hex(&zkey_bytes));
     assert_eq!(packaged.manifest.constraints, 1);
@@ -135,7 +140,7 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
     )
     .unwrap();
     assert_eq!(transcript["format"], "achronyme-ceremony-transcript");
-    assert_eq!(transcript["version"], 2);
+    assert_eq!(transcript["version"], 3);
     assert_eq!(
         transcript["circuit"]["r1cs_sha256"],
         sha256_hex(&r1cs_bytes)
@@ -150,6 +155,19 @@ fn packages_a_ceremony_key_with_reproducible_metadata() {
         CONTRIBUTION_HASH
     );
     assert_eq!(transcript["final_beacon"]["randomness"], BEACON_RANDOMNESS);
+    assert_eq!(transcript["final_beacon"]["round"], 31006463);
+    assert_eq!(
+        transcript["final_beacon"]["evidence_sha256"],
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    );
+    assert_eq!(
+        transcript["final_beacon"]["commitment_publication"],
+        "https://example.invalid/test-only/commitment-31006463"
+    );
+    assert_eq!(
+        transcript["final_beacon"]["commitment_sha256"],
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
     assert_eq!(
         transcript["final_beacon"]["contributed_zkey_sha256"],
         sha256_hex(&std::fs::read(&inputs.contributed_zkey).unwrap())

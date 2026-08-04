@@ -183,12 +183,45 @@ release operator must not accept an ID/hash pair that is absent from
 
 ### 4. Commit a final public beacon and cross-verify
 
-After the independent contribution is fixed, commit to a future round from a
-publicly verifiable randomness network. Retrieve and verify that round only
-after it has been produced, and retain its stable HTTPS round URL and
-64-character lowercase randomness value. A public beacon does not replace an
-independent secret contribution; it finalizes the transcript without letting
-the last contributor choose the final transformation in advance.
+After the independent contribution is fixed, install the locked drand client
+without dependency lifecycle scripts and create a commitment to a future
+quicknet round:
+
+```text
+npm ci --prefix scripts/proving/drand --ignore-scripts
+node scripts/proving/drand/commit-beacon.mjs \
+  --output ceremony/drand-commitment.json \
+  --lead-rounds 1200
+sha256sum ceremony/drand-commitment.json
+```
+
+The helper pins the quicknet chain hash, public key, period, and signature
+scheme. It verifies the anchor signature and requires identical observations
+from three independent official HTTP mirrors. A lead of 1200 rounds provides
+one hour at quicknet's three-second period.
+
+Publish the commitment before the target round in an append-only public place
+with a stable HTTPS URL. The publication must expose either the exact JSON or
+its SHA-256 and must have a reviewable timestamp before the target round. A
+local file or an unpublished Git commit is not evidence of prior commitment.
+
+Only after the target round exists, retrieve it using that publication URL:
+
+```text
+node scripts/proving/drand/fetch-beacon.mjs \
+  --commitment ceremony/drand-commitment.json \
+  --publication "https://PUBLICATION/COMMITMENT" \
+  --output ceremony/drand-beacon.json
+node scripts/proving/drand/verify-beacon.mjs \
+  --evidence ceremony/drand-beacon.json
+```
+
+Retrieval checks the pinned chain identity, verifies both BLS signatures, and
+requires identical target-round data from all three mirrors. The resulting
+evidence binds the publication URL, exact commitment hash, round URL,
+randomness, and signature. A public beacon does not replace an independent
+secret contribution; it finalizes the transcript without letting the last
+contributor choose the final transformation in advance.
 
 The finalizer applies the beacon itself. Ten means `2^10` hash iterations, as
 defined by `snarkjs zkey beacon`:
@@ -207,8 +240,7 @@ scripts/proving/finalize-phase2.sh \
   --ach-bin target/release/ach \
   --phase1-source "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau" \
   --contributor "contributor-pseudonym=CONTRIBUTION_HASH" \
-  --beacon-source "https://PUBLIC_BEACON/rounds/COMMITTED_ROUND" \
-  --beacon-randomness "64_HEX_RANDOMNESS" \
+  --beacon-evidence ceremony/drand-beacon.json \
   --beacon-iterations 10
 ```
 
@@ -218,13 +250,14 @@ The finalizer performs all of the following before reporting success:
 2. verifies the phase-1 transcript and witness;
 3. verifies that the contributed zkey matches the exact R1CS and phase 1;
 4. matches every declared contributor ID/hash against that verified zkey;
-5. applies the committed public beacon and extracts its contribution hash;
-6. verifies the resulting final zkey and its complete contribution history;
-7. generates a snarkjs proof and verifies it with Achronyme;
-8. packages the immutable trusted store as artifact format version 2;
-9. recompiles and proves with Achronyme without local setup;
-10. verifies the Achronyme proof with both Achronyme and snarkjs;
-11. writes `release-evidence.json` with hashes, sizes, commit, constraints,
+5. independently verifies the committed drand evidence and its BLS signatures;
+6. applies the committed public beacon and extracts its contribution hash;
+7. verifies the resulting final zkey and its complete contribution history;
+8. generates a snarkjs proof and verifies it with Achronyme;
+9. packages the immutable trusted store as artifact format version 3;
+10. recompiles and proves with Achronyme without local setup;
+11. verifies the Achronyme proof with both Achronyme and snarkjs;
+12. writes `release-evidence.json` with hashes, sizes, commit, constraints,
    elapsed time, and maximum RSS for each measured stage.
 
 ### 5. Verify detached artifacts

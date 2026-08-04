@@ -1,0 +1,66 @@
+{
+  "format": "achronyme-drand-beacon",
+  "version": 2,
+  "fetched_at": "2026-08-04T05:52:45.708Z",
+  "verified": true,
+  "verification": {
+    "pinned_chain_identity": true,
+    "signature": true,
+    "mirror_consensus": true,
+    "client": "drand-client@1.4.2"
+  },
+  "publication": {
+    "url": "https://example.invalid/test-only/commitment-31006463",
+    "commitment_sha256": "54703c6c0df8236e97524ec5f0aaa8733566cf8131188d280a84b9b3f0e18a59"
+  },
+  "commitment": {
+    "format": "achronyme-drand-commitment",
+    "version": 1,
+    "created_at": "2026-08-04T05:51:37.067Z",
+    "publication_required_before_target": true,
+    "network": {
+      "id": "quicknet",
+      "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "public_key": "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
+      "period_seconds": 3,
+      "scheme": "bls-unchained-g1-rfc9380",
+      "client": "drand-client@1.4.2",
+      "mirrors": [
+        "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+        "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+        "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
+      ]
+    },
+    "anchor": {
+      "round": 31006443,
+      "randomness": "93353da5a67d1ff7ced5f59824f31f4d6b2845f661a71bc2ccb3409d3389642c",
+      "signature": "b5467d8714a59bebcd874e7162b34351cc0818f7a0d63dd167a07398b012a8cdcf0a9f379c616d00f098195008df2612",
+      "sources": [
+        "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006443",
+        "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006443",
+        "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006443"
+      ]
+    },
+    "target": {
+      "round": 31006463,
+      "lead_rounds": 20,
+      "source": "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+      "mirrors": [
+        "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+        "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+        "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463"
+      ]
+    }
+  },
+  "beacon": {
+    "round": 31006463,
+    "randomness": "06664dcb57258c3ad1142e1f19575f3e597d29ee8eb49e957355dbab9d6935c9",
+    "signature": "b2a038a125417dadfbfbe3e285efb5c0b96ad4195b3bf30c79b02dd940a223f39fa803f63eb55709774a8220acc916b6",
+    "source": "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+    "mirrors": [
+      "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+      "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463",
+      "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31006463"
+    ]
+  }
+}

@@ -14,7 +14,7 @@ usage() {
         "  --source CIRCOM --input-file TOML [--lib DIR ...] --work-dir DIR" \
         "  --store DIR --ach-bin FILE --phase1-source URL" \
         "  --contributor ID=HASH [--contributor ID=HASH ...]" \
-        "  --beacon-source URL --beacon-randomness 64_HEX --beacon-iterations N" \
+        "  --beacon-evidence FILE --beacon-iterations N" \
         "  [--phase1-blake2b512 HASH]" >&2
     exit 2
 }
@@ -31,8 +31,7 @@ store=
 ach_bin=
 phase1_source=
 phase1_blake2b512=$ACHRONYME_PHASE1_BLAKE2B512
-beacon_source=
-beacon_randomness=
+beacon_evidence=
 beacon_iterations=
 declare -a lib_dirs=()
 declare -a contributors=()
@@ -52,8 +51,7 @@ while [[ $# -gt 0 ]]; do
         --phase1-source) phase1_source=${2:-}; shift 2 ;;
         --phase1-blake2b512) phase1_blake2b512=${2:-}; shift 2 ;;
         --contributor) contributors+=("${2:-}"); shift 2 ;;
-        --beacon-source) beacon_source=${2:-}; shift 2 ;;
-        --beacon-randomness) beacon_randomness=${2:-}; shift 2 ;;
+        --beacon-evidence) beacon_evidence=${2:-}; shift 2 ;;
         --beacon-iterations) beacon_iterations=${2:-}; shift 2 ;;
         *) usage ;;
     esac
@@ -63,10 +61,7 @@ done
 [[ -n "$source_file" && -n "$input_file" && -n "$work_dir" ]] || usage
 [[ -n "$store" && -n "$ach_bin" && -n "$phase1_source" ]] || usage
 [[ ${#contributors[@]} -gt 0 ]] || die "at least one --contributor is required"
-[[ "$beacon_source" =~ ^https://[^[:space:]]+$ && ${#beacon_source} -le 2048 ]] || \
-    die "final beacon source must be a non-empty HTTPS URL"
-[[ "$beacon_randomness" =~ ^[0-9a-f]{64}$ ]] || \
-    die "final beacon randomness must be lowercase 64-hex"
+[[ -n "$beacon_evidence" ]] || usage
 [[ "$beacon_iterations" =~ ^[0-9]+$ ]] || die "invalid final beacon iterations"
 ((beacon_iterations >= 10 && beacon_iterations <= 63)) || \
     die "final beacon iterations must be between 10 and 63"
@@ -78,6 +73,7 @@ done
 require_command b2sum
 require_command git
 require_command jq
+require_command node
 require_command od
 require_command sha256sum
 require_command /usr/bin/time
@@ -90,7 +86,22 @@ require_regular_file "$export_evidence" "proving export evidence"
 require_regular_file "$source_file" "Circom source"
 require_regular_file "$input_file" "witness input"
 require_regular_file "$ach_bin" "Achronyme binary"
+require_regular_file "$beacon_evidence" "verified public beacon evidence"
 require_clean_tracked_checkout "$repo_root"
+(( $(stat -c %s "$beacon_evidence") <= 1048576 )) || \
+    die "verified public beacon evidence exceeds 1048576 bytes"
+beacon_evidence_sha256=$(sha256_file "$beacon_evidence")
+beacon_json=$(node "$script_dir/drand/verify-beacon.mjs" --evidence "$beacon_evidence")
+jq -e '
+    (.round | type == "number" and . > 0) and
+    (.source | type == "string" and startswith("https://")) and
+    (.randomness | type == "string" and test("^[0-9a-f]{64}$"))
+' <<<"$beacon_json" >/dev/null || die "invalid verified public beacon output"
+beacon_round=$(jq -r '.round' <<<"$beacon_json")
+beacon_source=$(jq -r '.source' <<<"$beacon_json")
+beacon_randomness=$(jq -r '.randomness' <<<"$beacon_json")
+beacon_commitment_publication=$(jq -r '.commitment_publication' <<<"$beacon_json")
+beacon_commitment_sha256=$(jq -r '.commitment_sha256' <<<"$beacon_json")
 verify_phase1_hash "$phase1" "$phase1_blake2b512"
 phase1_sha256_start=$(sha256_file "$phase1")
 contributed_zkey_sha256_start=$(sha256_file "$contributed_zkey")
@@ -219,7 +230,11 @@ run_measured "$metrics" package_trusted_key \
         --phase1 "$phase1" --store "$store" \
         --tool "$ACHRONYME_SNARKJS_VERSION" --phase1-source "$phase1_source" \
         --phase1-blake2b512 "$phase1_blake2b512" \
-        --beacon-source "$beacon_source" --beacon-randomness "$beacon_randomness" \
+        --beacon-source "$beacon_source" --beacon-round "$beacon_round" \
+        --beacon-randomness "$beacon_randomness" \
+        --beacon-evidence-sha256 "$beacon_evidence_sha256" \
+        --beacon-commitment-publication "$beacon_commitment_publication" \
+        --beacon-commitment-sha256 "$beacon_commitment_sha256" \
         --beacon-iterations "$beacon_iterations" \
         --beacon-contribution-hash "$beacon_contribution_hash" \
         "${contributor_args[@]}" --format json
@@ -279,6 +294,8 @@ require_directory "$artifact_dir" "packaged trusted-key artifact"
     die "phase-1 artifact changed during phase-2 finalization"
 [[ "$(sha256_file "$contributed_zkey")" == "$contributed_zkey_sha256_start" ]] || \
     die "contributed zkey changed during phase-2 finalization"
+[[ "$(sha256_file "$beacon_evidence")" == "$beacon_evidence_sha256" ]] || \
+    die "public beacon evidence changed during phase-2 finalization"
 [[ "$(sha256_file "$final_zkey")" == "$zkey_sha256_start" ]] || \
     die "final zkey changed during phase-2 finalization"
 require_clean_tracked_checkout "$repo_root"
@@ -315,7 +332,11 @@ jq -n \
     --arg beacon_name "$beacon_name" \
     --arg beacon_source "$beacon_source" \
     --arg beacon_randomness "$beacon_randomness" \
+    --arg beacon_evidence_sha256 "$beacon_evidence_sha256" \
+    --arg beacon_commitment_publication "$beacon_commitment_publication" \
+    --arg beacon_commitment_sha256 "$beacon_commitment_sha256" \
     --arg beacon_contribution_hash "$beacon_contribution_hash" \
+    --argjson beacon_round "$beacon_round" \
     --argjson beacon_iterations "$beacon_iterations" \
     --argjson constraints "$r1cs_constraints" \
     --argjson r1cs_bytes "$(stat -c %s "$r1cs")" \
@@ -326,7 +347,7 @@ jq -n \
     --slurpfile metrics_data "$metrics_json" \
     '{
         format: "achronyme-proving-release-evidence",
-        version: 2,
+        version: 3,
         git_commit: $git_commit,
         achronyme_binary_sha256: $achronyme_binary_sha256,
         export_evidence: {
@@ -349,7 +370,11 @@ jq -n \
             final_beacon: {
                 name: $beacon_name,
                 source: $beacon_source,
+                round: $beacon_round,
                 randomness: $beacon_randomness,
+                evidence_sha256: $beacon_evidence_sha256,
+                commitment_publication: $beacon_commitment_publication,
+                commitment_sha256: $beacon_commitment_sha256,
                 iterations: $beacon_iterations,
                 contribution_hash: $beacon_contribution_hash
             },
@@ -360,6 +385,7 @@ jq -n \
             phase1: true,
             witness: true,
             contributed_zkey: true,
+            final_beacon_evidence: true,
             final_beacon: true,
             final_zkey: true,
             snarkjs_proof_in_achronyme: true,

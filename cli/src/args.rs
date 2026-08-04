@@ -323,9 +323,21 @@ pub enum TrustedSetupCommand {
         /// Stable HTTPS URL for the committed public beacon value
         #[arg(long)]
         beacon_source: String,
+        /// Positive round number from the verified public beacon evidence
+        #[arg(long)]
+        beacon_round: u64,
         /// Lowercase 64-hex public beacon randomness
         #[arg(long)]
         beacon_randomness: String,
+        /// Lowercase SHA-256 of the verified public beacon evidence
+        #[arg(long)]
+        beacon_evidence_sha256: String,
+        /// Stable HTTPS publication of the pre-round commitment
+        #[arg(long)]
+        beacon_commitment_publication: String,
+        /// Lowercase SHA-256 of the published pre-round commitment
+        #[arg(long)]
+        beacon_commitment_sha256: String,
         /// snarkjs beacon iteration exponent
         #[arg(long)]
         beacon_iterations: u32,

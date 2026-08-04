@@ -1,7 +1,9 @@
 //! Ceremony-derived BN254 Groth16 key loading and proving.
 
 mod artifact;
+mod install;
 mod package;
+mod support;
 mod zkey;
 
 use std::path::Path;
@@ -30,7 +32,7 @@ pub type TrustedProof = (Proof<Bn254>, VerifyingKey<Bn254>, Vec<Fr>);
 
 pub fn r1cs_sha256(cs: &ConstraintSystem) -> String {
     let bytes = constraints::write_r1cs(cs, PrimeId::Bn254);
-    artifact::sha256_bytes(&bytes)
+    support::sha256_bytes(&bytes)
 }
 
 pub fn load_trusted_key(cs: &ConstraintSystem, store: &Path) -> Result<LoadedTrustedKey, String> {

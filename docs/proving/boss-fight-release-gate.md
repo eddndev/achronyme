@@ -152,6 +152,22 @@ Commit to a future publicly verifiable randomness round only after the
 independent contribution is fixed. Verify the round when it becomes available.
 The public beacon does not replace the independent secret contribution.
 
+Use the locked quicknet helper from the trusted-setup guide to create
+`drand-commitment.json`, publish it before its target round, and then produce
+`drand-beacon.json`. The helper verifies the pinned chain identity, both BLS
+signatures, and consensus across three official mirrors:
+
+```text
+npm ci --prefix scripts/proving/drand --ignore-scripts
+node scripts/proving/drand/commit-beacon.mjs \
+  --output /var/tmp/achronyme-0.1.0-proving/drand-commitment.json \
+  --lead-rounds 1200
+node scripts/proving/drand/fetch-beacon.mjs \
+  --commitment /var/tmp/achronyme-0.1.0-proving/drand-commitment.json \
+  --publication "https://PUBLICATION/COMMITMENT" \
+  --output /var/tmp/achronyme-0.1.0-proving/drand-beacon.json
+```
+
 ```text
 scripts/proving/finalize-phase2.sh \
   --r1cs /var/tmp/achronyme-0.1.0-proving/export/circuit.r1cs \
@@ -167,8 +183,7 @@ scripts/proving/finalize-phase2.sh \
   --ach-bin target/release/ach \
   --phase1-source "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau" \
   --contributor "CONTRIBUTOR_ID=CONTRIBUTION_HASH" \
-  --beacon-source "https://PUBLIC_BEACON/rounds/COMMITTED_ROUND" \
-  --beacon-randomness "64_HEX_RANDOMNESS" \
+  --beacon-evidence /var/tmp/achronyme-0.1.0-proving/drand-beacon.json \
   --beacon-iterations 10
 ```
 
@@ -190,8 +205,8 @@ Before the 0.1.0 release is approved, review all of these outputs:
   `finalize.metrics.jsonl`;
 - R1CS, witness, phase-1, final-zkey, transcript, and manifest hashes;
 - verified contributor IDs/hashes;
-- the committed public-beacon source, randomness, iteration count, and verified
-  beacon contribution hash;
+- the published commitment URL and hash, verified drand evidence SHA-256,
+  round, randomness, iteration count, and beacon contribution hash;
 - successful snarkjs-to-Achronyme and Achronyme-to-snarkjs verification;
 - the exact tested Git commit, release binary version, and Achronyme binary
   SHA-256.
