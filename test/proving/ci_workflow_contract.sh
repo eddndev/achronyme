@@ -13,6 +13,8 @@ fi
 rg -Fq 'workflow_call:' "$workflow"
 rg -Fq 'ubuntu-24.04' "$workflow"
 rg -Fq 'snarkjs@0.7.6' "$workflow"
+rg -Fq 'npm ci --prefix scripts/proving/drand --ignore-scripts' "$workflow"
+rg -Fq 'npm test --prefix scripts/proving/drand' "$workflow"
 rg -Fq 'test/proving/documentation_contract.sh' "$workflow"
 rg -Fq 'test/proving/boss_fight_harness_test.sh' "$workflow"
 rg -Fq 'test/proving/trusted_setup_workflow.sh' "$workflow"

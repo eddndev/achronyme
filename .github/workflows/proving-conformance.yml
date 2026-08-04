@@ -35,6 +35,11 @@ jobs:
           test -x "$snarkjs_root/node_modules/.bin/snarkjs"
           echo "$snarkjs_root/node_modules/.bin" >> "$GITHUB_PATH"
 
+      - name: Verify pinned drand client
+        run: |
+          npm ci --prefix scripts/proving/drand --ignore-scripts --no-audit --no-fund
+          npm test --prefix scripts/proving/drand
+
       - name: Build Achronyme CLI
         run: cargo build -p cli
 
