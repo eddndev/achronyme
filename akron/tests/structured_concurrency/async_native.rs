@@ -249,11 +249,9 @@ fn configured_pending_request_limit_is_a_hard_bound() {
     limits.max_pending_native_requests = 1;
     vm.set_runtime_limits(limits).unwrap();
     let releaser = std::thread::spawn(|| {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while PENDING_LIMIT_ACTIVE_JOBS.load(Ordering::Acquire) < 1 {
-            assert!(Instant::now() < deadline, "pending-limit job did not start");
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        // The first request may still be queued when the second request hits
+        // the limit. Release unconditionally so either worker schedule can
+        // complete cleanup without changing the limit assertion.
         std::thread::sleep(Duration::from_millis(20));
         PENDING_LIMIT_RELEASE_JOBS.store(true, Ordering::Release);
     });
