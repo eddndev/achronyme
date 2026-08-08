@@ -1,0 +1,45 @@
+{
+  "format": "achronyme-proving-export",
+  "version": 1,
+  "tracked_checkout_clean": true,
+  "git_commit": "fd07b38e16256e2ed6a8f2b438d340a681c9b0ac",
+  "achronyme_binary_sha256": "1fc77b4a1aea9bf98aa9415afa592a4997d96fa9892d4a015b291f9580c01858",
+  "achronyme_version": "ach 0.1.0",
+  "fixture": {
+    "source_sha256": "43194035df08b5852004057db2a2bcf5acd80e7fdc6e1fff7767b3c08e5c3cfc",
+    "inputs_sha256": "024f51fe43968a68f880cd7b94c40ed2b1506f71bba818462eabcd406e92175f"
+  },
+  "circuit": {
+    "constraints": 1501364,
+    "public_inputs": 21,
+    "variables": 5201533,
+    "r1cs": {
+      "sha256": "85c0e91d50d7d2426851a977ade608972dec4e2c7dd41352e4d75167b24fd486",
+      "bytes": 402885972
+    },
+    "witness": {
+      "sha256": "8ca69b11bc80dbbee9c9e1cac1cfdca99c43289448170dcb5f6946e1a5328b52",
+      "bytes": 166449132
+    }
+  },
+  "bounds": {
+    "timeout_seconds": 21600,
+    "max_virtual_memory_gib": 30,
+    "min_free_disk_gib": 20,
+    "phase1_power": 21
+  },
+  "metrics": [
+    {
+      "stage": "bossfight_export",
+      "elapsed_seconds": 68.85,
+      "max_rss_kib": 6255096,
+      "exit_status": 0
+    },
+    {
+      "stage": "bossfight_witness_check",
+      "elapsed_seconds": 26.06,
+      "max_rss_kib": 1240540,
+      "exit_status": 0
+    }
+  ]
+}

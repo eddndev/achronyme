@@ -1,0 +1,106 @@
+{
+  "format": "achronyme-pre-beacon-evidence",
+  "version": 1,
+  "release": "0.1.0",
+  "status": "contribution-verified-beacon-pending",
+  "source": {
+    "git_commit": "fd07b38e16256e2ed6a8f2b438d340a681c9b0ac",
+    "achronyme_version": "ach 0.1.0",
+    "achronyme_binary_sha256": "fd580091de194ea1f3e43633fbb0298abe5902581306a929b6280c30473dc4a2",
+    "tracked_checkout_clean": true
+  },
+  "export": {
+    "evidence": {
+      "file": "bossfight-export.json",
+      "bytes": 1271,
+      "sha256": "4444902adce072476c1cb33965a1ed5fd281b642b19fe6200e01b442d92e6f3d"
+    },
+    "constraints": 1501364,
+    "public_inputs": 21,
+    "variables": 5201533,
+    "r1cs": {
+      "file": "circuit.r1cs",
+      "bytes": 402885972,
+      "sha256": "85c0e91d50d7d2426851a977ade608972dec4e2c7dd41352e4d75167b24fd486"
+    },
+    "witness": {
+      "file": "witness.wtns",
+      "bytes": 166449132,
+      "sha256": "8ca69b11bc80dbbee9c9e1cac1cfdca99c43289448170dcb5f6946e1a5328b52",
+      "bytes_published": false
+    }
+  },
+  "phase1": {
+    "file": "phase1.ptau",
+    "bytes": 2416002200,
+    "sha256": "cdc7c94a6635bc91466d8c7d96faefe1d17ecc98a3596a748ca1e6c895f8c2b4",
+    "blake2b512": "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678",
+    "transcript_verification": {
+      "status": "verified",
+      "log_file": "phase1-verify.log",
+      "log_bytes": 64712,
+      "log_sha256": "294a37488cae50b21f3199abb2af2edbdf42d0133ac428222e508a6007a48c3e"
+    }
+  },
+  "phase2": {
+    "challenge": {
+      "file": "circuit_0000.zkey",
+      "bytes": 2213425524,
+      "sha256": "c578324df1f60572a178f336182f80f1d09a38fac6ee248f39d01f094af6ddd8"
+    },
+    "contribution": {
+      "file": "circuit_0001.zkey",
+      "bytes": 2213425927,
+      "sha256": "5c2bf744064216bcef9101f99cceabdcdd9622e4f3fc504ae1bdfd36240a4eaf",
+      "contributor_id": "Sebastian",
+      "contribution_hash": "91551860806a34cd866b1b5db0125a038beabdf1b5de76dab02ba59478de1baed36685e5b3297debdfb1cc54be20a14d946aa6933e77c57dc6c881e665379eb8",
+      "created_utc": "2026-08-07T21:19:46Z",
+      "result": {
+        "file": "contribution-result.json",
+        "bytes": 829,
+        "sha256": "a9417c28340b61fd53adbcb524d44d1ffc86c4c7dcbab0c90b33bed0803b7951"
+      }
+    }
+  },
+  "operator_verification": {
+    "status": "verified",
+    "tool": {
+      "name": "snarkjs",
+      "version": "0.7.6"
+    },
+    "started_utc": "2026-08-07T22:46:26Z",
+    "completed_utc": "2026-08-07T23:37:37Z",
+    "elapsed_seconds": 3071.37,
+    "max_rss_kib": 8590524,
+    "exit_status": 0,
+    "zkey_ok": true,
+    "contributor_matches_result": true,
+    "raw_log": {
+      "file": "zkey-verify.log",
+      "bytes": 1048,
+      "sha256": "541f70f2233f97ba8ac84b690a2158010da91101a74bf16b85b068f920fdaef9"
+    },
+    "metrics": {
+      "file": "zkey-verify.metrics.txt",
+      "bytes": 821,
+      "sha256": "0988557d2e5b2504fc2771123d2c4fe6286e0217c6620158ca6249990cd273ba"
+    },
+    "public_extract": {
+      "file": "operator-verification.txt",
+      "sha256": "e9c12232313069619a2b7da0cc9a08dc1edb3dd8854a68e473efb1c6bdd9a0e1"
+    }
+  },
+  "beacon": {
+    "status": "pending-public-commitment",
+    "commitment": null,
+    "publication": null
+  },
+  "verification": {
+    "export_evidence_matches_artifacts": true,
+    "phase1_hash_matches_pinned_value": true,
+    "phase1_transcript_verified": true,
+    "contribution_result_matches_artifact": true,
+    "contributor_matches_verified_zkey": true,
+    "operator_zkey_verification": true
+  }
+}

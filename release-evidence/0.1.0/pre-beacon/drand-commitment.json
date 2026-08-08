@@ -1,0 +1,39 @@
+{
+  "format": "achronyme-drand-commitment",
+  "version": 1,
+  "created_at": "2026-08-08T02:00:23.694Z",
+  "publication_required_before_target": true,
+  "network": {
+    "id": "quicknet",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "public_key": "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
+    "period_seconds": 3,
+    "scheme": "bls-unchained-g1-rfc9380",
+    "client": "drand-client@1.4.2",
+    "mirrors": [
+      "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
+    ]
+  },
+  "anchor": {
+    "round": 31117018,
+    "randomness": "ff39f04c3ef2055ab8bbc07ce56559a8f1d87a480b8b3e5b1b201cfc2ea520dd",
+    "signature": "89bb317ae50912a2e25fb344dba64827ae92d22f7eaff27324a8ccd774a93cb540bb681a1901e04fd474dcee24fef997",
+    "sources": [
+      "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31117018",
+      "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31117018",
+      "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31117018"
+    ]
+  },
+  "target": {
+    "round": 31118218,
+    "lead_rounds": 1200,
+    "source": "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31118218",
+    "mirrors": [
+      "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31118218",
+      "https://api2.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31118218",
+      "https://api3.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31118218"
+    ]
+  }
+}
