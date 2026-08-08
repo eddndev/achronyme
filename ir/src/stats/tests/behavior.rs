@@ -238,13 +238,16 @@ fn display_format() {
         rhs: v1,
     });
 
-    let stats = CircuitStats::from_program(&prog, &empty_proven(), Some("test_circuit"));
+    let stats = CircuitStats::from_program(&prog, &empty_proven(), Some("test_circuit"))
+        .with_final_r1cs_constraints(0);
     let output = format!("{stats}");
     assert!(output.contains("test_circuit"));
     assert!(output.contains("1 public"));
     assert!(output.contains("1 witness"));
     assert!(output.contains("Arithmetic"));
-    assert!(output.contains("TOTAL"));
+    assert!(output.contains("PRE-OPTIMIZATION ESTIMATE"));
+    assert!(output.contains("FINAL PROVING CONSTRAINTS"));
+    assert_eq!(stats.final_r1cs_constraints, Some(0));
 }
 
 #[test]

@@ -171,7 +171,61 @@ fn configured_live_task_limit_is_a_hard_bound() {
 
     let error = vm.interpret().unwrap_err();
     assert!(
-        error.to_string().contains("live task count exceeds 1"),
+        error
+            .to_string()
+            .contains("live child task count exceeds 1"),
+        "{error}"
+    );
+}
+
+#[test]
+fn configured_task_limit_counts_explicit_and_implicit_children() {
+    let _pool_guard = lock_async_pool_test();
+    let mut vm = loaded_async_vm(
+        "fn wait_once() { await delay() }\n\
+         concurrent {\n\
+             let first = spawn wait_once();\n\
+             let second = spawn wait_once();\n\
+             await first;\n\
+             await second\n\
+         }",
+        "delay",
+        start_delay,
+    );
+    let mut limits = vm.runtime_limits;
+    limits.max_tasks = 2;
+    vm.set_runtime_limits(limits).unwrap();
+
+    let error = vm.interpret().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("live child task count exceeds 2"),
+        "{error}"
+    );
+}
+
+#[test]
+fn configured_task_scope_limit_counts_simultaneously_live_scopes() {
+    let _pool_guard = lock_async_pool_test();
+    let mut vm = loaded_async_vm(
+        "fn wait_once() { await delay() }\n\
+         concurrent {\n\
+             let first = spawn wait_once();\n\
+             let second = spawn wait_once();\n\
+             await first;\n\
+             await second\n\
+         }",
+        "delay",
+        start_delay,
+    );
+    let mut limits = vm.runtime_limits;
+    limits.max_task_scopes = 2;
+    vm.set_runtime_limits(limits).unwrap();
+
+    let error = vm.interpret().unwrap_err();
+    assert!(
+        error.to_string().contains("live task scopes exceed 2"),
         "{error}"
     );
 }
