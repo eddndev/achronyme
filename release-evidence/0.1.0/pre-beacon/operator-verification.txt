@@ -1,0 +1,20 @@
+tool: snarkjs@0.7.6
+started_utc: 2026-08-07T22:46:26Z
+completed_utc: 2026-08-07T23:37:37Z
+
+Circuit Hash:
+e0e75762 837b7e25 c326431e ab0df80c
+ed9b8729 84848048 ada40799 0b460194
+760c0cda e64e1caf 40385509 692626a3
+9ba71716 ba8454c6 f6e3a934 0f900548
+
+contribution #1 Sebastian:
+91551860 806a34cd 866b1b5d b0125a03
+8beabdf1 b5de76da b02ba594 78de1bae
+d36685e5 b3297deb dfb1cc54 be20a14d
+946aa693 3e77c57d c6c881e6 65379eb8
+
+ZKey Ok!
+elapsed_wall_clock: 51:11.37
+maximum_resident_set_size_kib: 8590524
+exit_status: 0
