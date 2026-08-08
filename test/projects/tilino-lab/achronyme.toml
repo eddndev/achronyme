@@ -1,0 +1,18 @@
+[project]
+name = "tilino-lab"
+version = "0.1.1"
+entry = "src/main.ach"
+
+[build]
+backend = "r1cs"
+
+[vm]
+max_tasks = 24
+max_resources = 24
+max_task_scopes = 24
+max_pending_native_requests = 24
+max_retained_task_results = 24
+max_channels = 4
+max_channel_operations = 24
+blocking_workers = 4
+blocking_queue_capacity = 24

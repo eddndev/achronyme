@@ -1,0 +1,61 @@
+// Auction commitments, winner constraints, and public receipt formatting.
+
+export fn alice_nonce() { 0p1111 }
+export fn bob_nonce() { 0p2222 }
+export fn charlie_nonce() { 0p3333 }
+
+export fn commitment(bid, nonce) {
+    poseidon(bid, nonce)
+}
+
+export fn prove_winner(
+    alice_bid,
+    bob_bid,
+    charlie_bid,
+    alice_nonce_value,
+    bob_nonce_value,
+    charlie_nonce_value,
+    commit_alice,
+    commit_bob,
+    commit_charlie,
+    registry_root,
+    bidder_bob,
+    bob_path: Field[2],
+    bob_indices: Field[2]
+) {
+    let proof = prove winner(
+        commit_bob: Public,
+        commit_alice: Public,
+        commit_charlie: Public,
+        registry_root: Public
+    ) {
+        assert_eq(poseidon(bob_bid, bob_nonce_value), commit_bob)
+        assert_eq(poseidon(alice_bid, alice_nonce_value), commit_alice)
+        assert_eq(poseidon(charlie_bid, charlie_nonce_value), commit_charlie)
+
+        range_check(alice_bid, 32)
+        range_check(bob_bid, 32)
+        range_check(charlie_bid, 32)
+        assert(bob_bid > 0p0)
+        assert(bob_bid > alice_bid)
+        assert(bob_bid > charlie_bid)
+
+        merkle_verify(registry_root, bidder_bob, bob_path, bob_indices)
+    }
+    proof
+}
+
+export fn receipt(
+    accepted_commitments,
+    commit_bob,
+    commit_alice,
+    commit_charlie,
+    registry_root
+) {
+    "winner=bob\n" +
+        "accepted_commitments=" + accepted_commitments.to_string() + "\n" +
+        "winner_commitment=" + commit_bob.to_string() + "\n" +
+        "alice_commitment=" + commit_alice.to_string() + "\n" +
+        "charlie_commitment=" + commit_charlie.to_string() + "\n" +
+        "registry_root=" + registry_root.to_string() + "\n"
+}

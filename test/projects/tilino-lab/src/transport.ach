@@ -1,0 +1,80 @@
+// Commitment-only transport with bounded structured concurrency.
+
+fn submit_commitment(address, bidder, commitment, delay_ms) {
+    await sleep(delay_ms)
+
+    let connection = await tcp_connect(address)
+    let payload = bidder + ":" + commitment.to_string()
+    let written = await tcp_write(connection, payload)
+    let acknowledgement = await tcp_read(connection, 64)
+    await tcp_close(connection)
+
+    assert(written > 0)
+    assert(acknowledgement != nil)
+    written
+}
+
+fn collect_commitments(listener, events) {
+    for _index in 0..3 {
+        let connection = await tcp_accept(listener)
+        let payload = await tcp_read(connection, 256)
+        assert(payload != nil)
+
+        await channel_send(events, payload)
+        await tcp_write(connection, "accepted")
+        await tcp_close(connection)
+    }
+
+    await tcp_listener_close(listener)
+    3
+}
+
+fn consume_commitments(events) {
+    mut accepted = 0
+    for _index in 0..3 {
+        let payload = await channel_receive(events)
+        assert(payload != nil)
+        accepted = accepted + 1
+        await yield_now()
+    }
+    accepted
+}
+
+export fn exchange_commitments(
+    address,
+    commit_alice,
+    commit_bob,
+    commit_charlie
+) {
+    let listener = await tcp_listen(address)
+    let commitment_events = channel(1)
+
+    let accepted_commitments = concurrent {
+        let server_task = spawn collect_commitments(listener, commitment_events)
+        let consumer_task = spawn consume_commitments(commitment_events)
+        let deadline_task = spawn timeout_after(5000)
+
+        let alice_task = spawn submit_commitment(address, "alice", commit_alice, 1)
+        let bob_task = spawn submit_commitment(address, "bob", commit_bob, 2)
+        let charlie_task = spawn submit_commitment(address, "charlie", commit_charlie, 3)
+
+        let server_race = await [server_task, deadline_task] as race
+        assert(server_race["index"] == 0)
+        assert(server_race["ok"] == true)
+        assert(server_race["value"] == 3)
+
+        let alice_outcome = await alice_task as outcome
+        let bob_outcome = await bob_task as outcome
+        let charlie_outcome = await charlie_task as outcome
+        assert(alice_outcome["ok"] == true)
+        assert(bob_outcome["ok"] == true)
+        assert(charlie_outcome["ok"] == true)
+
+        let consumed = await consumer_task
+        assert(consumed == 3)
+        consumed
+    }
+
+    channel_close(commitment_events)
+    accepted_commitments
+}
