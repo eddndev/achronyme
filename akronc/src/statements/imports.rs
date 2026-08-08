@@ -34,8 +34,13 @@ fn compile_module_statements(
 
     let old_prefix = compiler.module_prefix.take();
     let old_base = compiler.base_path.take();
+    let old_resolver_module = compiler.resolver_current_module;
     compiler.module_prefix = Some(prefix.to_string());
     compiler.base_path = canonical.parent().map(|path| path.to_path_buf());
+    compiler.resolver_current_module = compiler
+        .resolver_module_by_path
+        .as_ref()
+        .and_then(|modules| modules.get(canonical).copied());
 
     let warning_start = compiler.warnings.len();
     let result = statements
@@ -48,6 +53,7 @@ fn compile_module_statements(
 
     compiler.module_prefix = old_prefix;
     compiler.base_path = old_base;
+    compiler.resolver_current_module = old_resolver_module;
     compiler.compiling_modules.remove(canonical);
 
     result.map_err(|error| CompilerError::ModuleSource {

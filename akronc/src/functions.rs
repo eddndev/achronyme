@@ -63,19 +63,22 @@ impl FunctionDefinitionCompiler for Compiler {
         // Use the current span (pointing to the fn declaration) for param locals
         let fn_span = self.current_span.clone();
 
-        // Preserve the resolver module that owns this function body. Namespace
-        // imports compile under a mangled `{alias}::{name}` key, which maps
-        // directly to the ModuleId produced by the resolver graph. Lambdas and
+        // Preserve the resolver module that owns this function body. The active
+        // source path covers namespace and selective imports; the dispatch key
+        // remains the fallback for callers without path context. Lambdas and
         // other nested functions inherit the module of their enclosing body.
-        let resolver_module = name
-            .and_then(|declared_name| {
-                let fn_key = match &self.module_prefix {
-                    Some(prefix) => format!("{prefix}::{declared_name}"),
-                    None => declared_name.to_string(),
-                };
-                self.resolver_module_by_key
-                    .as_ref()
-                    .and_then(|modules| modules.get(&fn_key).copied())
+        let resolver_module = self
+            .resolver_current_module
+            .or_else(|| {
+                name.and_then(|declared_name| {
+                    let fn_key = match &self.module_prefix {
+                        Some(prefix) => format!("{prefix}::{declared_name}"),
+                        None => declared_name.to_string(),
+                    };
+                    self.resolver_module_by_key
+                        .as_ref()
+                        .and_then(|modules| modules.get(&fn_key).copied())
+                })
             })
             .or_else(|| {
                 self.current_ref()

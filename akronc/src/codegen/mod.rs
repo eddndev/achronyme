@@ -195,6 +195,14 @@ pub struct Compiler {
     /// so a bare identifier in an inlined body resolves against its
     /// own module's symbols.
     pub resolver_module_by_key: Option<Arc<HashMap<String, ModuleId>>>,
+    /// Canonical module path to its owning [`ModuleId`]. Unlike dispatch
+    /// keys, paths also identify selective imports whose compiler-only
+    /// `__sel_N` prefix has no resolver equivalent.
+    pub resolver_module_by_path: Option<Arc<HashMap<PathBuf, ModuleId>>>,
+    /// Resolver module for the module body currently being compiled.
+    /// [`crate::statements::imports`] saves and restores this around nested
+    /// imports so functions inherit the annotation scope of their source file.
+    pub resolver_current_module: Option<ModuleId>,
     // ── Availability inference ─────────────────────────────────────
     /// fn_table key → [`Availability`] for every user function.
     /// The VM compiler checks this before emitting bytecode: if a

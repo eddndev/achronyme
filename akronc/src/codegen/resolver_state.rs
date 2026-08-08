@@ -50,6 +50,8 @@ impl Compiler {
         self.resolver_hits.clear();
         self.resolver_dispatch_by_symbol = None;
         self.resolver_module_by_key = None;
+        self.resolver_module_by_path = None;
+        self.resolver_current_module = None;
         self.resolver_availability_map = None;
         self.resolver_outer_functions = None;
     }
@@ -129,6 +131,11 @@ impl Compiler {
         // handoff into `OuterResolverState` is a refcount bump
         // rather than a HashMap clone.
         let (dispatch_by_symbol, module_by_key) = build_dispatch_maps(&state.table, &state.graph);
+        let module_by_path = state
+            .graph
+            .iter()
+            .map(|module| (module.path.clone(), module.id))
+            .collect();
         let availability_map = build_availability_map(&state.table, &state.graph);
 
         // Derive outer functions from the graph so prove blocks can
@@ -142,6 +149,8 @@ impl Compiler {
         self.resolver_root_module = Some(root_module);
         self.resolver_dispatch_by_symbol = Some(Arc::new(dispatch_by_symbol));
         self.resolver_module_by_key = Some(Arc::new(module_by_key));
+        self.resolver_module_by_path = Some(Arc::new(module_by_path));
+        self.resolver_current_module = None;
         self.resolver_availability_map = Some(availability_map);
         self.resolver_outer_functions = Some(outer_functions);
         self.inferred_effects = inferred_effects;

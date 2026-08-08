@@ -159,3 +159,57 @@ fn imported_prove_array_parameters_count_as_reads() {
         "imported prove captures must count as parameter reads: {warnings:?}"
     );
 }
+
+#[test]
+fn selectively_imported_prove_uses_its_module_resolver_context() {
+    let directory = tempfile::tempdir().unwrap();
+    let main = directory.path().join("main.ach");
+    let module = directory.path().join("proofs.ach");
+    std::fs::write(
+        &main,
+        // Both builtin callees deliberately receive ExprId(1) in their own
+        // module. The imported merkle call must not resolve as root poseidon.
+        "import { prove_membership } from \"./proofs.ach\"\n\
+         let padding = poseidon(0p1, 0p2)\n\
+         let generated = prove_membership(\n\
+             0p1,\n\
+             0p2,\n\
+             [0p3, 0p4],\n\
+             [0p0, 0p1]\n\
+         )\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &module,
+        "export fn prove_membership(\n\
+             root,\n\
+             leaf,\n\
+             path: Field[2],\n\
+             indices: Field[2]\n\
+         ) {\n\
+             prove(root: Public) {\n\
+                 merkle_verify(root, leaf, path, indices)\n\
+             }\n\
+         }\n",
+    )
+    .unwrap();
+    let source = std::fs::read_to_string(&main).unwrap();
+    let mut compiler = cli::commands::new_compiler();
+
+    compiler
+        .compile_program(&source, &CompileOptions::for_source(&main))
+        .unwrap();
+
+    let warnings = compiler.take_warnings();
+    assert!(
+        !warnings.iter().any(|warning| {
+            warning
+                .message
+                .contains("unused function parameter: `path`")
+                || warning
+                    .message
+                    .contains("unused function parameter: `indices`")
+        }),
+        "selectively imported prove captures must count as parameter reads: {warnings:?}"
+    );
+}

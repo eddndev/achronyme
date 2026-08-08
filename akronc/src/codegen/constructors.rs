@@ -104,6 +104,8 @@ impl Compiler {
             resolver_hits: Vec::new(),
             resolver_dispatch_by_symbol: None,
             resolver_module_by_key: None,
+            resolver_module_by_path: None,
+            resolver_current_module: None,
             resolver_availability_map: None,
         }
     }
