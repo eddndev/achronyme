@@ -1,0 +1,4 @@
+{"stage":"phase1_transcript","elapsed_seconds":3817.97,"max_rss_kib":11413364,"exit_status":0}
+{"stage":"r1cs_info","elapsed_seconds":22.14,"max_rss_kib":4214200,"exit_status":0}
+{"stage":"witness_check","elapsed_seconds":27.56,"max_rss_kib":1212600,"exit_status":0}
+{"stage":"phase2_initial_setup","elapsed_seconds":1464.30,"max_rss_kib":9470312,"exit_status":0}

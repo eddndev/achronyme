@@ -1,0 +1,147 @@
+{
+  "format": "achronyme-proving-release-evidence",
+  "version": 3,
+  "git_commit": "fd07b38e16256e2ed6a8f2b438d340a681c9b0ac",
+  "achronyme_binary_sha256": "1fc77b4a1aea9bf98aa9415afa592a4997d96fa9892d4a015b291f9580c01858",
+  "export_evidence": {
+    "format": "achronyme-proving-export",
+    "version": 1,
+    "sha256": "b83febe2bc9909ae4a38d43dbcb4191b8b18c33a12502e03e219dc1b99d4efe3"
+  },
+  "tools": {
+    "achronyme": "ach 0.1.0",
+    "snarkjs": "snarkjs@0.7.6"
+  },
+  "circuit": {
+    "constraints": 1501364,
+    "r1cs": {
+      "sha256": "85c0e91d50d7d2426851a977ade608972dec4e2c7dd41352e4d75167b24fd486",
+      "bytes": 402885972
+    },
+    "witness": {
+      "sha256": "8ca69b11bc80dbbee9c9e1cac1cfdca99c43289448170dcb5f6946e1a5328b52",
+      "bytes": 166449132
+    }
+  },
+  "ceremony": {
+    "phase1": {
+      "sha256": "cdc7c94a6635bc91466d8c7d96faefe1d17ecc98a3596a748ca1e6c895f8c2b4",
+      "blake2b512": "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678"
+    },
+    "contributed_zkey": {
+      "sha256": "5c2bf744064216bcef9101f99cceabdcdd9622e4f3fc504ae1bdfd36240a4eaf",
+      "bytes": 2213425927
+    },
+    "final_beacon": {
+      "name": "Achronyme final beacon",
+      "source": "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/31118218",
+      "round": 31118218,
+      "randomness": "9737d5ff5ada67e0926bf5767c55345da2cb0e06d7db830eabbf0447ea0cc52f",
+      "evidence_sha256": "88449a28ab624d4012ff40f6b14286a8560a26bad47956844cf23d9657ddd525",
+      "commitment_publication": "https://github.com/achronyme/achronyme/blob/d5eb8c4b5420e94060c8591e8c86e2385519c745/release-evidence/0.1.0/pre-beacon/drand-commitment.json",
+      "commitment_sha256": "3515db09b37e749c96dff57d2f632bada79e77afee370f6ff34034bebae35d0f",
+      "iterations": 10,
+      "contribution_hash": "a11f39fb0098fa70bf2fe2ff7eb0398e01529f0647dd5370a3da9d2b7b0610d2c89fa47ebbf85edf13b2a1be1d643acc22a61835021a0df017d36efb19caa016"
+    },
+    "final_zkey": {
+      "sha256": "709b3e30d0065910680f34a443ca0f8a6729fa60054d02e042baf0cff70fb8d0",
+      "bytes": 2213426379
+    },
+    "contributors": [
+      {
+        "id": "Sebastian",
+        "contribution_hash": "91551860806a34cd866b1b5db0125a038beabdf1b5de76dab02ba59478de1baed36685e5b3297debdfb1cc54be20a14d946aa6933e77c57dc6c881e665379eb8"
+      }
+    ]
+  },
+  "verification": {
+    "phase1": true,
+    "witness": true,
+    "contributed_zkey": true,
+    "final_beacon_evidence": true,
+    "final_beacon": true,
+    "final_zkey": true,
+    "snarkjs_proof_in_achronyme": true,
+    "achronyme_proof_in_snarkjs": true
+  },
+  "metrics": [
+    {
+      "stage": "phase1_transcript",
+      "elapsed_seconds": 5183.46,
+      "max_rss_kib": 11067244,
+      "exit_status": 0
+    },
+    {
+      "stage": "witness_check",
+      "elapsed_seconds": 25.79,
+      "max_rss_kib": 1240400,
+      "exit_status": 0
+    },
+    {
+      "stage": "contributed_zkey_verify",
+      "elapsed_seconds": 1725.14,
+      "max_rss_kib": 10784444,
+      "exit_status": 0
+    },
+    {
+      "stage": "final_beacon",
+      "elapsed_seconds": 276.82,
+      "max_rss_kib": 525208,
+      "exit_status": 0
+    },
+    {
+      "stage": "final_zkey_verify",
+      "elapsed_seconds": 1731.18,
+      "max_rss_kib": 10629076,
+      "exit_status": 0
+    },
+    {
+      "stage": "export_verification_key",
+      "elapsed_seconds": 0.48,
+      "max_rss_kib": 172788,
+      "exit_status": 0
+    },
+    {
+      "stage": "snarkjs_prove",
+      "elapsed_seconds": 88.06,
+      "max_rss_kib": 18926052,
+      "exit_status": 0
+    },
+    {
+      "stage": "snarkjs_verify",
+      "elapsed_seconds": 0.46,
+      "max_rss_kib": 177160,
+      "exit_status": 0
+    },
+    {
+      "stage": "achronyme_verify_snarkjs",
+      "elapsed_seconds": 0.00,
+      "max_rss_kib": 7572,
+      "exit_status": 0
+    },
+    {
+      "stage": "package_trusted_key",
+      "elapsed_seconds": 48.49,
+      "max_rss_kib": 7028,
+      "exit_status": 0
+    },
+    {
+      "stage": "achronyme_trusted_prove",
+      "elapsed_seconds": 582.90,
+      "max_rss_kib": 9770272,
+      "exit_status": 0
+    },
+    {
+      "stage": "achronyme_verify_achronyme",
+      "elapsed_seconds": 0.00,
+      "max_rss_kib": 7028,
+      "exit_status": 0
+    },
+    {
+      "stage": "snarkjs_verify_achronyme",
+      "elapsed_seconds": 0.47,
+      "max_rss_kib": 177988,
+      "exit_status": 0
+    }
+  ]
+}
