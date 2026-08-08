@@ -114,11 +114,27 @@ impl DefaultProveHandler {
             eprintln!("{s}");
         }
         if stats.len() > 1 {
-            let total: usize = stats.iter().map(|s| s.total_constraints).sum();
+            let all_final = stats
+                .iter()
+                .all(|stats| stats.final_r1cs_constraints.is_some());
+            let total: usize = stats
+                .iter()
+                .map(|stats| {
+                    stats
+                        .final_r1cs_constraints
+                        .unwrap_or(stats.total_constraints)
+                })
+                .sum();
+            let label = if all_final {
+                "final proving constraints"
+            } else {
+                "pre-optimization estimated constraints"
+            };
             eprintln!(
-                "  Total across {} circuits: {} constraints",
+                "  Total across {} circuits: {} {}",
                 stats.len(),
-                total
+                total,
+                label,
             );
         }
     }

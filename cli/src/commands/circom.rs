@@ -443,14 +443,20 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
         );
     }
 
-    // Circuit stats profiler
-    if circuit_stats {
+    // Build the backend-independent IR estimate now. The R1CS branch attaches
+    // the exact finalized constraint count after backend optimization.
+    let circuit_stats = if circuit_stats {
         let name = std::path::Path::new(path)
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned());
-        let stats = ir::stats::CircuitStats::from_program(&program, &proven, name.as_deref());
-        eprintln!("{stats}");
-    }
+        Some(ir::stats::CircuitStats::from_program(
+            &program,
+            &proven,
+            name.as_deref(),
+        ))
+    } else {
+        None
+    };
 
     // 6. Backend compilation
     let source_dir = file_path
@@ -461,7 +467,7 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
     match backend {
         "r1cs" => {
             let want_reusable = input_files.len() > 1;
-            let prover = run_r1cs_pipeline(
+            let (prover, final_constraints) = run_r1cs_pipeline(
                 program,
                 r1cs_path,
                 wtns_path,
@@ -477,6 +483,9 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
                 lean_r1cs,
                 key_source,
             )?;
+            if let Some(stats) = circuit_stats {
+                eprintln!("{}", stats.with_final_r1cs_constraints(final_constraints));
+            }
 
             // Extra input files reuse the compiled circuit: only the
             // per-input work runs (hint walk, witness replay, verify,
@@ -518,6 +527,9 @@ fn circom_command_inner<F: FieldBackend + PoseidonParamsProvider + Groth16Field>
             Ok(())
         }
         "plonkish" => {
+            if let Some(stats) = circuit_stats {
+                eprintln!("{stats}");
+            }
             let mut memo = artik::ArtikMemo::<F>::new();
             let all_inputs = walk_hints(&mut memo)?;
             run_plonkish_pipeline(

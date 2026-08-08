@@ -28,7 +28,7 @@ pub(super) fn run_r1cs_pipeline<
     no_optimize: bool,
     proven: &std::collections::HashSet<ir::SsaVar>,
     key_source: &proving::groth16::ProvingKeySource,
-) -> Result<()> {
+) -> Result<usize> {
     let mut compiler = R1CSCompiler::<F>::new();
     compiler.prime_id = prime_id;
     compiler.set_proven_boolean(proven.clone());
@@ -305,5 +305,5 @@ pub(super) fn run_r1cs_pipeline<
         }
     }
 
-    Ok(())
+    Ok(compiler.cs.num_constraints())
 }

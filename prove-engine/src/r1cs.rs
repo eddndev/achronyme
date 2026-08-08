@@ -13,6 +13,7 @@ impl ProveEngine {
         program: ir::IrProgram,
         prove_ir: &ir_forge::ProveIR,
         mut inputs: HashMap<String, FieldElement>,
+        circuit_stats: Option<ir::stats::CircuitStats>,
     ) -> Result<ProveResult, ProveError> {
         // Prover constructor: identical constraint surface, but skips the
         // per-constraint origin log — this path never reads origins (they
@@ -72,6 +73,10 @@ impl ProveEngine {
             .map_err(|e| ProveError::Verification(format!("{e}")))?;
 
         let n_constraints = r1cs.cs.num_constraints();
+        if let Some(stats) = circuit_stats {
+            self.observer
+                .on_circuit_stats(stats.with_final_r1cs_constraints(n_constraints));
+        }
         // Proof generation needs only the constraint system and the witness;
         // drop the rest of the compile working set before the SNARK setup.
         let cs = r1cs.into_constraint_system();
