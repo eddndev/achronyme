@@ -12,6 +12,7 @@
 
 use achronyme_parser::diagnostic::SpanRange;
 use achronyme_parser::Diagnostic;
+use std::path::Path;
 
 use super::Compiler;
 use crate::error::{CompilerError, OptSpan};
@@ -30,6 +31,11 @@ impl Compiler {
     /// Take all collected warnings, leaving the internal list empty.
     pub fn take_warnings(&mut self) -> Vec<Diagnostic> {
         std::mem::take(&mut self.warnings)
+    }
+
+    /// Source text for a canonical module path loaded during compilation.
+    pub fn module_source(&self, path: &Path) -> Option<&str> {
+        self.module_loader.source(path)
     }
 
     /// Collect all in-scope names (locals, globals) for "did you mean?" suggestions.

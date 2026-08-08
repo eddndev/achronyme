@@ -157,7 +157,10 @@ impl<'a> ModuleSource for ModuleLoaderSource<'a> {
                 });
             }
         }
-        let exports = self.loader.load(canonical)?;
+        let exports = self
+            .loader
+            .load(canonical)
+            .map_err(|error| error.to_string())?;
         Ok(LoadedModule {
             program: exports.program.clone(),
             exported_names: exports.exported_names.clone(),

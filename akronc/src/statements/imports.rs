@@ -23,6 +23,40 @@ use achronyme_parser::ast::*;
 use akron::opcode::OpCode;
 use memory::Value;
 
+fn compile_module_statements(
+    compiler: &mut Compiler,
+    canonical: &Path,
+    source: &str,
+    prefix: &str,
+    statements: &[Stmt],
+) -> Result<(), CompilerError> {
+    compiler.compiling_modules.insert(canonical.to_path_buf());
+
+    let old_prefix = compiler.module_prefix.take();
+    let old_base = compiler.base_path.take();
+    compiler.module_prefix = Some(prefix.to_string());
+    compiler.base_path = canonical.parent().map(|path| path.to_path_buf());
+
+    let warning_start = compiler.warnings.len();
+    let result = statements
+        .iter()
+        .try_for_each(|statement| compiler.compile_stmt(statement));
+
+    for warning in &mut compiler.warnings[warning_start..] {
+        *warning = warning.clone().with_file(canonical.to_path_buf());
+    }
+
+    compiler.module_prefix = old_prefix;
+    compiler.base_path = old_base;
+    compiler.compiling_modules.remove(canonical);
+
+    result.map_err(|error| CompilerError::ModuleSource {
+        path: canonical.to_path_buf(),
+        source: source.to_string(),
+        error: Box::new(error),
+    })
+}
+
 pub(super) fn compile_import(
     compiler: &mut Compiler,
     path: &str,
@@ -80,25 +114,11 @@ pub(super) fn compile_import(
         .map_err(CompilerError::ModuleLoadError)?;
     let module_stmts = module.program.stmts.clone();
     let exported_names = module.exported_names.clone();
+    let module_source = module.source.clone();
 
-    // 5. Mark as compiling (for cycle detection during stmt compilation)
-    compiler.compiling_modules.insert(canonical.clone());
-
-    // 6. Save and set module_prefix + base_path for name mangling
-    let old_prefix = compiler.module_prefix.take();
-    let old_base = compiler.base_path.take();
-    compiler.module_prefix = Some(alias.to_string());
-    compiler.base_path = canonical.parent().map(|p| p.to_path_buf());
-
-    // 7. Compile the module's statements (globals get mangled as alias::name)
-    for stmt in &module_stmts {
-        compiler.compile_stmt(stmt)?;
-    }
-
-    // 8. Restore prefix and base_path, remove from compiling set
-    compiler.module_prefix = old_prefix;
-    compiler.base_path = old_base;
-    compiler.compiling_modules.remove(&canonical);
+    // 5. Compile the module under its namespace while preserving source
+    // context for errors and warnings.
+    compile_module_statements(compiler, &canonical, &module_source, alias, &module_stmts)?;
 
     // 9. Build a Map { export_name: value } and bind it to the alias
     let count = exported_names.len();
@@ -216,6 +236,7 @@ pub(super) fn compile_selective_import(
         .map_err(CompilerError::ModuleLoadError)?;
     let module_stmts = module.program.stmts.clone();
     let exported_names = module.exported_names.clone();
+    let module_source = module.source.clone();
 
     // 4. Validate that all requested names are exported
     for name in names {
@@ -260,24 +281,15 @@ pub(super) fn compile_selective_import(
     // 6. Generate internal module prefix
     let internal_prefix = format!("__sel_{}", compiler.imported_aliases.len());
 
-    // 7. Mark as compiling (for cycle detection)
-    compiler.compiling_modules.insert(canonical.clone());
-
-    // 8. Save and set module_prefix + base_path for name mangling
-    let old_prefix = compiler.module_prefix.take();
-    let old_base = compiler.base_path.take();
-    compiler.module_prefix = Some(internal_prefix.clone());
-    compiler.base_path = canonical.parent().map(|p| p.to_path_buf());
-
-    // 9. Compile the module's statements
-    for stmt in &module_stmts {
-        compiler.compile_stmt(stmt)?;
-    }
-
-    // 10. Restore prefix and base_path, remove from compiling set
-    compiler.module_prefix = old_prefix;
-    compiler.base_path = old_base;
-    compiler.compiling_modules.remove(&canonical);
+    // 7. Compile the module under its internal namespace while preserving
+    // source context for errors and warnings.
+    compile_module_statements(
+        compiler,
+        &canonical,
+        &module_source,
+        &internal_prefix,
+        &module_stmts,
+    )?;
 
     // 11. Copy only the requested names from mangled globals to user-visible globals
     for name in names {
