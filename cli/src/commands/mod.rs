@@ -1,6 +1,7 @@
 pub mod aot;
 pub mod circom;
 pub mod circuit;
+mod circuit_stats;
 pub mod compile;
 pub mod disassemble;
 pub mod engine;
