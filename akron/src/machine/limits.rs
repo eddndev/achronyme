@@ -9,8 +9,10 @@ use super::VM;
 /// Per-VM bounds for structured concurrency and owned host state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuntimeLimits {
+    /// Maximum live child tasks across explicit spawn and implicit await.
     pub max_tasks: usize,
     pub max_resources: usize,
+    /// Maximum simultaneously live structured task scopes across the VM.
     pub max_task_scopes: usize,
     pub max_pending_native_requests: usize,
     pub max_retained_task_results: usize,

@@ -12,7 +12,7 @@ impl VM {
     pub(super) fn enter_task_scope(&mut self) -> Result<(), RuntimeError> {
         if self.task_scheduler.scopes.len() >= self.runtime_limits.max_task_scopes {
             return Err(RuntimeError::resource_limit_exceeded(format!(
-                "nested task scopes exceed {}",
+                "live task scopes exceed {}",
                 self.runtime_limits.max_task_scopes
             )));
         }
@@ -50,7 +50,7 @@ impl VM {
             .ok_or(RuntimeError::TaskOutOfScope)?;
         if self.task_scheduler.tasks.len() >= self.runtime_limits.max_tasks {
             return Err(RuntimeError::resource_limit_exceeded(format!(
-                "live task count exceeds {}",
+                "live child task count exceeds {}",
                 self.runtime_limits.max_tasks
             )));
         }
