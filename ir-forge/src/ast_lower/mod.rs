@@ -130,7 +130,11 @@ pub struct OuterResolverState {
     pub table: std::sync::Arc<SymbolTable>,
     /// Annotation map keyed by `(module_id, expr_id)`.
     pub resolved: std::sync::Arc<ResolvedProgram>,
-    /// Root module id in the graph the annotations were built for.
+    /// Module id that contains the prove block being compiled.
+    ///
+    /// This is the graph root for top-level and standalone blocks, but an
+    /// imported function's owning module for a block nested in that function.
+    /// The historical field name is retained for API compatibility.
     pub root_module: ModuleId,
     /// Precomputed map from [`SymbolId`] to the fn_table key the
     /// ProveIR compiler uses. Built once by walking the resolver's
@@ -268,9 +272,9 @@ pub struct ProveIrCompiler<F: FieldBackend = Bn254Fr> {
     /// `compiler` crate's [`Compiler::resolved_program`] doc for
     /// the key semantics.
     resolver_resolved: Option<std::sync::Arc<ResolvedProgram>>,
-    /// The [`ModuleId`] annotations are currently being resolved
-    /// against when the stack is empty. Installed from
-    /// `OuterScope::resolver_state.root_module` at compile-start.
+    /// The [`ModuleId`] annotations are currently being resolved against when
+    /// the stack is empty. Installed from the prove block's entry module at
+    /// compile-start.
     resolver_root_module: Option<ModuleId>,
     /// Stack of module ids that override [`resolver_root_module`]
     /// while walking inlined user-fn bodies. Every

@@ -63,8 +63,30 @@ impl FunctionDefinitionCompiler for Compiler {
         // Use the current span (pointing to the fn declaration) for param locals
         let fn_span = self.current_span.clone();
 
-        self.compilers
-            .push(FunctionCompiler::new(fn_name.clone(), arity));
+        // Preserve the resolver module that owns this function body. Namespace
+        // imports compile under a mangled `{alias}::{name}` key, which maps
+        // directly to the ModuleId produced by the resolver graph. Lambdas and
+        // other nested functions inherit the module of their enclosing body.
+        let resolver_module = name
+            .and_then(|declared_name| {
+                let fn_key = match &self.module_prefix {
+                    Some(prefix) => format!("{prefix}::{declared_name}"),
+                    None => declared_name.to_string(),
+                };
+                self.resolver_module_by_key
+                    .as_ref()
+                    .and_then(|modules| modules.get(&fn_key).copied())
+            })
+            .or_else(|| {
+                self.current_ref()
+                    .ok()
+                    .and_then(|func| func.resolver_module)
+            })
+            .or(self.resolver_root_module);
+
+        let mut function_compiler = FunctionCompiler::new(fn_name.clone(), arity);
+        function_compiler.resolver_module = resolver_module;
+        self.compilers.push(function_compiler);
 
         for (i, param) in params.iter().enumerate() {
             self.current()?.locals.push(Local {

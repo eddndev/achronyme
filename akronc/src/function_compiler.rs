@@ -3,11 +3,18 @@ use crate::types::{Local, LoopContext, UpvalueInfo};
 use akron::opcode::instruction::{encode_abc, encode_abx};
 use akron::opcode::OpCode;
 use memory::Value;
+use resolve::ModuleId;
 
 /// State specific to ONE function being compiled
 pub struct FunctionCompiler {
     pub name: String,
     pub arity: u8,
+    /// Resolver module that owns this function body.
+    ///
+    /// Prove blocks use this as their initial annotation scope. Imported
+    /// functions must not start resolution in the program root because AST
+    /// expression ids are local to each module.
+    pub resolver_module: Option<ModuleId>,
     pub locals: Vec<Local>,
     pub scope_depth: u32,
     pub bytecode: Vec<u32>,
@@ -33,6 +40,7 @@ impl FunctionCompiler {
         Self {
             name,
             arity,
+            resolver_module: None,
             locals: Vec::new(),
             scope_depth: 0,
             bytecode: Vec::new(),
