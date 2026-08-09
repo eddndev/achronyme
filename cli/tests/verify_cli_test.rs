@@ -211,3 +211,55 @@ fn curve_is_required_and_explicit() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("--curve"));
 }
+
+#[test]
+fn missing_artifact_is_not_reported_as_an_invalid_proof() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("missing.json");
+    let missing = missing.to_str().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_ach"))
+        .args([
+            "verify", "--proof", missing, "--public", missing, "--vkey", missing, "--curve",
+            "bn254",
+        ])
+        .output()
+        .expect("run ach verify");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty(), "stdout must not claim invalidity");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cannot inspect proof"), "{stderr}");
+    assert!(!stderr.contains("proof invalid"), "{stderr}");
+}
+
+#[test]
+fn global_json_error_format_applies_to_detached_verification() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("missing.json");
+    let missing = missing.to_str().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_ach"))
+        .args([
+            "verify",
+            "--error-format",
+            "json",
+            "--proof",
+            missing,
+            "--public",
+            missing,
+            "--vkey",
+            missing,
+            "--curve",
+            "bn254",
+        ])
+        .output()
+        .expect("run ach verify");
+
+    assert!(!output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["curve"], "bn254");
+    assert_eq!(value["valid"], false);
+    assert!(value["error"]
+        .as_str()
+        .unwrap()
+        .contains("cannot inspect proof"));
+}

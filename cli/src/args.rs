@@ -6,7 +6,11 @@ use cli::commands::engine::ExecutionEngine;
 #[command(about = "Achronyme CLI", long_about = None)]
 pub struct Cli {
     /// Diagnostic output format: human (default), json, or short
-    #[arg(long, global = true)]
+    #[arg(
+        long,
+        global = true,
+        value_parser = ["human", "json", "short"]
+    )]
     pub error_format: Option<String>,
 
     /// Prime field: bn254 (default), bls12-381, or goldilocks
@@ -110,9 +114,9 @@ pub enum Commands {
         /// Proof curve; required to avoid format inference
         #[arg(long, value_parser = ["bn254", "bls12-381"])]
         curve: String,
-        /// Result format
-        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
-        format: String,
+        /// Result format; defaults to json when --error-format=json, otherwise text
+        #[arg(long, value_parser = ["text", "json"])]
+        format: Option<String>,
     },
     /// Package a ceremony-derived trusted proving key
     TrustedSetup {

@@ -43,6 +43,13 @@ fn main() -> Result<()> {
         format,
     } = &cli.command
     {
+        let format = format.as_deref().unwrap_or_else(|| {
+            if cli.error_format.as_deref() == Some("json") {
+                "json"
+            } else {
+                "text"
+            }
+        });
         return cli::commands::verify::verify_files(proof, public, vkey, curve, format);
     }
 

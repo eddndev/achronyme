@@ -22,7 +22,9 @@ pub fn verify_files(
             }
         }
         Err(error) => {
-            print_result(curve, format, false, Some(&error));
+            if format == "json" {
+                print_result(curve, format, false, Some(&error));
+            }
             Err(anyhow!(
                 "proof verification failed for curve `{curve}`: {error}"
             ))
