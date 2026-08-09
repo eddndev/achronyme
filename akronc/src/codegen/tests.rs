@@ -54,6 +54,34 @@ mod warning_tests {
     }
 
     #[test]
+    fn array_parameters_used_only_by_prove_are_not_reported_unused() {
+        let ws = compile_warnings(
+            "fn prove_membership(\
+                 root,\
+                 leaf,\
+                 path: Field[2],\
+                 indices: Field[2]\
+             ) {\
+                 prove(root: Public) {\
+                     merkle_verify(root, leaf, path, indices)\
+                 }\
+             }",
+        );
+
+        assert!(
+            !ws.iter().any(|warning| {
+                warning
+                    .message
+                    .contains("unused function parameter: `path`")
+                    || warning
+                        .message
+                        .contains("unused function parameter: `indices`")
+            }),
+            "prove captures must count as parameter reads: {ws:?}"
+        );
+    }
+
+    #[test]
     fn underscore_param_suppresses_warning() {
         let ws = compile_warnings("fn test(_x) { 1 }");
         assert!(!ws

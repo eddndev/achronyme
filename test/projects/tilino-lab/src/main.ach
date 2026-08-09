@@ -1,0 +1,78 @@
+// Thin application orchestrator for the private concurrent auction.
+
+import "./transport.ach" as transport
+import "./auction.ach" as auction
+import "./registry.ach" as registry
+import "./artifacts.ach" as artifacts
+
+print("=== Private Concurrent Auction ===")
+print("Enter loopback address, output directory, and three bids.")
+
+let address = read_line()
+let output_dir = read_line()
+let alice_bid = parse_int(read_line()).to_field()
+let bob_bid = parse_int(read_line()).to_field()
+let charlie_bid = parse_int(read_line()).to_field()
+
+assert(alice_bid > 0p0)
+assert(bob_bid > 0p0)
+assert(charlie_bid > 0p0)
+
+let alice_nonce = auction::alice_nonce()
+let bob_nonce = auction::bob_nonce()
+let charlie_nonce = auction::charlie_nonce()
+let commit_alice = auction::commitment(alice_bid, alice_nonce)
+let commit_bob = auction::commitment(bob_bid, bob_nonce)
+let commit_charlie = auction::commitment(charlie_bid, charlie_nonce)
+
+let accepted_commitments = await transport::exchange_commitments(
+    address,
+    commit_alice,
+    commit_bob,
+    commit_charlie,
+)
+print("commitments accepted: " + accepted_commitments.to_string())
+
+let bidder_bob = registry::bob_leaf()
+let registry_root = registry::root()
+let bob_path: Field[2] = registry::bob_path()
+let bob_indices: Field[2] = registry::bob_indices()
+
+let winner_proof = auction::prove_winner(
+    alice_bid,
+    bob_bid,
+    charlie_bid,
+    alice_nonce,
+    bob_nonce,
+    charlie_nonce,
+    commit_alice,
+    commit_bob,
+    commit_charlie,
+    registry_root,
+    bidder_bob,
+    bob_path,
+    bob_indices,
+)
+
+let proof_valid = verify_proof(winner_proof)
+assert(proof_valid)
+print("winner proof verified: " + proof_valid.to_string())
+
+let receipt = auction::receipt(
+    accepted_commitments,
+    commit_bob,
+    commit_alice,
+    commit_charlie,
+    registry_root,
+)
+let bundle = await artifacts::write_bundle(
+    output_dir,
+    proof_json(winner_proof),
+    proof_public(winner_proof),
+    proof_vkey(winner_proof),
+    receipt,
+)
+
+print("artifact bytes written: " + bundle["bytes"].to_string())
+print("receipt: " + bundle["receipt_path"])
+print("PASS: private_concurrent_auction")

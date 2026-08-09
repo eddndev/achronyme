@@ -1,0 +1,43 @@
+// Concurrent proof bundle persistence and receipt read-back validation.
+
+fn write_artifact(path, contents) {
+    let file = await create_file(path)
+    let written = await file_write(file, contents)
+    await file_close(file)
+    assert(written > 0)
+    written
+}
+
+export fn write_bundle(
+    output_dir,
+    proof_document,
+    public_document,
+    vkey_document,
+    receipt_document
+) {
+    let proof_path = output_dir + "/proof.json"
+    let public_path = output_dir + "/public.json"
+    let vkey_path = output_dir + "/verification_key.json"
+    let receipt_path = output_dir + "/receipt.txt"
+
+    let artifact_bytes = concurrent {
+        let proof_task = spawn write_artifact(proof_path, proof_document)
+        let public_task = spawn write_artifact(public_path, public_document)
+        let vkey_task = spawn write_artifact(vkey_path, vkey_document)
+        let receipt_task = spawn write_artifact(receipt_path, receipt_document)
+
+        let proof_bytes = await proof_task
+        let public_bytes = await public_task
+        let vkey_bytes = await vkey_task
+        let receipt_bytes = await receipt_task
+        proof_bytes + public_bytes + vkey_bytes + receipt_bytes
+    }
+
+    let receipt_reader = await open_file(receipt_path)
+    let receipt_bytes = await file_read(receipt_reader, 65536)
+    assert(receipt_bytes != nil)
+    await file_close(receipt_reader)
+    assert(read_file(receipt_path) == receipt_document)
+
+    {"bytes": artifact_bytes, "receipt_path": receipt_path}
+}

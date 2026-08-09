@@ -204,6 +204,27 @@ impl Diagnostic {
         }
     }
 
+    /// Attach a source file to every span that does not already name one.
+    ///
+    /// Nested compilation phases can preserve a more specific file by setting
+    /// it first; outer module contexts only fill the remaining gaps.
+    pub fn with_file(mut self, file: PathBuf) -> Self {
+        if self.primary_span.file.is_none() {
+            self.primary_span.file = Some(file.clone());
+        }
+        for label in &mut self.labels {
+            if label.span.file.is_none() {
+                label.span.file = Some(file.clone());
+            }
+        }
+        for suggestion in &mut self.suggestions {
+            if suggestion.span.file.is_none() {
+                suggestion.span.file = Some(file.clone());
+            }
+        }
+        self
+    }
+
     pub fn with_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
         self

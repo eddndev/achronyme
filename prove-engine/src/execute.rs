@@ -41,13 +41,17 @@ impl ProveHandler for ProveEngine {
             program
         };
 
-        // 3b. Collect circuit stats if enabled
-        if self.opts.circuit_stats {
+        // 3b. Build the pre-optimization estimate if enabled. The R1CS path
+        // attaches its exact finalized count before publishing the stats.
+        let circuit_stats = if self.opts.circuit_stats {
             let proven = ir::passes::bool_prop::compute_proven_boolean(&program);
             let name = prove_ir.name.as_deref();
-            let stats = ir::stats::CircuitStats::from_program(&program, &proven, name);
-            self.observer.on_circuit_stats(stats);
-        }
+            Some(ir::stats::CircuitStats::from_program(
+                &program, &proven, name,
+            ))
+        } else {
+            None
+        };
 
         // 4. Build input map from scope_values (public + witness + capture names).
         //    Validate that all required values are present.
@@ -116,8 +120,11 @@ impl ProveHandler for ProveEngine {
         //     compiler reads the full input map up front, so its walk stays
         //     here.
         match self.opts.backend {
-            ProveBackend::R1cs => self.prove_r1cs(program, &prove_ir, inputs),
+            ProveBackend::R1cs => self.prove_r1cs(program, &prove_ir, inputs, circuit_stats),
             ProveBackend::Plonkish => {
+                if let Some(stats) = circuit_stats {
+                    self.observer.on_circuit_stats(stats);
+                }
                 let mut artik_memo = artik::ArtikMemo::<memory::Bn254Fr>::new();
                 walk_circom_hints(&prove_ir, &mut inputs, &mut artik_memo)?;
                 self.prove_plonkish(&program, &inputs)

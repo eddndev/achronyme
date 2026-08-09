@@ -12,11 +12,24 @@ impl fmt::Display for CircuitStats {
             "  Inputs:  {} public, {} witness",
             self.n_public, self.n_witness
         )?;
+        writeln!(
+            f,
+            "  PRE-OPTIMIZATION ESTIMATE: {} constraints",
+            self.total_constraints
+        )?;
+        match self.final_r1cs_constraints {
+            Some(constraints) => {
+                writeln!(f, "  FINAL PROVING CONSTRAINTS: {constraints}")?;
+            }
+            None => {
+                writeln!(f, "  FINAL PROVING CONSTRAINTS: unavailable")?;
+            }
+        }
         writeln!(f, "  {bar}")?;
         writeln!(
             f,
             "  {:<20} {:>6}  {:>11}  {:>5}",
-            "Category", "Instrs", "Constraints", "%"
+            "Category", "Instrs", "Est. constraints", "%"
         )?;
         writeln!(f, "  {bar}")?;
 
@@ -48,7 +61,7 @@ impl fmt::Display for CircuitStats {
         writeln!(
             f,
             "  {:<20} {:>6}  {:>11}",
-            "TOTAL", self.n_instructions, self.total_constraints
+            "ESTIMATE TOTAL", self.n_instructions, self.total_constraints
         )?;
 
         if let Some(top) = self.bottleneck() {

@@ -349,41 +349,44 @@ fn circuit_command_inner<F: FieldBackend + PoseidonParamsProvider + Bn254Ops + G
         );
     }
 
-    // Circuit stats profiler
-    if circuit_stats {
-        let name = std::path::Path::new(path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned());
-        let stats = ir::stats::CircuitStats::from_program(&program, &proven, name.as_deref());
-        eprintln!("{stats}");
-    }
+    // Build the backend-independent IR estimate now. The R1CS branch attaches
+    // the exact finalized constraint count after backend optimization.
+    let circuit_stats =
+        super::super::circuit_stats::collect(circuit_stats, path, &program, &proven);
 
     match backend {
-        "r1cs" => run_r1cs_pipeline(
-            &program,
-            r1cs_path,
-            wtns_path,
-            resolved_inputs.as_ref(),
-            prime_id,
-            prove,
-            solidity_path,
-            &style,
-            verbose,
-            no_optimize,
-            &proven,
-            key_source,
-        ),
-        "plonkish" => run_plonkish_pipeline(
-            &program,
-            resolved_inputs.as_ref(),
-            prove,
-            plonkish_json_path,
-            &source_dir,
-            &style,
-            verbose,
-            &proven,
-            key_source,
-        ),
+        "r1cs" => {
+            let final_constraints = run_r1cs_pipeline(
+                &program,
+                r1cs_path,
+                wtns_path,
+                resolved_inputs.as_ref(),
+                prime_id,
+                prove,
+                solidity_path,
+                &style,
+                verbose,
+                no_optimize,
+                &proven,
+                key_source,
+            )?;
+            super::super::circuit_stats::print(circuit_stats, Some(final_constraints));
+            Ok(())
+        }
+        "plonkish" => {
+            super::super::circuit_stats::print(circuit_stats, None);
+            run_plonkish_pipeline(
+                &program,
+                resolved_inputs.as_ref(),
+                prove,
+                plonkish_json_path,
+                &source_dir,
+                &style,
+                verbose,
+                &proven,
+                key_source,
+            )
+        }
         // Unreachable: backend validated at the top of this function
         _ => unreachable!(),
     }

@@ -5,6 +5,8 @@ use achronyme_parser::ast::Span;
 use achronyme_parser::diagnostic::SpanRange;
 use achronyme_parser::Diagnostic;
 
+use crate::module_loader::ModuleLoadError;
+
 /// Boxed span to keep error enum small.
 pub type OptSpan = Option<Box<SpanRange>>;
 
@@ -25,7 +27,16 @@ pub enum CompilerError {
     CompileError(String, OptSpan),
     ModuleNotFound(String, OptSpan),
     CircularImport(String, OptSpan),
-    ModuleLoadError(String),
+    ModuleLoadError(ModuleLoadError),
+    /// Error raised while compiling a parsed module.
+    ///
+    /// The nested error retains its structured diagnostic while this wrapper
+    /// provides the canonical path and source text used by CLI rendering.
+    ModuleSource {
+        path: PathBuf,
+        source: String,
+        error: Box<CompilerError>,
+    },
     DuplicateModuleAlias(String, OptSpan),
     InternalError(String),
     /// A rich error that already carries a full Diagnostic (for structured suggestions).
@@ -88,6 +99,7 @@ impl fmt::Display for CompilerError {
                 write!(f, "{}circular import: {path}", fmt_span(span))
             }
             CompilerError::ModuleLoadError(msg) => write!(f, "module load error: {msg}"),
+            CompilerError::ModuleSource { error, .. } => write!(f, "{error}"),
             CompilerError::DuplicateModuleAlias(name, span) => {
                 write!(f, "{}duplicate module alias: {name}", fmt_span(span))
             }
@@ -121,6 +133,14 @@ impl CompilerError {
         // DiagnosticError already carries the full Diagnostic
         if let CompilerError::DiagnosticError(diag) = self {
             return *diag.clone();
+        }
+
+        if let CompilerError::ModuleLoadError(error) = self {
+            return error.to_diagnostic();
+        }
+
+        if let CompilerError::ModuleSource { path, error, .. } = self {
+            return error.to_diagnostic().with_file(path.clone());
         }
 
         // CircomImport renders the .ach import span as the primary
@@ -160,11 +180,23 @@ impl CompilerError {
             | CompilerError::DuplicateModuleAlias(_, s) => s.as_deref().cloned(),
             CompilerError::ParseError(_)
             | CompilerError::ModuleLoadError(_)
+            | CompilerError::ModuleSource { .. }
             | CompilerError::InternalError(_)
             | CompilerError::DiagnosticError(_)
             | CompilerError::CircomImport { .. } => None,
         };
         let primary = span.unwrap_or_else(|| SpanRange::point(0, 0, 0));
         Diagnostic::error(self.to_string(), primary)
+    }
+
+    /// Source text that corresponds to the primary structured diagnostic.
+    pub fn diagnostic_source(&self) -> Option<&str> {
+        match self {
+            CompilerError::ModuleLoadError(error) => error.source(),
+            CompilerError::ModuleSource { source, error, .. } => {
+                error.diagnostic_source().or(Some(source.as_str()))
+            }
+            _ => None,
+        }
     }
 }

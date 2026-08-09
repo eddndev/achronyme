@@ -145,9 +145,12 @@ the program. Add `--error-format json` for stable machine-readable output.
 
 Every VM has finite bounds. The CLI and `[vm]` configuration expose:
 
-- `max_tasks`
+- `max_tasks`: live child tasks across explicit `spawn` and the implicit child
+  created by `await function_call(...)`; the root task is not counted.
 - `max_resources`
-- `max_task_scopes`
+- `max_task_scopes`: simultaneously live structured task scopes across the
+  VM, including explicit `concurrent` scopes and implicit single-child `await`
+  scopes. This is a global live count, not a nesting-depth limit.
 - `max_pending_native_requests`
 - `max_retained_task_results`
 - `max_channels`
@@ -161,9 +164,9 @@ exhaustion is a recoverable runtime error; it does not silently grow a queue.
 
 | Runtime dimension | Default and hard maximum |
 | --- | ---: |
-| Live child tasks | 65,535 |
+| Live child tasks, explicit and implicit | 65,535 |
 | Open owned resources | 65,535 |
-| Nested task scopes | 1,024 |
+| Simultaneously live task scopes | 1,024 |
 | Pending native requests | 4,096 |
 | Retained task results | 4,096 |
 | Open channels | 4,096 |

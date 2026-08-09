@@ -29,7 +29,7 @@ pub(super) fn run_r1cs_pipeline<F, H>(
     want_reusable: bool,
     release_optimized_program: bool,
     key_source: &proving::groth16::ProvingKeySource,
-) -> Result<Option<ReusableProver<F>>>
+) -> Result<(Option<ReusableProver<F>>, usize)>
 where
     F: FieldBackend + PoseidonParamsProvider + Groth16Field,
     H: FnOnce(&mut artik::ArtikMemo<F>) -> Result<HashMap<String, FieldElement<F>>>,
@@ -313,7 +313,11 @@ where
         }
     }
 
-    Ok(generator.map(|generator| ReusableProver::new(cs, prime_id, generator, prepared_key)))
+    let final_constraints = cs.num_constraints();
+    Ok((
+        generator.map(|generator| ReusableProver::new(cs, prime_id, generator, prepared_key)),
+        final_constraints,
+    ))
 }
 
 fn path_stem(path: &str) -> &std::path::Path {

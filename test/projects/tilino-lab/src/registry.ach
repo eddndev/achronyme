@@ -1,0 +1,23 @@
+// Public four-leaf bidder registry and Bob's fixed membership path.
+
+export fn alice_leaf() { poseidon(0p101, 0p9001) }
+export fn bob_leaf() { poseidon(0p102, 0p9002) }
+export fn charlie_leaf() { poseidon(0p103, 0p9003) }
+export fn reserve_leaf() { poseidon(0p104, 0p9004) }
+
+export fn bob_upper_sibling() {
+    poseidon(charlie_leaf(), reserve_leaf())
+}
+
+export fn bob_path() {
+    [alice_leaf(), bob_upper_sibling()]
+}
+
+export fn bob_indices() {
+    [0p1, 0p0]
+}
+
+export fn root() {
+    let path: Field[2] = bob_path()
+    poseidon(poseidon(path[0], bob_leaf()), path[1])
+}

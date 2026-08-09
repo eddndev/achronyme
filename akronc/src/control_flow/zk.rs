@@ -118,7 +118,14 @@ pub(super) fn compile_prove(
         ) => Some(ir_forge::OuterResolverState {
             table: std::sync::Arc::new(table.clone()),
             resolved: std::sync::Arc::new(resolved.clone()),
-            root_module,
+            // A prove block embedded in an imported function starts in that
+            // function's module. Falling back to the graph root preserves the
+            // standalone and top-level behavior.
+            root_module: compiler
+                .current_ref()
+                .ok()
+                .and_then(|func| func.resolver_module)
+                .unwrap_or(root_module),
             dispatch_key_by_symbol: dispatch_by_symbol.clone(),
             module_by_dispatch_key: module_by_key.clone(),
             availability_by_key: std::sync::Arc::new(

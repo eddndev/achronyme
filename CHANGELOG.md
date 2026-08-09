@@ -2,6 +2,33 @@
 
 All notable changes to the Achronyme language and CLI are recorded here.
 
+## [0.1.1] - 2026-08-08
+
+### Added
+
+- A versioned Tilino Lab end-to-end fixture covering namespace modules, typed
+  array captures, interpreter and LLVM JIT parity, structured concurrency,
+  explicit capabilities, Groth16 generation, detached verification, tampered
+  public inputs, resource exhaustion, and the standalone AOT boundary.
+
+### Fixed
+
+- Module parse errors, compile errors, and warnings now retain the canonical
+  imported file, exact span, and matching source text in human, JSON, and
+  short diagnostics.
+- Prove blocks inside imported functions now begin resolver lookup in the
+  function's owning module, so typed array captures resolve and count as reads.
+- Circuit statistics distinguish the pre-R1CS-optimization estimate from the
+  exact finalized R1CS constraint count used for Groth16 proving.
+- `max_tasks` consistently counts explicit and implicit live child tasks, and
+  `max_task_scopes` consistently counts all simultaneously live structured
+  scopes instead of being described as nesting depth.
+
+### Compatibility
+
+- ACHB container format, bytecode version, runtime ABI, trusted-key format,
+  and fail-closed proving policy are unchanged from 0.1.0.
+
 ## [0.1.0] - 2026-08-03
 
 ### Added

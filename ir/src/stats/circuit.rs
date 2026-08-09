@@ -29,8 +29,13 @@ pub struct CircuitStats {
     pub n_witness: usize,
     /// Total IR instructions (excluding Const/Input).
     pub n_instructions: usize,
-    /// Total estimated R1CS constraints.
+    /// Pre-optimization R1CS constraint estimate derived from optimized IR.
     pub total_constraints: usize,
+    /// Exact constraint count in the finalized R1CS used for proving.
+    ///
+    /// This is `None` until an R1CS backend has emitted and finalized the
+    /// constraint system. Non-R1CS backends leave it unset.
+    pub final_r1cs_constraints: Option<usize>,
 }
 
 impl CircuitStats {
@@ -218,7 +223,14 @@ impl CircuitStats {
             n_witness,
             n_instructions,
             total_constraints,
+            final_r1cs_constraints: None,
         }
+    }
+
+    /// Attach the exact constraint count from the finalized proving R1CS.
+    pub fn with_final_r1cs_constraints(mut self, constraints: usize) -> Self {
+        self.final_r1cs_constraints = Some(constraints);
+        self
     }
 
     /// Returns the category with the highest constraint cost, if any.

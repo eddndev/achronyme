@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use achronyme_parser::ast::{Program, Stmt};
+use diagnostics::{Diagnostic, SpanRange};
 
 use crate::suggest::find_similar_ir;
 
@@ -9,6 +11,58 @@ use crate::suggest::find_similar_ir;
 pub struct ModuleExports {
     pub exported_names: Vec<String>,
     pub program: Program,
+    pub source: String,
+}
+
+/// Structured module-loading failure with enough context for source-aware
+/// diagnostics.
+#[derive(Clone, Debug)]
+pub enum ModuleLoadError {
+    Read {
+        path: PathBuf,
+        message: String,
+    },
+    Diagnostic {
+        source: String,
+        diagnostic: Box<Diagnostic>,
+    },
+}
+
+impl ModuleLoadError {
+    pub fn source(&self) -> Option<&str> {
+        match self {
+            Self::Read { .. } => None,
+            Self::Diagnostic { source, .. } => Some(source),
+        }
+    }
+
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            Self::Read { path, message } => Diagnostic::error(
+                message.clone(),
+                SpanRange::point(0, 0, 0).with_file(path.clone()),
+            ),
+            Self::Diagnostic { diagnostic, .. } => *diagnostic.clone(),
+        }
+    }
+}
+
+impl fmt::Display for ModuleLoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Read { message, .. } => write!(f, "{message}"),
+            Self::Diagnostic { diagnostic, .. } => write!(f, "{}", diagnostic.message),
+        }
+    }
+}
+
+impl std::error::Error for ModuleLoadError {}
+
+fn source_diagnostic(path: &Path, source: String, diagnostic: Diagnostic) -> ModuleLoadError {
+    ModuleLoadError::Diagnostic {
+        source,
+        diagnostic: Box::new(diagnostic.with_file(path.to_path_buf())),
+    }
 }
 
 /// Loads, caches, and deduplicates module files. Detects circular imports.
@@ -32,27 +86,32 @@ impl ModuleLoader {
     /// Load a module from the given canonical path.
     /// Returns the exported names and the parsed AST.
     /// Caches results for deduplication.
-    pub fn load(&mut self, canonical_path: &Path) -> Result<&ModuleExports, String> {
+    pub fn load(&mut self, canonical_path: &Path) -> Result<&ModuleExports, ModuleLoadError> {
         if self.cache.contains_key(canonical_path) {
             return Ok(&self.cache[canonical_path]);
         }
 
-        let source = std::fs::read_to_string(canonical_path)
-            .map_err(|e| format!("cannot read {}: {}", canonical_path.display(), e))?;
+        let source =
+            std::fs::read_to_string(canonical_path).map_err(|error| ModuleLoadError::Read {
+                path: canonical_path.to_path_buf(),
+                message: format!("cannot read {}: {error}", canonical_path.display()),
+            })?;
 
         let (program, parse_errors) = achronyme_parser::parse_program(&source);
         if let Some(err) = parse_errors
             .iter()
             .find(|d| d.severity == diagnostics::Severity::Error)
         {
-            return Err(format!(
-                "parse error in {}: {}",
-                canonical_path.display(),
-                err.message
-            ));
+            return Err(source_diagnostic(canonical_path, source, err.clone()));
         }
 
-        let exported_names = collect_exports(&program)?;
+        let exported_names = collect_exports(&program).map_err(|message| {
+            source_diagnostic(
+                canonical_path,
+                source.clone(),
+                Diagnostic::error(message, SpanRange::point(1, 1, 0)),
+            )
+        })?;
 
         let key = canonical_path.to_path_buf();
         self.cache.insert(
@@ -60,10 +119,18 @@ impl ModuleLoader {
             ModuleExports {
                 exported_names,
                 program,
+                source,
             },
         );
 
         Ok(&self.cache[&key])
+    }
+
+    /// Return cached source text for a successfully loaded canonical module.
+    pub fn source(&self, canonical_path: &Path) -> Option<&str> {
+        self.cache
+            .get(canonical_path)
+            .map(|module| module.source.as_str())
     }
 }
 

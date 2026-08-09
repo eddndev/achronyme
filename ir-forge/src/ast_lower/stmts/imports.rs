@@ -80,13 +80,14 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
         let module = self
             .module_loader
             .load(&canonical)
-            .map_err(ProveIrError::ModuleLoadError)?;
+            .map_err(|error| ProveIrError::ModuleLoadError(error.to_string()))?;
         // Clone what we need before releasing the borrow on module_loader.
         let exported_names = module.exported_names.clone();
         let stmts = module.program.stmts.clone();
         let exports = crate::module_loader::ModuleExports {
             exported_names,
             program: achronyme_parser::ast::Program { stmts },
+            source: module.source.clone(),
         };
         self.register_module_exports(alias, &exports);
         Ok(())
@@ -107,7 +108,7 @@ impl<F: FieldBackend> ProveIrCompiler<F> {
         let module = self
             .module_loader
             .load(&canonical)
-            .map_err(ProveIrError::ModuleLoadError)?;
+            .map_err(|error| ProveIrError::ModuleLoadError(error.to_string()))?;
         let exported_names = module.exported_names.clone();
         let stmts = module.program.stmts.clone();
 

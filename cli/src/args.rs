@@ -46,7 +46,7 @@ pub struct Cli {
     #[arg(long = "allow-listen", value_name = "IP:PORT", global = true)]
     pub allow_listen: Vec<String>,
 
-    /// Maximum number of live child tasks
+    /// Maximum live child tasks, including explicit spawn and implicit await
     #[arg(long, global = true)]
     pub max_tasks: Option<usize>,
 
@@ -54,7 +54,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub max_resources: Option<usize>,
 
-    /// Maximum nesting depth of concurrent task scopes
+    /// Maximum simultaneously live explicit and implicit task scopes
     #[arg(long, global = true)]
     pub max_task_scopes: Option<usize>,
 

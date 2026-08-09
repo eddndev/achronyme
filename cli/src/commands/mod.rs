@@ -1,6 +1,7 @@
 pub mod aot;
 pub mod circom;
 pub mod circuit;
+mod circuit_stats;
 pub mod compile;
 pub mod disassemble;
 pub mod engine;
@@ -45,15 +46,21 @@ pub fn print_warnings(compiler: &mut Compiler, source: &str, fmt: ErrorFormat) {
     if warnings.is_empty() {
         return;
     }
-    for w in &warnings {
-        emit_diagnostic(w, source, fmt);
+    for warning in &warnings {
+        let diagnostic_source = warning
+            .primary_span
+            .file
+            .as_deref()
+            .and_then(|path| compiler.module_source(path))
+            .unwrap_or(source);
+        emit_diagnostic(warning, diagnostic_source, fmt);
     }
 }
 
 /// Convert a CompilerError to a rendered diagnostic string.
 pub fn render_compile_error(err: &CompilerError, source: &str, fmt: ErrorFormat) -> String {
     let diag = err.to_diagnostic();
-    render_diagnostic(&diag, source, fmt)
+    render_diagnostic(&diag, err.diagnostic_source().unwrap_or(source), fmt)
 }
 
 /// Render a single diagnostic to a string in the requested format.
