@@ -79,7 +79,7 @@ fn constraint_count_isneq() {
 /// Circom comparators.circom: ~65 constraints (Num2Bits optimization). [ref 32]
 /// Gnark std: ~65 constraints. [ref 14]
 ///
-/// This 12× gap is tracked as weakness D7 in STRATEGY.md.
+/// The constraint-count assertion below tracks this roughly 12x gap directly.
 #[test]
 fn constraint_count_islt_unbounded() {
     let n = compile_and_verify(
@@ -91,7 +91,7 @@ fn constraint_count_islt_unbounded() {
     assert!(
         (600..=900).contains(&n),
         "IsLt unbounded constraint count unexpected: {n} (expected ~760, \
-         industry target ~65 — see D7 in STRATEGY.md)"
+         industry target ~65)"
     );
 }
 

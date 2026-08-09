@@ -46,10 +46,6 @@ grep -Fq -- '--contributed-zkey' "$boss"
 grep -Fq -- '--beacon-evidence' "$boss"
 grep -Fq 'trusted-setup.md' "$repo_root/README.md"
 
-if grep -Fq 'Caching de `.zkey`' "$repo_root/STRATEGY.md"; then
-    printf 'STRATEGY.md still mislabels local Arkworks cache files as zkeys\n' >&2
-    exit 1
-fi
 if grep -Fq 'snarkjs groth16 setup circuit.r1cs pot12_final.ptau circuit.zkey' \
     "$repo_root/README.md"; then
     printf 'README.md still presents a zero-contribution zkey as the production path\n' >&2

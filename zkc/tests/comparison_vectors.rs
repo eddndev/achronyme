@@ -19,7 +19,7 @@
 //!
 //! Key benchmark (Table 1 from research document):
 //!   - IsLt 64-bit: Circom ~65, Gnark ~65, Achronyme ~760 constraints
-//!   - This 12× gap is weakness D7 (STRATEGY.md), tracked by constraint count tests below.
+//!   - Constraint count tests below guard this roughly 12x gap.
 //!
 //! Note: only numerical test vectors (not code) are referenced here.
 //! These are facts, not copyrightable expression — compatible with our Apache-2.0.
