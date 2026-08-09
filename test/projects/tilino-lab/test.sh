@@ -14,6 +14,36 @@ trap cleanup EXIT HUP INT TERM
 
 export XDG_CACHE_HOME="$CASE_ROOT/cache"
 
+allocate_loopback_port() {
+    preferred_port=$1
+    if ! command -v python3 >/dev/null 2>&1; then
+        printf 'python3 is required to allocate a collision-free loopback port\n' >&2
+        exit 1
+    fi
+
+    python3 - "$preferred_port" <<'PY'
+import socket
+import sys
+
+preferred = int(sys.argv[1])
+ports = (preferred, 0) if 0 < preferred < 65536 else (0,)
+
+for port in ports:
+    candidate = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        candidate.bind(("127.0.0.1", port))
+    except OSError:
+        candidate.close()
+        continue
+
+    print(candidate.getsockname()[1])
+    candidate.close()
+    raise SystemExit(0)
+
+raise SystemExit("unable to allocate a loopback port")
+PY
+}
+
 expect_text() {
     file=$1
     text=$2
@@ -67,8 +97,9 @@ verify_bundle() {
 }
 
 run_without_proving_authority() {
+    port=$1
     output_dir="$CASE_ROOT/no-proving-authority"
-    address="127.0.0.1:$((PORT_BASE + 2))"
+    address="127.0.0.1:$port"
     mkdir -p "$output_dir"
     (
         cd "$PROJECT_ROOT"
@@ -113,7 +144,8 @@ fi
 
 INTERPRETER_OUTPUT="$CASE_ROOT/interpreter"
 JIT_OUTPUT="$CASE_ROOT/jit"
-run_demo interpreter "$PORT_BASE" "$INTERPRETER_OUTPUT" "$CASE_ROOT/interpreter.log"
+INTERPRETER_PORT=$(allocate_loopback_port "$PORT_BASE")
+run_demo interpreter "$INTERPRETER_PORT" "$INTERPRETER_OUTPUT" "$CASE_ROOT/interpreter.log"
 expect_text "$CASE_ROOT/interpreter.log" 'commitments accepted: 3'
 expect_text "$CASE_ROOT/interpreter.log" 'winner proof verified: true'
 expect_text "$CASE_ROOT/interpreter.log" 'PRE-OPTIMIZATION ESTIMATE'
@@ -150,7 +182,8 @@ if "$ACH_BIN" verify \
 fi
 grep -Eq '"valid"[[:space:]]*:[[:space:]]*false' "$CASE_ROOT/tampered-verify.json"
 
-run_demo jit "$((PORT_BASE + 1))" "$JIT_OUTPUT" "$CASE_ROOT/jit.log"
+JIT_PORT=$(allocate_loopback_port "$((PORT_BASE + 1))")
+run_demo jit "$JIT_PORT" "$JIT_OUTPUT" "$CASE_ROOT/jit.log"
 cmp -s "$INTERPRETER_OUTPUT/receipt.txt" "$JIT_OUTPUT/receipt.txt"
 verify_bundle "$JIT_OUTPUT" "$CASE_ROOT/jit-verify.json"
 
@@ -163,22 +196,25 @@ expect_failure \
 expect_failure \
     missing-proving-authority \
     'proof generation|trusted setup|development setup|key source|insecure-dev-setup|trusted-key-dir' \
-    run_without_proving_authority
+    run_without_proving_authority \
+    "$(allocate_loopback_port "$((PORT_BASE + 2))")"
 
+TASK_LIMIT_PORT=$(allocate_loopback_port "$((PORT_BASE + 3))")
 expect_failure \
     bounded-task-limit \
     'live child task count exceeds 2' \
     env \
-        TILINO_ADDRESS="127.0.0.1:$((PORT_BASE + 3))" \
+        TILINO_ADDRESS="127.0.0.1:$TASK_LIMIT_PORT" \
         TILINO_OUTPUT_DIR="$CASE_ROOT/task-limit" \
         TILINO_MAX_TASKS=2 \
         sh "$PROJECT_ROOT/scripts/run-demo.sh"
 
+FALSE_WINNER_PORT=$(allocate_loopback_port "$((PORT_BASE + 4))")
 expect_failure \
     false-winner \
     'constraint|unsatisfied|assertion failed|circom assert' \
     env \
-        TILINO_ADDRESS="127.0.0.1:$((PORT_BASE + 4))" \
+        TILINO_ADDRESS="127.0.0.1:$FALSE_WINNER_PORT" \
         TILINO_OUTPUT_DIR="$CASE_ROOT/false-winner" \
         TILINO_ALICE_BID=900 \
         TILINO_BOB_BID=750 \
@@ -186,13 +222,14 @@ expect_failure \
         sh "$PROJECT_ROOT/scripts/run-demo.sh"
 
 (
+    INSPECT_PORT=$(allocate_loopback_port "$((PORT_BASE + 5))")
     cd "$PROJECT_ROOT"
     "$ACH_BIN" \
         --insecure-dev-setup \
         --allow-read "$CASE_ROOT" \
         --allow-write "$CASE_ROOT" \
-        --allow-connect "127.0.0.1:$((PORT_BASE + 5))" \
-        --allow-listen "127.0.0.1:$((PORT_BASE + 5))" \
+        --allow-connect "127.0.0.1:$INSPECT_PORT" \
+        --allow-listen "127.0.0.1:$INSPECT_PORT" \
         inspect --manifest >"$CASE_ROOT/manifest.txt"
 )
 expect_text "$CASE_ROOT/manifest.txt" 'effects: task,io.console,io.file,io.network,io.clock,prove,verify,circuit'
