@@ -2,6 +2,25 @@
 
 All notable changes to the Achronyme language and CLI are recorded here.
 
+## [0.1.2] - 2026-08-09
+
+### Fixed
+
+- Detached verification now honors `--error-format json` when no explicit
+  `--format` override is supplied.
+- Unreadable detached proof artifacts no longer produce the misleading text
+  claim that the proof itself is cryptographically invalid.
+
+### Repository
+
+- Removed the legacy internal strategy document and dated audit records, along
+  with test comments and documentation checks that referenced them.
+
+### Compatibility
+
+- ACHB container format, bytecode version, runtime ABI, proof artifacts, and
+  trusted-key format are unchanged from 0.1.1.
+
 ## [0.1.1] - 2026-08-08
 
 ### Added
